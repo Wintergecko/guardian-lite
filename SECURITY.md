@@ -1,4 +1,9 @@
-# Guardian Lite v0.23.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.24.0 – Sicherheitsmodell und Grenzen
+
+## 0.24.0 – Globale Malware-Ignore-Hashes
+
+- Administratoren koennen einen SHA-256-Inhalt domainuebergreifend als ignoriert markieren. Scans laufen weiter und Funde bleiben sichtbar; Warnungen und automatische Reparatur fuer diesen Inhalt werden unterdrueckt.
+- Globale Hash-Ausnahmen sind auf 2.000 Eintraege begrenzt, reversibel und im Incident-Verlauf dokumentiert. Ein Hash ist kein Sicherheitsnachweis: falsche Freigabe kann Malware auf mehreren Websites verdecken.
 
 ## 0.23.0 – Plesk-Portregeln
 

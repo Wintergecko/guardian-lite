@@ -1365,19 +1365,29 @@ def admin_tool_candidates(docroot):
 def ignored_hash_set(domain):
     settings = read_json(ROOT / 'management' / 'config.json', {})
     ignored = settings.get('ignore_hashes', {}) if isinstance(settings, dict) else {}
+    global_values = settings.get('global_ignore_hashes', []) if isinstance(settings, dict) else []
     values = ignored.get(domain, []) if isinstance(ignored, dict) else []
-    return {value for value in values if isinstance(value, str) and re.fullmatch(r'[a-f0-9]{64}', value)} \
+    domain_hashes = {value for value in values if isinstance(value, str) and re.fullmatch(r'[a-f0-9]{64}', value)} \
         if isinstance(values, list) else set()
+    global_hashes = {value for value in global_values if isinstance(value, str) and
+                     re.fullmatch(r'[a-f0-9]{64}', value)} if isinstance(global_values, list) else set()
+    return domain_hashes | global_hashes
 
 
 def annotate_ignored_findings(domain, findings):
-    """Keep ignored detections visible, but prevent automated repair/alerts for exact content hashes."""
+    """Keep ignored detections visible, but suppress alerts/repair for exact content hashes."""
+    settings = read_json(ROOT / 'management' / 'config.json', {})
+    global_values = settings.get('global_ignore_hashes', []) if isinstance(settings, dict) else []
+    global_hashes = {value for value in global_values if isinstance(value, str) and
+                     re.fullmatch(r'[a-f0-9]{64}', value)} if isinstance(global_values, list) else set()
     hashes = ignored_hash_set(domain)
     count = 0
     for finding in findings:
         fingerprint = finding.get('fingerprint')
         sha = fingerprint.get('sha256') if isinstance(fingerprint, dict) else None
         finding['ignored'] = isinstance(sha, str) and sha in hashes
+        if finding['ignored']:
+            finding['ignore_scope'] = 'global' if sha in global_hashes else 'domain'
         count += int(finding['ignored'])
     return count
 

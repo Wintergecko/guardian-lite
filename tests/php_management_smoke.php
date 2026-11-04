@@ -133,6 +133,14 @@ $backupRequest = json_decode($backupCall[3], true);
 checkManagement(($backupRequest['action'] ?? '') === 'backup-delete' &&
     $backupRequest['backup'] === str_repeat('b', 32), 'Backup deletion did not reach the fixed manager request');
 
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'global-ignore-add',
+    'sha256' => str_repeat('d', 64)];
+try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
+$globalIgnoreCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+$globalIgnoreRequest = json_decode($globalIgnoreCall[3], true);
+checkManagement(($globalIgnoreRequest['action'] ?? '') === 'global-ignore-add' &&
+    $globalIgnoreRequest['sha256'] === str_repeat('d', 64), 'Global ignore action did not reach the fixed manager API');
+
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'wp-db-scan', 'domain' => 'example.com'];
 try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
 $wpDbScanCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
@@ -161,6 +169,7 @@ $view = new ManagementView();
 $view->management = ['handlers' => [['version' => '8.3', 'sha256' => str_repeat('a', 64),
     'module' => true, 'managed' => false, 'build_missing' => ['phpize']]], 'cloud' => [],
     'ignore_hashes' => ['example.com' => [str_repeat('c', 64)]],
+    'global_ignore_hashes' => [str_repeat('d', 64)],
     'backups' => [['kind' => 'php', 'identity' => '8.3', 'id' => str_repeat('b', 32), 'created_at' => 'test'],
                   ['kind' => 'waf', 'id' => str_repeat('c', 32), 'created_at' => 'test']],
     'waf_sha256' => str_repeat('d', 64),
@@ -176,6 +185,8 @@ $view->domains = ['example.com'];
 $view->csrf = 'test-token';
 $view->scan = ['id' => str_repeat('e', 32), 'domain' => 'example.com', 'findings' => [
     ['path' => '<script>test</script>.php', 'state' => 'found', 'fingerprint' => ['sha256' => str_repeat('f', 64)]],
+    ['path' => 'global-cache.php', 'state' => 'found', 'ignore_scope' => 'global', 'ignored' => true,
+        'fingerprint' => ['sha256' => str_repeat('d', 64)]],
     ['path' => 'index.php', 'state' => 'repaired']]];
 $render = function () {
     $esc = static function ($value) { return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
@@ -189,6 +200,9 @@ checkManagement(strpos($html, 'name="csrf"') !== false, 'Management forms lack C
 checkManagement(strpos($html, '<script>test</script>') === false, 'Finding path was not escaped');
 checkManagement(strpos($html, 'ignore-add') !== false, 'Malware ignore action not rendered');
 checkManagement(strpos($html, 'ignore-remove') !== false, 'Malware ignore removal not rendered');
+checkManagement(strpos($html, 'global-ignore-add') !== false, 'Global malware ignore action not rendered');
+checkManagement(strpos($html, 'global-ignore-remove') !== false, 'Global malware ignore removal not rendered');
+checkManagement(strpos($html, 'Global ignoriert') !== false, 'Global ignore scope is not visible');
 checkManagement(strpos($html, 'Speicher und Wiederherstellungspunkte') !== false, 'Storage overview not rendered');
 checkManagement(strpos($html, 'backup-delete') !== false, 'Backup retention action not rendered');
 checkManagement(strpos($html, 'baseline-delete') !== false, 'Baseline retention action not rendered');

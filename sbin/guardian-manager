@@ -611,6 +611,34 @@ def ignore_hash_set(domain, sha256, mode):
     return {'message': message}
 
 
+def global_ignore_hash_set(sha256, mode):
+    if not isinstance(sha256, str) or not HEX.fullmatch(sha256) or mode not in ('add', 'remove'):
+        raise ValueError('Ungueltiger globaler Ignore-List-Eintrag.')
+    settings = config()
+    values = settings.get('global_ignore_hashes', [])
+    if not isinstance(values, list):
+        values = []
+    values = sorted({value for value in values if isinstance(value, str) and HEX.fullmatch(value)})
+    if mode == 'add':
+        if sha256 not in values and len(values) >= 2000:
+            raise ValueError('Maximal 2000 globale Ignore-Hashes; zuerst alte Eintraege entfernen.')
+        values = sorted(set(values) | {sha256})
+        settings['global_ignore_hashes'] = values
+        message = 'Exakter Dateiinhalt wird domainuebergreifend als ignoriert markiert; er wird weiterhin gescannt und angezeigt.'
+    else:
+        values = [value for value in values if value != sha256]
+        if values:
+            settings['global_ignore_hashes'] = values
+        else:
+            settings.pop('global_ignore_hashes', None)
+        message = 'Hash aus der globalen Ignore-Liste entfernt; Treffer werden wieder normal gemeldet.'
+    save_config(settings)
+    h.incident_log('operator', 'warning', '',
+                   ('Globalen SHA256 zur Malware-Ignore-Liste hinzugefuegt: ' if mode == 'add' else
+                    'Globalen SHA256 aus Malware-Ignore-Liste entfernt: ') + sha256[:12])
+    return {'message': message}
+
+
 def directory_usage(path):
     """Count regular files without following symlinks in a Guardian storage area."""
     total = 0
@@ -901,7 +929,11 @@ def repair_one(jobid, index, blocking=False):
         domain = report['domain']
         raw_ignored = config().get('ignore_hashes', {})
         ignored_hashes = raw_ignored.get(domain, []) if isinstance(raw_ignored, dict) else []
-        if finding['fingerprint'].get('sha256') in ignored_hashes:
+        global_ignored = config().get('global_ignore_hashes', [])
+        if not isinstance(global_ignored, list):
+            global_ignored = []
+        if (finding['fingerprint'].get('sha256') in ignored_hashes or
+                finding['fingerprint'].get('sha256') in global_ignored):
             raise ValueError('Dateiinhalt steht auf der Ignore-Liste; Eintrag zuerst entfernen und neu scannen.')
         item = config().get('baselines', {}).get(domain, {})
         token = item.get('id', '')
@@ -1020,6 +1052,12 @@ def auto_repair(jobid):
         return
     raw_ignored = settings.get('ignore_hashes', {})
     ignored_hashes = raw_ignored.get(report['domain'], []) if isinstance(raw_ignored, dict) else []
+    if not isinstance(ignored_hashes, list):
+        ignored_hashes = []
+    global_ignored = settings.get('global_ignore_hashes', [])
+    if not isinstance(global_ignored, list):
+        global_ignored = []
+    ignored_hashes = set(ignored_hashes) | set(global_ignored)
     for index, finding in enumerate(report.get('findings', [])):
         sha = (finding.get('fingerprint') or {}).get('sha256')
         if (finding.get('state') == 'found' and finding.get('ignored') is not True and
@@ -2143,7 +2181,7 @@ def wordpress_theme_fetch(url, max_bytes):
     parts = urllib.parse.urlsplit(url)
     if not allowed_target(url) or parts.fragment:
         raise ValueError('Theme-Pruefung akzeptiert nur HTTPS von WordPress.org.')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.23.0 theme-integrity'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.24.0 theme-integrity'})
     class AllowedRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not allowed_target(newurl):
@@ -2504,6 +2542,9 @@ def public_status():
             'ignore_hashes': {domain: sorted(value for value in values if isinstance(value, str) and HEX.fullmatch(value))
                               for domain, values in ignore_hashes.items()
                               if h.valid_domain(domain) and isinstance(values, list)},
+            'global_ignore_hashes': sorted(value for value in settings.get('global_ignore_hashes', [])
+                                           if isinstance(value, str) and HEX.fullmatch(value))
+                                    if isinstance(settings.get('global_ignore_hashes', []), list) else [],
             'bots': {d: {'enabled': v.get('enabled', False)} for d, v in settings.get('bots', {}).items()},
             'storage': storage, 'baseline_inventory': baseline_items,
             'diagnostics': h.read_json(root() / 'diagnostics.json', {}),
@@ -2656,6 +2697,9 @@ def dispatch(request):
         if action in ('ignore-add', 'ignore-remove'):
             return ignore_hash_set(request.get('domain', ''), request.get('sha256', ''),
                                    'add' if action == 'ignore-add' else 'remove')
+        if action in ('global-ignore-add', 'global-ignore-remove'):
+            return global_ignore_hash_set(request.get('sha256', ''),
+                                          'add' if action == 'global-ignore-add' else 'remove')
         if action == 'reputation':
             return reputation(request.get('ip', ''))
         if action == 'baseline-create':

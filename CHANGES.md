@@ -235,3 +235,10 @@
 - Globale Port-Policies, globale IP-Allowlisten, Greylisting, Provider-Firewalls und zeitbegrenzte Portregeln bleiben offen. Eine Allow-Regel kann globale Plesk- oder Provider-Sperren nicht ueberstimmen.
 - Tests decken CLI-Argumente, Port-/Quellvalidierung, Admin-IP-Schutz, Listenfilterung, Loeschen eigener Regeln und Controller-Routing ab.
 
+## 0.24.0 – Globale Malware-Ignore-Hashes
+
+- Ergaenzt eine domainuebergreifende SHA-256-Ausnahmeliste neben den bestehenden domainbezogenen Ausnahmen.
+- Ausgenommene Inhalte werden weiterhin gescannt und sichtbar berichtet; Malwarewarnungen und automatische Reparaturen werden fuer exakt diesen Inhalt unterdrueckt.
+- UI zeigt den Geltungsbereich, erlaubt gezieltes Hinzufuegen/Entfernen und warnt vor domainuebergreifender Wirkung; Grenze 2.000 globale Eintraege.
+- Tests pruefen Wirkung auf unterschiedliche Domains, sichtbare Treffer, Reparatursperre, Ruecknahme und Controller-Routing.
+
