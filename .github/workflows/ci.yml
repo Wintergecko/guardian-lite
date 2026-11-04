@@ -1,0 +1,26 @@
+name: Tests
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PHP CLI
+        run: sudo apt-get update && sudo apt-get install -y php-cli
+      - name: Check PHP syntax
+        run: |
+          find htdocs plib -name '*.php' -print0 | xargs -0 -n1 php -l
+          find plib -name '*.phtml' -print0 | xargs -0 -n1 php -l
+      - name: Python tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Build ZIP
+        run: python3 tools/build_release.py

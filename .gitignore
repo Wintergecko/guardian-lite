@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.phpunit.result.cache
+dist/
+.DS_Store
+*.swp

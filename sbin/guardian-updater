@@ -1,0 +1,307 @@
+#!/usr/bin/python3
+"""Privileged, opt-in GitHub release updater for Guardian Lite.
+
+Only public GitHub releases. No PAT, custom URLs, arbitrary commands, or silent
+installation. An explicit Plesk administrator POST initiates each update.
+Release asset digests are checked, but GitHub metadata is not an independent
+publisher signature. Review release source and take a snapshot before applying.
+"""
+import fcntl
+import hashlib
+import json
+import os
+import pathlib
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+import xml.etree.ElementTree as ET
+import zipfile
+
+DATA = pathlib.Path('/var/lib/guardian-lite')
+UPDATES = DATA / 'updates'
+STATE = UPDATES / 'state.json'
+REPO_RE = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_.-]{1,100}$')
+VERSION_RE = re.compile(r'^(?:v)?(\d+)\.(\d+)\.(\d+)$')
+DIGEST_RE = re.compile(r'^[a-f0-9]{64}$')
+JOB_RE = re.compile(r'^[a-f0-9]{32}$')
+MAX_DOWNLOAD = 8 * 1024 * 1024
+MAX_EXPANDED = 32 * 1024 * 1024
+MAX_FILES = 300
+ALLOWED_HOSTS = {'api.github.com', 'github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
+PLESK_BIN = ('/usr/sbin/plesk', '/usr/bin/plesk')
+
+
+def reply(obj, code=0):
+    print(json.dumps(obj, ensure_ascii=False, separators=(',', ':')))
+    return code
+
+
+def valid_repo(value):
+    if not isinstance(value, str) or not REPO_RE.fullmatch(value):
+        raise ValueError('GitHub-Repository muss owner/repo sein.')
+    if '..' in value or value.startswith('-') or '/.' in value:
+        raise ValueError('Ungueltiger GitHub-Repository-Name.')
+    return value
+
+
+def version_tuple(value):
+    match = VERSION_RE.fullmatch(value) if isinstance(value, str) else None
+    if not match:
+        raise ValueError('Ungueltige Versionsnummer (erwartet X.Y.Z).')
+    return tuple(int(s) for s in match.groups())
+
+
+def ensure_dirs():
+    DATA.mkdir(mode=0o700, exist_ok=True)
+    if DATA.is_symlink():
+        raise ValueError('Unsicheres Guardian-Datenverzeichnis.')
+    UPDATES.mkdir(mode=0o700, exist_ok=True)
+    if UPDATES.is_symlink():
+        raise ValueError('Unsicheres Update-Verzeichnis.')
+    os.chmod(UPDATES, 0o700)
+
+
+def save_state(obj):
+    ensure_dirs()
+    tmp = UPDATES / ('.state-' + uuid.uuid4().hex)
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as out:
+            json.dump(obj, out, ensure_ascii=False)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(str(tmp), str(STATE))
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
+def read_state():
+    try:
+        if STATE.is_symlink():
+            raise ValueError('Unsicherer Update-Statuspfad.')
+        with STATE.open('r', encoding='utf-8') as inp:
+            obj = json.load(inp)
+        return obj if isinstance(obj, dict) else {}
+    except FileNotFoundError:
+        return {}
+
+
+class StrictRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urlsplit(newurl)
+        if target.scheme != 'https' or target.hostname not in ALLOWED_HOSTS or target.port not in (None, 443):
+            raise ValueError('Unsicherer Download-Redirect abgelehnt.')
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def opener():
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), StrictRedirects())
+
+
+def fetch_release(repo, current):
+    valid_repo(repo)
+    version_tuple(current)
+    url = 'https://api.github.com/repos/' + repo + '/releases/latest'
+    req = urllib.request.Request(url, headers={
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Guardian-Lite-Updater/0.3.0',
+        'X-GitHub-Api-Version': '2022-11-28',
+    })
+    with opener().open(req, timeout=12) as response:
+        if response.status != 200:
+            raise ValueError('GitHub antwortet nicht mit Status 200.')
+        data = response.read(256 * 1024 + 1)
+    if len(data) > 256 * 1024:
+        raise ValueError('GitHub-Antwort zu gross.')
+    release = json.loads(data.decode('utf-8'))
+    if not isinstance(release, dict) or release.get('draft') or release.get('prerelease'):
+        raise ValueError('Kein stabiles Release vorhanden.')
+    tag = release.get('tag_name', '')
+    ver = version_tuple(tag)
+    version = '.'.join(str(i) for i in ver)
+    newer = ver > version_tuple(current)
+    asset_name = 'guardian-lite-' + version + '.zip'
+    asset = next((a for a in release.get('assets', []) if isinstance(a, dict) and a.get('name') == asset_name), None)
+    if asset is None:
+        raise ValueError('Release ohne passendes Guardian-ZIP-Asset.')
+    digest = str(asset.get('digest', ''))
+    digest = digest[len('sha256:'):] if digest.startswith('sha256:') else ''
+    size = asset.get('size')
+    download = asset.get('browser_download_url', '')
+    expected = 'https://github.com/' + repo + '/releases/download/' + tag + '/' + asset_name
+    if (not DIGEST_RE.fullmatch(digest) or not isinstance(size, int) or size < 1000 or size > MAX_DOWNLOAD
+            or download != expected or asset.get('state') != 'uploaded'):
+        raise ValueError('Asset-Pruefsumme, Groesse oder GitHub-URL ungueltig.')
+    url_html = 'https://github.com/' + repo + '/releases/tag/' + tag
+    return {'ok': True, 'repo': repo, 'current': current, 'latest': version,
+            'newer': newer, 'sha256': digest, 'size': size, 'asset': asset_name,
+            'download_url': download, 'release_url': url_html}
+
+
+def verify_archive(path, version):
+    total = 0
+    seen = set()
+    with zipfile.ZipFile(str(path)) as archive:
+        infos = archive.infolist()
+        if not (1 <= len(infos) <= MAX_FILES):
+            raise ValueError('Unzulaessige ZIP-Dateianzahl.')
+        for item in infos:
+            name = item.filename
+            parts = pathlib.PurePosixPath(name).parts
+            if (name.startswith('/') or '\\' in name or '..' in parts or
+                    '\x00' in name or not name or name.startswith('./') or
+                    any(part == '' for part in name.split('/')[:-1])):
+                raise ValueError('Unsicherer Dateipfad im Update-ZIP.')
+            if name in seen:
+                raise ValueError('Doppelter ZIP-Eintrag.')
+            seen.add(name)
+            ftype = (item.external_attr >> 16) & 0o170000
+            if ftype not in (0, stat.S_IFREG, stat.S_IFDIR):
+                raise ValueError('ZIP mit Symlink oder Spezialdatei.')
+            total += item.file_size
+            if total > MAX_EXPANDED:
+                raise ValueError('Entpackte Update-Dateien sind zu gross.')
+        if 'meta.xml' not in seen or 'sbin/guardian-updater' not in seen:
+            raise ValueError('Kein gueltiges Guardian-Extension-Paket.')
+        meta_file = archive.getinfo('meta.xml')
+        if meta_file.file_size > 16384:
+            raise ValueError('Extension-Metadaten zu gross.')
+        root = ET.fromstring(archive.read('meta.xml'))
+        if root.findtext('id') != 'guardian-lite' or root.findtext('version') != version:
+            raise ValueError('Extension-ID oder Version stimmt nicht.')
+    return True
+
+
+def download_verified(info):
+    ensure_dirs()
+    req = urllib.request.Request(info['download_url'], headers={'User-Agent': 'Guardian-Lite-Updater/0.3.0'})
+    path = UPDATES / ('guardian-' + uuid.uuid4().hex + '.zip')
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with os.fdopen(fd, 'wb') as out, opener().open(req, timeout=20) as inp:
+            if inp.status != 200:
+                raise ValueError('GitHub-Asset konnte nicht geladen werden.')
+            while True:
+                chunk = inp.read(65536)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_DOWNLOAD:
+                    raise ValueError('ZIP ueberschreitet Groessenlimit.')
+                out.write(chunk)
+                digest.update(chunk)
+            out.flush()
+            os.fsync(out.fileno())
+        if size != info['size'] or digest.hexdigest() != info['sha256']:
+            raise ValueError('SHA256/Groesse des Downloads stimmen nicht mit GitHub ueberein.')
+        verify_archive(path, info['latest'])
+        return path
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+
+def start_install(repo, current, version, expected_sha):
+    if os.geteuid() != 0:
+        raise ValueError('Update erfordert Root-Rechte.')
+    if not DIGEST_RE.fullmatch(expected_sha):
+        raise ValueError('Ungueltige Update-Pruefsumme.')
+    ensure_dirs()
+    fd = os.open(str(UPDATES / '.lock'), os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        old = read_state()
+        if old.get('status') in ('preparing', 'installing') and time.time() - float(old.get('timestamp', 0)) < 900:
+            raise ValueError('Ein Update laeuft bereits.')
+        info = fetch_release(repo, current)
+        if not info['newer'] or info['latest'] != version or info['sha256'] != expected_sha:
+            raise ValueError('Release hat sich geaendert. Bitte erneut pruefen.')
+        if not any(pathlib.Path(p).is_file() for p in PLESK_BIN):
+            raise ValueError('Plesk-CLI nicht gefunden.')
+        job = uuid.uuid4().hex
+        save_state({'status': 'preparing', 'job': job, 'version': version,
+                    'repo': repo, 'timestamp': time.time(), 'error': ''})
+        try:
+            path = download_verified(info)
+            state = {'status': 'installing', 'job': job, 'version': version, 'repo': repo,
+                     'timestamp': time.time(), 'sha256': expected_sha, 'path': str(path)}
+            save_state(state)
+            script = pathlib.Path(__file__).resolve()
+            subprocess.Popen(['/usr/bin/python3', str(script), 'worker', job],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True,
+                             close_fds=True, env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C'})
+        except Exception as exc:
+            save_state({'status': 'failed', 'job': job, 'version': version, 'timestamp': time.time(),
+                        'error': ('Vorbereitung fehlgeschlagen: ' + str(exc))[:300]})
+            raise
+        return {'ok': True, 'status': 'installing', 'job': job, 'version': version}
+    finally:
+        os.close(fd)
+
+
+def run_worker(job):
+    if os.geteuid() != 0 or not JOB_RE.fullmatch(job):
+        raise ValueError('Ungueltiger Update-Worker.')
+    state = read_state()
+    if state.get('status') != 'installing' or state.get('job') != job:
+        raise ValueError('Kein passender ausstehender Update-Auftrag.')
+    source = pathlib.Path(str(state.get('path', '')))
+    if source.parent != UPDATES or not re.fullmatch(r'guardian-[a-f0-9]{32}\.zip', source.name):
+        raise ValueError('Unsicherer Update-Pfad.')
+    digest = str(state.get('sha256', ''))
+    if not DIGEST_RE.fullmatch(digest) or not source.is_file() or source.is_symlink():
+        raise ValueError('Update-Datei nicht vorhanden.')
+    try:
+        if hashlib.sha256(source.read_bytes()).hexdigest() != digest:
+            raise ValueError('Update-Datei wurde veraendert.')
+        verify_archive(source, str(state['version']))
+        cli = next(p for p in PLESK_BIN if pathlib.Path(p).is_file())
+        result = subprocess.run([cli, 'bin', 'extension', '-g', str(source)], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=300, check=False,
+                                text=True, errors='replace',
+                                env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C'})
+        if result.returncode:
+            raise ValueError('Plesk-Upgrade fehlgeschlagen (Exit ' + str(result.returncode) + '): ' + result.stderr[-200:])
+        save_state({'status': 'completed', 'job': job, 'version': state['version'],
+                    'timestamp': time.time(), 'error': ''})
+    except Exception as exc:
+        save_state({'status': 'failed', 'job': job, 'version': state.get('version', ''),
+                    'timestamp': time.time(), 'error': str(exc)[:300]})
+        return 1
+    finally:
+        source.unlink(missing_ok=True)
+    return 0
+
+
+def main(args):
+    try:
+        if args == ['status']:
+            s = read_state()
+            return reply({'ok': True, 'state': {k: v for k, v in s.items()
+                                                if k in ('status', 'version', 'timestamp', 'error')}})
+        if len(args) == 3 and args[0] == 'check':
+            return reply(fetch_release(args[1], args[2]))
+        if len(args) == 5 and args[0] == 'apply':
+            return reply(start_install(args[1], args[2], args[3], args[4]))
+        if len(args) == 2 and args[0] == 'worker':
+            return run_worker(args[1])
+        raise ValueError('Unbekannte Updater-Aktion.')
+    except (ValueError, OSError, RuntimeError, urllib.error.URLError, zipfile.BadZipFile,
+            subprocess.SubprocessError, ET.ParseError, json.JSONDecodeError) as exc:
+        return reply({'ok': False, 'error': str(exc)[:300]}, 1)
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

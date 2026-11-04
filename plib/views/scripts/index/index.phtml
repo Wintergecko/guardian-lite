@@ -1,0 +1,263 @@
+<?php
+$esc = static function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
+$services = is_array($this->overview) ? $this->overview : [];
+$f2b = isset($services['fail2ban']) && is_array($services['fail2ban']) ? $services['fail2ban'] : [];
+$clam = isset($services['clamav']) && is_array($services['clamav']) ? $services['clamav'] : [];
+$fw = isset($services['firewall']) && is_array($services['firewall']) ? $services['firewall'] : [];
+$runtime = isset($services['php_runtime']) && is_array($services['php_runtime']) ? $services['php_runtime'] : [];
+$bots = isset($services['http_flood']) && is_array($services['http_flood']) ? $services['http_flood'] : [];
+$wafLog = isset($services['waflog']) && is_array($services['waflog']) ? $services['waflog'] : [];
+$scan = is_array($this->scan) ? $this->scan : null;
+$waf = is_array($this->waf) ? $this->waf : [];
+$mode = isset($waf['mode']) ? $waf['mode'] : 'unknown';
+$history = is_array($this->history) ? $this->history : [];
+$schedules = is_array($this->schedules) ? $this->schedules : [];
+$watch = is_array($this->watch) ? $this->watch : [];
+$action = static function ($name) use ($esc) {
+    // Fixed action strings come from this trusted template, not request input.
+    return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
+};
+?>
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css" />
+<div class="guardian">
+  <header class="guardian-hero">
+    <div>
+      <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
+      <h1>Guardian Lite <span>v0.4.0</span></h1>
+      <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
+    </div>
+    <span class="guardian-tag">Administratorbereich</span>
+  </header>
+  <div class="guardian-alert guardian-important">Beta-Version: Erst nach Snapshot auf Testsystem testen. ClamAV kann Malware uebersehen. Quarantaene entfernt Dateien aus der laufenden Website und kann sie beschaedigen. Keine automatische Bereinigung.</div>
+  <?php if ($this->helperError): ?>
+    <div class="guardian-alert">Helfer nicht erreichbar: <?= $esc($this->helperError) ?></div>
+  <?php endif; ?>
+  <div class="guardian-grid">
+    <section class="guardian-card">
+      <div class="guardian-icon">01</div><h2>Fail2Ban</h2>
+      <div class="guardian-state <?= !empty($f2b['running']) ? 'is-good' : 'is-warn' ?>"><?= !empty($f2b['running']) ? 'Aktiv' : 'Nicht aktiv' ?></div>
+      <p>Jails: <strong><?= $esc(isset($f2b['jail_count']) ? $f2b['jail_count'] : '–') ?></strong> · Sperren je Jail summiert: <strong><?= $esc(isset($f2b['banned_total']) ? $f2b['banned_total'] : '–') ?></strong></p>
+      <?php if (!empty($f2b['jails'])): ?>
+        <div class="guardian-scroll"><table><thead><tr><th>Jail</th><th>Gesperrte IPs</th></tr></thead><tbody>
+        <?php foreach ($f2b['jails'] as $jail): ?><tr><td><?= $esc($jail['name']) ?></td><td><?= $esc($jail['banned']) ?></td></tr><?php endforeach; ?>
+        </tbody></table></div>
+      <?php endif; ?>
+      <p class="guardian-small">Bann-Zahlen sind nicht die Anzahl eindeutiger IPs. Hier wird Fail2Ban nicht automatisch umkonfiguriert.</p>
+    </section>
+    <section class="guardian-card">
+      <div class="guardian-icon">02</div><h2>ModSecurity / WAF</h2>
+      <div class="guardian-state <?= $mode === 'on' ? 'is-good' : 'is-warn' ?>">
+        <?= $mode === 'on' ? 'Regel-Engine aktiv' : ($mode === 'off' ? 'Regel-Engine aus' : ($mode === 'detectiononly' ? 'Nur Erkennung' : 'Modus unbekannt')) ?>
+      </div>
+      <p>Audit-Log: <b><?= !empty($wafLog['available']) ? 'lesbar' : 'nicht verfuegbar' ?></b> · Letzte erkannte Ereignisse: <b><?= count(isset($wafLog['recent_events']) ? $wafLog['recent_events'] : []) ?></b></p>
+      <p class="guardian-small">Auswertung nur aus den letzten 512 KiB des Logs, kein vollstaendiger Ereigniszaehler.</p>
+      <?php if ($this->wafError): ?><p class="guardian-small"><?= $esc($this->wafError) ?></p><?php endif; ?>
+      <?php if (!empty($waf['detail'])): ?><details><summary>WAF-Servereinstellungen</summary><pre><?= $esc($waf['detail']) ?></pre></details><?php endif; ?>
+    </section>
+    <section class="guardian-card">
+      <div class="guardian-icon">03</div><h2>ClamAV Malware-Engine</h2>
+      <div class="guardian-state <?= !empty($clam['installed']) ? 'is-good' : 'is-warn' ?>"><?= !empty($clam['installed']) ? 'Scanner installiert' : 'Nicht installiert' ?></div>
+      <p>Signaturen: <?= $esc(isset($clam['database_age_days']) && $clam['database_age_days'] !== null ? $clam['database_age_days'] . ' Tage alt' : 'nicht feststellbar') ?></p>
+      <p class="guardian-small">ClamAV erkennt nur einen Teil der Webshells und anderer PHP-Malware. Keine PHP-Verhaltensanalyse.</p>
+    </section>
+    <section class="guardian-card">
+      <div class="guardian-icon">04</div><h2>Firewall-Status</h2>
+      <div class="guardian-state <?= !empty($fw['plesk_firewall_active']) ? 'is-good' : 'is-neutral' ?>">
+        <?= !empty($fw['plesk_firewall_active']) ? 'Plesk-Firewall aktiv' : 'Plesk-Firewall nicht aktiv' ?>
+      </div>
+      <p class="guardian-small">Andere System- oder Provider-Firewalls werden hier nicht bewertet.</p>
+    </section>
+  </div>
+  <div class="guardian-grid guardian-lower">
+    <section class="guardian-card">
+      <h2>PHP Runtime Protection (Snuffleupagus)</h2>
+      <div class="guardian-state <?= !empty($runtime['confirmed']) ? 'is-good' : 'is-warn' ?>">
+        <?= !empty($runtime['confirmed']) ? 'Snuffleupagus-Konfiguration erkannt' : 'Nicht verifiziert / nicht aktiv' ?>
+      </div>
+      <p class="guardian-small">Dieser Status prueft nur Plesk-PHP-Konfigurationsdateien, keine ausgefuehrten PHP-Requests. Eine konfigurierte Engine ist nicht automatisch ein Beleg dafuer, dass alle Websites geschuetzt sind.</p>
+      <p>Erkannte Konfigurationen: <?= $esc(isset($runtime['config_count']) ? $runtime['config_count'] : 0) ?></p>
+      <details><summary>Handler-Konfigurationen</summary><ul>
+      <?php foreach (isset($runtime['configs']) ? $runtime['configs'] : [] as $r): ?>
+        <li><?= $esc($r['handler']) ?>: <?= !empty($r['module_configured']) ? 'Modul konfiguriert' : 'nicht konfiguriert' ?> / <?= !empty($r['rules_configured']) ? 'Regeldatei referenziert' : 'keine Regeldatei erkannt' ?></li>
+      <?php endforeach; ?></ul></details>
+      <p>Beispielregeln und das Vorgehen zur Aktivierung findest du im Paket unter <code>security/php-runtime/</code>. Aktivierung und Rollback erfolgen bewusst manuell je PHP-Handler nach Test.</p>
+    </section>
+    <section class="guardian-card">
+      <h2>HTTP-Bot-/Flood-Schutz (ModSecurity)</h2>
+      <div class="guardian-state is-warn">Bereitstellung pro Website erforderlich</div>
+      <p>Regelvorlagen fuer zeitlich begrenzte IP-basierte HTTP-Limits liegen unter <code>security/http-guard/</code>. Sie koennen typische HTTP-Floods bremsen, aber keinen volumetrischen DDoS abwehren.</p>
+      <p>WAF-Log lesbar: <?= !empty($bots['waf_log_readable']) ? 'Ja' : 'Nein' ?> · NGINX-Rate-Limit-Modul nachgewiesen: <?= !empty($bots['nginx_rate_module_detected']) ? 'Ja' : 'Nein / unbekannt' ?></p>
+      <p class="guardian-small">Keine Regeln sind automatisch aktiviert; ein falsches Rate Limit kann legitime Besucher aussperren. Vor Aktivierung auf einer Testdomain pruefen. Reverse-Proxy-/CDN-IP-Vertrauen muss korrekt eingerichtet sein.</p>
+    </section>
+  </div>
+  <div class="guardian-grid guardian-lower">
+    <section class="guardian-card">
+      <h2>Malware-Scan starten</h2>
+      <p>Die Standard-Document-Roots werden mit ClamAV unter der Website-UID geprueft. Nur ein Scan gleichzeitig.</p>
+      <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'scan'])) ?>">
+        <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+        <label for="guardian-domain">Domain</label>
+        <div class="guardian-formline">
+          <select name="domain" id="guardian-domain" required <?= empty($this->domains) || empty($clam['installed']) ? 'disabled' : '' ?>>
+            <option value="">Domain waehlen</option>
+            <?php foreach ($this->domains as $domain): ?><option value="<?= $esc($domain) ?>"><?= $esc($domain) ?></option><?php endforeach; ?>
+          </select>
+          <button type="submit" <?= empty($this->domains) || empty($clam['installed']) ? 'disabled' : '' ?>>Jetzt scannen</button>
+        </div>
+      </form>
+      <h3>Automatische Scans</h3>
+      <p class="guardian-small">Opt-in pro Domain. Der Plesk-Scheduler prueft stuendlich auf faellige Domains und startet maximal einen Scan je Durchlauf (mindestens 24 Stunden Abstand je Domain).</p>
+      <?php if (empty($this->domains)): ?><p>Keine Standard-Plesk-Domains gefunden.</p><?php endif; ?>
+      <div class="guardian-scroll"><table><thead><tr><th>Domain</th><th>Automatisch</th><th>Aktion</th></tr></thead><tbody>
+        <?php foreach ($this->domains as $domain): $on = isset($schedules[$domain]); ?>
+          <tr><td><?= $esc($domain) ?></td><td><?= $on ? 'Aktiv' : 'Aus' ?></td><td>
+            <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'schedule'])) ?>">
+              <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+              <input type="hidden" name="domain" value="<?= $esc($domain) ?>" />
+              <input type="hidden" name="mode" value="<?= $on ? 'off' : 'on' ?>" />
+              <button type="submit" class="guardian-small-button"><?= $on ? 'Deaktivieren' : 'Aktivieren' ?></button>
+            </form>
+          </td></tr>
+        <?php endforeach; ?>
+      </tbody></table></div>
+    </section>
+    <section class="guardian-card">
+      <h2><?= $scan ? 'Scan-Bericht' : 'Letzter Scan' ?></h2>
+      <?php if (!$scan): ?>
+        <p>Es wurde noch kein Scan ausgefuehrt.</p>
+      <?php else: ?>
+        <p><strong><?= $esc(isset($scan['domain']) ? $scan['domain'] : '–') ?></strong> · <strong><?= $esc(isset($scan['status']) ? $scan['status'] : '–') ?></strong></p>
+        <p>Start: <?= $esc(isset($scan['started_at']) ? $scan['started_at'] : '–') ?> · Ende: <?= $esc(isset($scan['finished_at']) ? $scan['finished_at'] : '–') ?></p>
+        <?php if (isset($scan['infected'])): ?><div class="guardian-state <?= (int)$scan['infected'] === 0 ? 'is-good' : 'is-warn' ?>">Verifizierte Funde: <?= $esc($scan['infected']) ?></div><?php endif; ?>
+        <?php if (!empty($scan['error'])): ?><p class="guardian-alert"><?= $esc($scan['error']) ?></p><?php endif; ?>
+        <?php if (!empty($scan['warning'])): ?><p class="guardian-alert"><?= $esc($scan['warning']) ?></p><?php endif; ?>
+        <?php if (!empty($scan['findings'])): ?>
+          <div class="guardian-scroll"><table><thead><tr><th>Datei / Signatur</th><th>Status</th><th>Aktion</th></tr></thead><tbody>
+          <?php foreach ($scan['findings'] as $i => $finding): ?>
+            <tr>
+              <td><b><?= $esc($finding['path']) ?></b><br><small><?= $esc($finding['signature']) ?></small></td>
+              <td><?= $esc($finding['state']) ?></td>
+              <td>
+                <?php if (in_array($finding['state'], ['found', 'quarantined'], true)): ?>
+                  <?php $isFound = $finding['state'] === 'found'; ?>
+                  <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => $isFound ? 'quarantine' : 'restore'])) ?>" onsubmit="return confirm('<?= $isFound ? 'Datei wirklich von der Website entfernen und in Quarantaene verschieben? Die Website kann danach nicht mehr funktionieren.' : 'Moeglicherweise infizierte Datei wirklich wiederherstellen?' ?>');">
+                    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+                    <input type="hidden" name="jobid" value="<?= $esc($scan['id']) ?>" />
+                    <input type="hidden" name="index" value="<?= $esc($i) ?>" />
+                    <button class="guardian-small-button <?= $isFound ? 'guardian-danger' : '' ?>" type="submit"><?= $isFound ? 'Quarantaene' : 'Wiederherstellen' ?></button>
+                  </form>
+                <?php else: ?>–<?php endif; ?>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody></table></div>
+        <?php endif; ?>
+        <?php if (!empty($scan['output'])): ?><details><summary>Scanner-Protokoll (max. 128 KiB)</summary><pre><?= $esc($scan['output']) ?></pre></details><?php endif; ?>
+      <?php endif; ?>
+      <p class="guardian-small"><a href="<?= $esc($this->baseUrl) ?>">Aktuelle Ansicht laden</a></p>
+    </section>
+  </div>
+  <div class="guardian-grid guardian-lower">
+    <section class="guardian-card">
+      <h2>WAF-Angriffsereignisse</h2>
+      <p>Regelnummer, Quell-IP und Blockierungsindikator (ohne rohe HTTP-Header oder Zugangstoken).</p>
+      <div class="guardian-scroll"><table><thead><tr><th>Regel</th><th>Quell-IP</th><th>Blockiert?</th></tr></thead><tbody>
+        <?php foreach (isset($wafLog['recent_events']) ? $wafLog['recent_events'] : [] as $event): ?>
+          <tr><td><?= $esc($event['rule']) ?></td><td><?= $esc(isset($event['ip']) ? $event['ip'] : '–') ?></td><td><?= !empty($event['blocked']) ? 'Ja' : 'Unbekannt' ?></td></tr>
+        <?php endforeach; ?>
+      </tbody></table></div>
+      <?php if (empty($wafLog['recent_events'])): ?><p class="guardian-small">Keine auswertbaren Ereignisse im letzten Log-Ausschnitt.</p><?php endif; ?>
+    </section>
+    <section class="guardian-card">
+      <h2>IP manuell mit Fail2Ban verwalten</h2>
+      <p class="guardian-alert">Vorsicht: Du kannst deine eigene Administrator-IP sperren. Keine automatische IP-Reputation oder Bot-Challenge.</p>
+      <?php if (!empty($f2b['jails'])): ?>
+        <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'ip'])) ?>" onsubmit="return confirm('Fail2Ban-Aktion wirklich ausfuehren? Eigene Admin-IP kontrollieren!');">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+          <label for="guardian-jail">Jail</label>
+          <select name="jail" id="guardian-jail" required>
+            <?php foreach ($f2b['jails'] as $jail): ?><option value="<?= $esc($jail['name']) ?>"><?= $esc($jail['name']) ?></option><?php endforeach; ?>
+          </select>
+          <label for="guardian-ip">IPv4 oder IPv6</label>
+          <input id="guardian-ip" type="text" name="ip" placeholder="198.51.100.23" required maxlength="45" />
+          <label for="guardian-operation">Aktion</label>
+          <select name="operation" id="guardian-operation"><option value="ban">Sperren</option><option value="unban">Entsperren</option></select>
+          <button type="submit">Aktion ausfuehren</button>
+        </form>
+      <?php else: ?><p>Kein aktives Fail2Ban-Jail gefunden.</p><?php endif; ?>
+    </section>
+  </div>
+  <section class="guardian-card guardian-lower" id="guardian-updater">
+    <h2>GitHub-Updater · v0.4.0</h2>
+    <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
+       Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
+    <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
+       Eine GitHub-Pruefsumme ist <strong>keine unabhaengige digitale Signatur</strong>. Bei kompromittiertem Repository ist auch das Update gefaehrdet.</p>
+    <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'update-repo'])) ?>">
+      <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+      <label for="guardian-update-repo">Vertrauenswuerdiges GitHub-Repository (owner/repo)</label>
+      <div class="guardian-formline">
+        <input id="guardian-update-repo" name="repo" type="text" value="<?= $esc($this->updateRepo) ?>" maxlength="140" placeholder="benutzername/guardian-lite" />
+        <button type="submit">Speichern</button>
+      </div>
+    </form>
+    <?php if ($this->updateRepo !== ''): ?>
+      <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'update-check'])) ?>">
+        <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+        <button type="submit">Auf neue Version pruefen</button>
+      </form>
+    <?php endif; ?>
+    <?php $release = is_array($this->updateResult) ? $this->updateResult : null; ?>
+    <?php if ($release && ($release['repo'] ?? '') === $this->updateRepo): ?>
+      <div class="guardian-state <?= !empty($release['newer']) ? 'is-warn' : 'is-good' ?>">
+        <?= !empty($release['newer']) ? 'Neue Version verfuegbar' : 'Bereits auf aktuellem Stand' ?>:
+        <?= $esc($release['latest'] ?? '–') ?>
+      </div>
+      <?php if (!empty($release['release_url'])): ?>
+        <p><a rel="noopener noreferrer" target="_blank" href="<?= $esc($release['release_url']) ?>">Release-Details bei GitHub ansehen</a></p>
+      <?php endif; ?>
+      <?php if (!empty($release['newer'])): ?>
+        <p class="guardian-small">ZIP-Paket: <?= $esc($release['asset']) ?> · SHA-256:
+           <code><?= $esc($release['sha256']) ?></code></p>
+        <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'update-apply'])) ?>"
+            onsubmit="return confirm('VPS-Snapshot vorhanden? Quellcode des Releases geprueft? Guardian Lite wird mit Root-Rechten aktualisiert. Wirklich installieren?');">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+          <button type="submit" class="guardian-danger">Update auf v<?= $esc($release['latest']) ?> installieren</button>
+        </form>
+      <?php endif; ?>
+    <?php endif; ?>
+    <?php $updateState = is_array($this->updateState) ? $this->updateState : []; ?>
+    <?php if (!empty($updateState['status'])): ?>
+      <p><strong>Letzter Update-Status:</strong> <?= $esc($updateState['status']) ?>
+        <?= !empty($updateState['version']) ? '(v' . $esc($updateState['version']) . ')' : '' ?></p>
+      <?php if (!empty($updateState['error'])): ?><p class="guardian-alert"><?= $esc($updateState['error']) ?></p><?php endif; ?>
+    <?php endif; ?>
+    <?php if ($this->updateError): ?><p class="guardian-alert">Update-Status nicht abrufbar: <?= $esc($this->updateError) ?></p><?php endif; ?>
+    <p class="guardian-small">Fuer den Updater ist keine Verbindung deines GitHub-Kontos mit Plesk erforderlich. Er liest ausschliesslich oeffentliche Releases. Private Repositories werden nicht unterstuetzt.</p>
+  </section>
+  <section class="guardian-card guardian-lower">
+    <h2>Dateiaenderungen (zeitversetzte Erkennung)</h2>
+    <p>Fuer Domains mit aktiviertem Scanplan: Pruefung der Metadaten von PHP-/Konfigurationsdateien durch den stuendlichen Scheduler. Kein Echtzeitschutz und kein vollstaendiges Datei-Inventar. Maximal 1.500 Dateien je Domain-Stichprobe.</p>
+    <?php if (empty($watch)): ?><p>Noch keine Ueberwachungs-Stichprobe vorhanden. Automatischen Scan fuer eine Domain aktivieren.</p><?php else: ?>
+    <div class="guardian-scroll"><table><thead><tr><th>Domain</th><th>Geprueft am (UTC)</th><th>Aenderungen</th><th>Hinweis</th></tr></thead><tbody>
+    <?php foreach ($watch as $watchItem): ?>
+    <tr><td><?= $esc($watchItem['domain']) ?></td><td><?= $esc($watchItem['checked_at']) ?></td><td><?= $esc($watchItem['change_count']) ?></td><td><?= !empty($watchItem['limited']) ? 'Unvollstaendig' : 'Stichprobe' ?></td></tr>
+    <?php if (!empty($watchItem['last_changes'])): ?><tr><td colspan="4"><details><summary>Letzte Aenderungen anzeigen</summary><ul>
+      <?php foreach ($watchItem['last_changes'] as $change): ?><li><?= $esc($change['type']) ?>: <?= $esc($change['path']) ?></li><?php endforeach; ?>
+    </ul></details></td></tr><?php endif; ?>
+    <?php endforeach; ?>
+    </tbody></table></div>
+    <?php endif; ?>
+  </section>
+  <section class="guardian-card guardian-lower">
+    <h2>Scan-Historie</h2>
+    <?php if (empty($history)): ?><p>Noch keine Guardian-0.2-Scans vorhanden.</p><?php else: ?>
+      <div class="guardian-scroll"><table><thead><tr><th>Domain</th><th>Start</th><th>Typ</th><th>Status</th><th>Funde</th><th>Bericht</th></tr></thead><tbody>
+      <?php foreach ($history as $record): ?>
+        <tr><td><?= $esc($record['domain']) ?></td><td><?= $esc($record['started_at']) ?></td><td><?= $esc($record['trigger']) ?></td><td><?= $esc($record['status']) ?></td><td><?= $esc(isset($record['infected']) ? $record['infected'] : '–') ?></td><td><a href="<?= $esc($this->baseUrl) ?>?report=<?= $esc($record['id']) ?>">Ansehen</a></td></tr>
+      <?php endforeach; ?>
+      </tbody></table></div>
+    <?php endif; ?>
+  </section>
+  <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie oder automatische Bereinigung.</footer>
+</div>

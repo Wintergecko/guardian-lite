@@ -1,0 +1,10 @@
+# Guardian Lite Snuffleupagus starter policy - install only after verifying handler support.
+# See https://snuffleupagus.readthedocs.io/config.html
+# These policies block PHP OS command execution. Applications that need those functions break.
+# Test on a single staging PHP-FPM handler and check logs before applying in production.
+sp.disable_function.function("system").drop();
+sp.disable_function.function("shell_exec").drop();
+sp.disable_function.function("passthru").drop();
+sp.disable_function.function("exec").drop();
+sp.disable_function.function("proc_open").drop();
+sp.disable_function.function("popen").drop();
