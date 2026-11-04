@@ -1,4 +1,4 @@
-# Guardian Lite 0.9.1 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.10.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -18,6 +18,7 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | Guardian-WAF/HTTP-Limits | Apache-ModSecurity **v2**, geladenes `mod_unique_id`, `SecDataDir` und Plesk-WAF fuer wirksames Blockieren. In Plesk ueber Installer/Komponentenverwaltung einrichten und danach Guardian-Vorschau pruefen. |
 | Snuffleupagus | Pro verwaltetem Plesk-PHP-FPM-Handler das passende Entwicklerpaket, z. B. `plesk-php83-dev`, ausserdem `git`, `gcc`, `make`, `autoconf`; Handler-Version 8.0–8.5. Beispiel Debian/Ubuntu: `apt install plesk-php83-dev git gcc make autoconf`. |
 | Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |
+| WordPress-Core-Pruefsummen | WP-CLI als root-eigene Datei unter `/usr/local/bin/wp`, `/usr/bin/wp` oder `/bin/wp`; systemweite PHP-CLI und ausgehender HTTPS-Zugriff auf WordPress.org. Guardian installiert WP-CLI nicht. |
 | AbuseIPDB | HTTPS-Ausgangsverbindung und eigener API-Key; kein Serverpaket. |
 
 Plesk-Pakete/Handler-Komponenten koennen je nach Betriebssystem und PHP-Version abweichen. System-PHP-Entwicklungspakete ersetzen nicht die zum Plesk-Handler gehoerigen Pakete.
@@ -80,6 +81,12 @@ Referenzen: [AbuseIPDB CHECK](https://docs.abuseipdb.com/#check-endpoint), [Turn
 Unter **Verwaltung & Diagnose** kann ein Administrator die gaengigen System- und Benutzer-Cronpfade manuell pruefen lassen. Der Check ist read-only und sucht nach wenigen deutlichen Mustern wie Remote-Shell-Pipes, dekodierten Shell-Payloads, PHP-Inline-Eval und Ausfuehrung aus temporaeren Verzeichnissen. Treffer erscheinen im Ergebnis und im Incident-Verlauf. Angezeigt werden nur Datei, Zeilennummer und Regelkennung; der Befehlstext wird nicht kopiert. Guardian deaktiviert oder loescht keine Cronjobs.
 
 Das ist eine begrenzte Heuristik, kein Malware-Vollscan. Ein sauberer Bericht beweist nicht, dass alle Cronjobs harmlos sind. Ungewoehnlich grosse Dateien, Symlinks und nicht lesbare Quellen werden ausgelassen; das Ergebnis markiert eine unvollstaendige Pruefung.
+
+## WordPress-Core-Pruefsummen
+
+Im Verwaltungstab kann der Administrator die Core-Dateien einer gehosteten WordPress-Domain pruefen. Guardian verlangt `wp-load.php` und `wp-includes/version.php`, ruft eine root-eigene WP-CLI-Binary mit `core verify-checksums` und `--skip-plugins --skip-themes --skip-packages` auf und startet sie mit der Website-UID. Projekt-/Benutzerkonfigurationen werden durch ein isoliertes Home und Arbeitsverzeichnis umgangen. Die Netzwerkpruefung verwendet WP-CLI-Standardverhalten mit TLS-Pruefung; `--insecure` wird nicht gesetzt.
+
+Das Ergebnis meldet erkannte Dateiabweichungen mit Pfad und Regelkennung, speichert einen Bericht und erzeugt einen Incident bei Abweichungen. Dateien werden nicht geaendert. WordPress.org-Core-Pruefsummen verwenden laut WP-CLI MD5-Pruefwerte ueber HTTPS und sind kein signierter Paketnachweis. Plugins, Themes, Must-Use-Plugins, eigene Dateien und automatische Reparatur sind nicht Teil dieser Core-Pruefung. Eine saubere Pruefung beweist daher nicht, dass die gesamte Website frei von Malware ist.
 
 ## Malware-Ignore-Liste
 

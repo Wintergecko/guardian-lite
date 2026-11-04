@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import shlex
 import tempfile
 import time
 import unittest
@@ -90,6 +91,48 @@ class ManagementTests(unittest.TestCase):
         self.assertNotIn('bad.example', json.dumps(result))
         self.assertEqual(source.read_bytes(), content)
         self.assertTrue(link.is_symlink())
+
+    def fake_wp_cli(self, message, exit_code):
+        temporary = tempfile.TemporaryDirectory(prefix='guardian-wp-cli-test-', dir='/var/lib')
+        self.addCleanup(temporary.cleanup)
+        folder = pathlib.Path(temporary.name)
+        os.chmod(folder, 0o755)
+        path = folder / 'wp'
+        script = '#!/bin/sh\ncase "$*" in *--insecure*) exit 41;; esac\nprintf "%s\\n" ' + shlex.quote(message) + '\nexit ' + str(exit_code) + '\n'
+        path.write_text(script)
+        os.chmod(path, 0o755)
+        with mock.patch.object(m, 'WP_CLI_PATHS', (str(path),)):
+            return m.wordpress_core_checksum_audit('example.com')
+
+    def test_wordpress_core_checksum_audit_uses_unprivileged_cli_without_mutation(self):
+        self.write_site('wp-load.php', b'<?php // fixture')
+        self.write_site('wp-includes/version.php', b'<?php $wp_version = "6.8.1";')
+        result = self.fake_wp_cli('Success: WordPress installation verifies against checksums.', 0)
+        self.assertEqual(result['status'], 'verified')
+        self.assertEqual(result['finding_count'], 0)
+        self.assertEqual((self.web / 'wp-load.php').read_bytes(), b'<?php // fixture')
+
+    def test_wordpress_core_checksum_mismatch_is_reported_without_file_content(self):
+        self.write_site('wp-load.php', b'<?php // fixture')
+        self.write_site('wp-includes/version.php', b'<?php $wp_version = "6.8.1";')
+        result = self.fake_wp_cli("Warning: File doesn't verify against checksum: wp-admin/admin.php", 1)
+        self.assertEqual(result['status'], 'mismatch')
+        self.assertEqual(result['findings'], [{'path': 'wp-admin/admin.php',
+                                                'rule': 'wordpress-core-checksum-mismatch'}])
+        self.assertNotIn('fixture', json.dumps(result))
+        events = m.h.incident_list()
+        self.assertTrue(any(item['type'] == 'cms_checksum_mismatch' for item in events))
+
+    def test_wordpress_core_checksum_audit_rejects_symlinked_core_paths(self):
+        self.write_site('wp-load.php', b'<?php // fixture')
+        actual = self.web / 'actual-core'
+        actual.mkdir()
+        (actual / 'version.php').write_text('<?php $wp_version = "6.8.1";')
+        os.chown(actual, 65534, 65534)
+        os.chown(actual / 'version.php', 65534, 65534)
+        (self.web / 'wp-includes').symlink_to(actual, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'Symlinks'):
+            m.wordpress_core_checksum_audit('example.com')
 
     def test_repair_preserves_original_and_rollback_refuses_user_changes(self):
         self.write_site('index.php', b'GOOD')

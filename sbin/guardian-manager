@@ -33,6 +33,8 @@ PHP_BASE = pathlib.Path('/opt/plesk/php')
 SNuffle_COMMIT = '1d8614af85a1baa52656f3adbd4684772df91288'
 VERSION = re.compile(r'^8\.[0-5]$')
 HEX = re.compile(r'^[a-f0-9]{64}$')
+WP_CLI_PATHS = ('/usr/local/bin/wp', '/usr/bin/wp', '/bin/wp')
+WP_HASH_WARNING = re.compile(r"^Warning: File doesn't verify against checksum:\s*(.+?)\s*$")
 BEGIN = '; BEGIN GUARDIAN MANAGED\n'
 END = '; END GUARDIAN MANAGED\n'
 CRON_FILES = (pathlib.Path('/etc/crontab'),)
@@ -978,6 +980,93 @@ def cron_audit():
     return result
 
 
+def wordpress_core_checksum_audit(domain):
+    """Compare a WordPress core against WordPress.org checksums using WP-CLI as its site UID."""
+    if os.geteuid() != 0 or not h.valid_domain(domain):
+        raise ValueError('Gueltige Domain und Root-Verwaltung erforderlich.')
+    docroot, uid, gid = h.site_docroot(domain)
+    for relative in ('wp-load.php', 'wp-includes/version.php'):
+        cursor = docroot
+        components = relative.split('/')
+        for index, component in enumerate(components):
+            cursor = cursor / component
+            try:
+                info = cursor.lstat()
+                resolved = cursor.resolve(strict=True)
+            except OSError:
+                raise ValueError('Kein vollstaendiger WordPress-Core im Document-Root gefunden.')
+            if (stat.S_ISLNK(info.st_mode) or
+                    (index < len(components) - 1 and not stat.S_ISDIR(info.st_mode)) or
+                    (index == len(components) - 1 and not stat.S_ISREG(info.st_mode)) or
+                    os.path.commonpath((str(docroot), str(resolved))) != str(docroot)):
+                raise ValueError('WordPress-Core-Pruefung lehnt Symlinks und Sonderdateien ab.')
+    cli = h.binary(WP_CLI_PATHS)
+    if not cli:
+        raise ValueError('WP-CLI fehlt. Fuer die Core-Pruefung WP-CLI als root-eigene Systemdatei bereitstellen.')
+    executable = pathlib.Path(cli).resolve(strict=True)
+    cli_stat = executable.stat()
+    if (not stat.S_ISREG(cli_stat.st_mode) or cli_stat.st_uid != 0 or
+            cli_stat.st_mode & 0o022 or not os.access(executable, os.X_OK)):
+        raise ValueError('WP-CLI muss eine root-eigene, nicht gruppen-/weltbeschreibbare Systemdatei sein.')
+    parent = executable.parent
+    while parent != parent.parent:
+        parent_stat = parent.stat()
+        if not stat.S_ISDIR(parent_stat.st_mode) or parent_stat.st_uid != 0 or parent_stat.st_mode & 0o022:
+            raise ValueError('WP-CLI-Verzeichnisse muessen root-eigen und nicht gruppen-/weltbeschreibbar sein.')
+        parent = parent.parent
+    result = None
+    output = ''
+    truncated = False
+    try:
+        with tempfile.TemporaryDirectory(prefix='guardian-wp-cli-') as home:
+            os.chown(home, uid, gid)
+            os.chmod(home, 0o700)
+            env = {'PATH': '/usr/bin:/bin', 'HOME': home, 'LANG': 'C', 'TERM': 'dumb',
+                   'WP_CLI_CONFIG_PATH': str(pathlib.Path(home) / 'config.yml'),
+                   'WP_CLI_PACKAGES_DIR': str(pathlib.Path(home) / 'packages'),
+                   'WP_CLI_CACHE_DIR': str(pathlib.Path(home) / 'cache'),
+                   'WP_CLI_DISABLE_AUTO_CHECK_UPDATE': '1'}
+            args = [str(executable), '--path=' + str(docroot), '--skip-plugins', '--skip-themes',
+                    '--skip-packages', '--no-color', 'core', 'verify-checksums']
+            with tempfile.TemporaryFile() as log:
+                result = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                        timeout=300, cwd='/', check=False, preexec_fn=lambda: h.drop_privileges(uid, gid),
+                                        env=env)
+                log.seek(0)
+                raw = log.read(5 * 1024 * 1024 + 1)
+                truncated = len(raw) > 5 * 1024 * 1024
+                output = raw[:5 * 1024 * 1024].decode('utf-8', 'replace')
+    except subprocess.TimeoutExpired:
+        raise ValueError('WordPress-Core-Pruefung nach fuenf Minuten abgebrochen.')
+    findings = []
+    for line in output.splitlines():
+        match = WP_HASH_WARNING.match(line)
+        if not match:
+            continue
+        relative = match.group(1).replace('\\', '/')
+        if h.safe_relative(relative) and len(findings) < 100:
+            findings.append({'path': relative, 'rule': 'wordpress-core-checksum-mismatch'})
+    if truncated:
+        status = 'incomplete'
+    elif result.returncode == 0:
+        status = 'verified'
+    elif findings:
+        status = 'mismatch'
+    else:
+        status = 'error'
+    report = {'domain': domain, 'checked_at': h.utc_now(), 'status': status,
+              'finding_count': len(findings), 'findings': findings,
+              'note': 'WP-CLI vergleicht WordPress-Core-Dateien mit WordPress.org-MD5-Pruefsummen ueber HTTPS. Kein signierter Paketnachweis; keine Datei wird geaendert.'}
+    h.write_json(root() / 'wordpress-checksum.json', report)
+    if status == 'mismatch':
+        h.incident_log('cms_checksum_mismatch', 'warning', domain,
+                       '%d WordPress-Core-Dateien stimmen nicht mit WordPress.org-Pruefsummen ueberein.' % len(findings),
+                       findings[0]['path'] if findings else '')
+    elif status == 'verified':
+        h.incident_log('operator', 'info', domain, 'WordPress-Core-Pruefsummen erfolgreich verifiziert.')
+    return report
+
+
 def diagnostics(domain='', http_probe=False):
     result = {'generated_at': h.utc_now(), 'checks': [], 'domain': domain,
               'note': 'Keine API-Schluessel, Dateiinhalte oder vollstaendigen Serverkonfigurationen enthalten.'}
@@ -1061,6 +1150,7 @@ def public_status():
             'bots': {d: {'enabled': v.get('enabled', False)} for d, v in settings.get('bots', {}).items()},
             'diagnostics': h.read_json(root() / 'diagnostics.json', {}),
             'cron_audit': h.read_json(root() / 'cron-audit.json', {}),
+            'wordpress_checksum': h.read_json(root() / 'wordpress-checksum.json', {}),
             'jobs': [h.read_json(p, {}) for p in sorted((root() / 'jobs').glob('*.json'),
                      key=lambda x: x.stat().st_mtime, reverse=True)[:10]],
             'reputation': list(h.read_json(root() / 'reputation.json', {}).values())[-20:]}
@@ -1201,6 +1291,8 @@ def dispatch(request):
             return diagnostics(request.get('domain', ''), request.get('http_probe') is True)
         if action == 'cron-audit':
             return cron_audit()
+        if action == 'wp-checksum-audit':
+            return wordpress_core_checksum_audit(request.get('domain', ''))
         raise ValueError('Unbekannte Verwaltungsaktion.')
 
 

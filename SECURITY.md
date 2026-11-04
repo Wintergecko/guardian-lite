@@ -1,4 +1,4 @@
-# Guardian Lite v0.9.1 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.10.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -37,3 +37,9 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - Die Admin-Pruefung liest nur Dateien aus festen, ueblichen Cron-Pfaden. Symlinks und unregulaere Dateien werden nicht verfolgt; Dateianzahl, Dateigroesse und Gesamtvolumen sind begrenzt.
 - Die heuristischen Treffer nennen Quelldatei, Zeilennummer und Regelkennung, aber keinen Cron-Befehlsinhalt. Kein Cronjob wird automatisch deaktiviert oder geloescht.
 - Die Erkennungsregeln sind bewusst eng und unvollstaendig. Ein sauberer Bericht beweist nicht, dass Cronjobs frei von Malware sind.
+
+## 0.10.0 – WordPress-Core-Pruefsummen
+
+- Guardian ruft nur eine root-eigene WP-CLI-Binary aus festen Systempfaden mit festem Unterbefehl/Optionen auf. Die Domain wird als nicht-shell-ausgewertetes `--path`-Argument uebergeben.
+- WP-CLI laeuft mit Webspace-UID/GID, begrenzter Laufzeit/Dateiausgabe, isoliertem Home, deaktiviertem Auto-Update und ohne Plugins, Themes oder Packages.
+- Netzwerkverifikation bleibt auf WP-CLI/WordPress.org HTTPS mit Zertifikatspruefung angewiesen. Keine automatische Datei-Reparatur; MD5-Pruefsummen sind kein signierter Build-Nachweis.

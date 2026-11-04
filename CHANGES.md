@@ -1,3 +1,10 @@
+## 0.10.0 – WordPress-Core-Pruefsummen
+
+- Neue manuelle Pruefung vergleicht WordPress-Core-Dateien ueber WP-CLI mit WordPress.org-Pruefsummen.
+- WP-CLI laeuft mit festen Argumenten und Umgebungsvariablen als Website-UID, ohne Plugins/Themes/Packages und ohne unsicheren TLS-Fallback.
+- Treffer werden begrenzt im Panel/Incident-Log gezeigt. Kein automatisches Reparieren; Plugins, Themes und eigene Dateien bleiben ausserhalb dieser Core-Pruefung.
+- Regressionstests fuer saubere und abweichende Core-Dateien, sichere Ausgabe und unveraenderte Website-Dateien.
+
 ## 0.9.1 – Plattformunabhaengige Release-Pakete
 
 - Der ZIP-Build normalisiert jetzt auch eingebettete Markdown-Dateien in Unterordnern auf LF, damit Windows- und Linux-Builds dieselben Paketdateiinhalte enthalten.
