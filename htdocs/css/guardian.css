@@ -23,3 +23,16 @@
 .guardian td small{font-size:11px;color:#667}
 .guardian-scroll{max-height:350px;overflow:auto}
 .guardian-card .guardian-alert{font-size:12px}
+
+/* JS-enhanced navigation; without JavaScript every section remains visible. */
+.guardian-tabs{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 12px;margin:10px 0 8px;scrollbar-width:thin}
+.guardian .guardian-tab{background:#eef3f8;border:1px solid #d9e3ef;color:#244463;white-space:nowrap;flex:0 0 auto;padding:11px 16px}
+.guardian .guardian-tab:hover{background:#dbeaf7}
+.guardian .guardian-tab[aria-selected="true"]{background:#0d527e;color:#fff;border-color:#0d527e}
+.guardian .guardian-tab:focus-visible{outline:3px solid #e9a23b;outline-offset:2px}
+.guardian-tab-panel[hidden]{display:none!important}
+.guardian-tab-panel{min-height:100px;outline:none}
+.guardian-tab-panel>.guardian-grid:first-child,.guardian-tab-panel>.guardian-card:first-child{margin-top:0}
+.guardian-roadmap-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+.guardian-roadmap-grid ul{padding-left:20px;line-height:1.65;color:#455468}
+@media(max-width:800px){.guardian-roadmap-grid{grid-template-columns:1fr;gap:0}.guardian .guardian-tab{padding:10px 13px}}

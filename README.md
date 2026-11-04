@@ -110,6 +110,10 @@ Die Erweiterung enthaelt den Bereich **GitHub-Updater**. In Plesk als Administra
 - Eine umfangreiche DDoS-Abwehr benoetigt einen vorgeschalteten Provider/CDN-Schutz.
 
 
-## Hinweis zum privaten GitHub-Repository
+## Oberflaeche seit 0.5.0
 
-Dieses Repository ist privat. Der eingebaute GitHub-Updater arbeitet derzeit nur mit **oeffentlichen** GitHub-Releases ohne Authentifizierung. Auf diesem privaten Repository wird er keine Updates finden. Bitte kein persoenliches Zugriffstoken in die Extension eintragen. Fuer private Releases ist ein separater sicherer Authentifizierungs- und Signaturmechanismus erforderlich.
+Die Administratoroberflaeche verwendet ohne externe JavaScript-Bibliotheken fuenf Tabs:
+Uebersicht, Malware & Dateien, Angriffe & Schutz, Updates und Feature-Liste.
+Der aktuelle Tab bleibt nach Formularaktionen in derselben Browser-Sitzung erhalten; Links mit
+`#guardian-tab-updates` oeffnen den Updater direkt. Ohne JavaScript bleiben alle Bereiche sichtbar.
+Das Feature-Backlog ist bewusst keine Zusage eines vollstaendigen Imunify360-Ersatzes.

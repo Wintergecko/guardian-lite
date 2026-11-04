@@ -1,3 +1,18 @@
+## 0.5.0 – Uebersichtliche Plesk-Tabs und Feature-Liste
+
+- Fuenf Bereiche: Uebersicht, Malware & Dateien, Angriffe & Schutz, Updates, Feature-Liste.
+- Tastaturbedienbare Tabs mit ARIA-Rollen, Hash-Links und Wiederherstellung des letzten Tabs.
+- Alle vorhandenen Formulare und POST-Aktionen bleiben bestehen.
+- Ohne JavaScript bleiben alle Abschnitte sichtbar.
+- Feature-Liste unterscheidet implementierte, manuell vorbereitete und offene Funktionen.
+- Die Laufzeit-/Bot-Policies werden weiterhin nicht automatisch aktiviert.
+
+## 0.4.1
+
+- Updater-Repository-Feld akzeptiert nun owner/repo oder vollständige GitHub-URL.
+- Prüfung, ob die Repository-Einstellung gespeichert wurde.
+- Hinweis: Private GitHub-Releases sind noch nicht mit dem Updater nutzbar.
+
 # 0.4.0 – PHP-Runtime-/HTTP-Bot-Integration (Opt-in)
 
 - Konservative Anzeige von Plesk-PHP-Konfigurationen und WAF-Log-Bereitschaft.
