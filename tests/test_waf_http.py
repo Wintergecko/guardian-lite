@@ -38,6 +38,7 @@ class WafHttpTests(unittest.TestCase):
                           'Listen 127.0.0.1:%d\nUser www-data\nGroup www-data\n'
                           'LoadModule mpm_event_module /usr/lib/apache2/modules/mod_mpm_event.so\n'
                           'LoadModule authz_core_module /usr/lib/apache2/modules/mod_authz_core.so\n'
+                          'LoadModule unique_id_module /usr/lib/apache2/modules/mod_unique_id.so\n'
                           'LoadModule security2_module /usr/lib/apache2/modules/mod_security2.so\n'
                           'ErrorLog %s/error.log\nDocumentRoot %s\n'
                           '<Directory %s>\nRequire all granted\n</Directory>\n'
@@ -68,8 +69,7 @@ class WafHttpTests(unittest.TestCase):
                                 statuses.append(error.code)
                     if mode == 'enforce':
                         debug = (folder / 'debug.log').read_text(errors='replace')
-                        summary = '\n'.join(line for line in debug.splitlines() if
-                                            'guardian_requests' in line or 'collection' in line.lower())[-2200:]
+                        summary = debug[-1500:] + '\n' + (folder / 'error.log').read_text(errors='replace')[-800:]
                         self.assertEqual(statuses[:10], [200] * 10)
                         self.assertEqual(statuses[10:], [429, 429], summary)
                     else:

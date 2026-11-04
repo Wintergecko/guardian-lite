@@ -60,14 +60,17 @@ def locked(blocking=False):
         os.close(fd)
 
 
-def run(argv, timeout=30, **kwargs):
+def run(argv, timeout=30, diagnostic=False, **kwargs):
     result = subprocess.run([str(a) for a in argv], stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, timeout=timeout, check=False,
                             env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C'}, **kwargs)
     if result.returncode:
         # Commands may process secrets; never echo command arguments or raw stderr.
-        raise ValueError('Systemaktion fehlgeschlagen: %s (Exit %d).' %
-                         (pathlib.Path(str(argv[0])).name, result.returncode))
+        detail = ''
+        if diagnostic:
+            detail = ' ' + re.sub(r'[\x00-\x1f]+', ' ', result.stderr.decode('utf-8', 'replace')[-180:])
+        raise ValueError('Systemaktion fehlgeschlagen: %s (Exit %d).%s' %
+                         (pathlib.Path(str(argv[0])).name, result.returncode, detail))
     return result.stdout.decode('utf-8', 'replace').strip()
 
 
@@ -86,7 +89,7 @@ def checked(path, limit=2_000_000):
     fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         st = os.fstat(fd)
-        if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_nlink != 1 or st.st_size > limit:
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_nlink != 1 or st.st_size > limit or st.st_mode & 0o022:
             raise ValueError('Unsichere oder zu grosse Konfigurationsdatei.')
         with os.fdopen(fd, 'rb', closefd=False) as stream:
             data = stream.read(limit + 1)
@@ -261,8 +264,8 @@ def runtime_install(version):
         run(['/usr/sbin/useradd', '--system', '--no-create-home', '--home-dir', '/nonexistent',
              '--shell', '/usr/sbin/nologin', 'guardian-build'])
         user = pwd.getpwnam('guardian-build')
-    if user.pw_uid == 0:
-        raise ValueError('Build-Benutzer darf keine Root-UID besitzen.')
+    if not 0 < user.pw_uid < 1000 or user.pw_dir != '/nonexistent' or user.pw_shell != '/usr/sbin/nologin':
+        raise ValueError('Build-Benutzer muss ein gesondertes gesperrtes Systemkonto sein.')
     def unprivileged():
         os.setgroups([])
         os.setgid(user.pw_gid)
@@ -274,15 +277,16 @@ def runtime_install(version):
         os.chown(folder, user.pw_uid, user.pw_gid)
         source = folder / 'source'
         run(['/usr/bin/git', 'clone', '--depth=1', '--branch', 'v0.14.0',
-             'https://github.com/jvoisin/snuffleupagus.git', str(source)], timeout=180, preexec_fn=unprivileged)
-        commit = run(['/usr/bin/git', '-C', source, 'rev-parse', 'HEAD'], preexec_fn=unprivileged)
+             'https://github.com/jvoisin/snuffleupagus.git', str(source)], timeout=180,
+            cwd=folder, preexec_fn=unprivileged, diagnostic=True)
+        commit = run(['/usr/bin/git', '-C', source, 'rev-parse', 'HEAD'], cwd=folder, preexec_fn=unprivileged, diagnostic=True)
         if commit != SNuffle_COMMIT:
             raise ValueError('Upstream-Tag stimmt nicht mit dem freigegebenen Commit ueberein.')
         src = source / 'src'
-        run([base / 'bin/phpize'], timeout=120, cwd=src, preexec_fn=unprivileged)
+        run([base / 'bin/phpize'], timeout=120, cwd=src, preexec_fn=unprivileged, diagnostic=True)
         run([src / 'configure', '--enable-snuffleupagus', '--with-php-config=' + str(base / 'bin/php-config')],
-            timeout=180, cwd=src, preexec_fn=unprivileged)
-        run(['/usr/bin/make', '-j2'], timeout=600, cwd=src, preexec_fn=unprivileged)
+            timeout=180, cwd=src, preexec_fn=unprivileged, diagnostic=True)
+        run(['/usr/bin/make', '-j2'], timeout=600, cwd=src, preexec_fn=unprivileged, diagnostic=True)
         built = src / 'modules/snuffleupagus.so'
         fd = os.open(str(built), os.O_RDONLY | os.O_NOFOLLOW)
         with os.fdopen(fd, 'rb') as inp:
@@ -344,6 +348,8 @@ def waf_set(domain, mode, limit, expected):
     modules = run([ctl, '-M'])
     if 'security2_module' not in modules:
         raise ValueError('Apache ModSecurity v2 ist nicht geladen.')
+    if 'unique_id_module' not in modules:
+        raise ValueError('Apache mod_unique_id als ModSecurity-Voraussetzung fehlt.')
     included = run([ctl, '-t', '-D', 'DUMP_INCLUDES'])
     datadir = None
     for filename in re.findall(r'(/[^\s]+\.conf)', included):
@@ -928,6 +934,8 @@ def uninstall_cleanup():
     if path is not None and path.exists():
         data, _ = checked(path)
         if data.startswith(b'# Guardian managed\n'):
+            if digest(data) != settings.get('waf', {}).get('sha256'):
+                raise ValueError('Guardian-WAF-Datei wurde extern geaendert; vor Deinstallation manuell pruefen.')
             ctl = h.binary(('/usr/sbin/apache2ctl', '/usr/sbin/apachectl'))
             systemctl = h.binary(h.SYSTEMCTL_PATHS)
             if not ctl or not systemctl:
