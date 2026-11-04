@@ -46,7 +46,7 @@ Die Dokumentation enthaelt auch cPanel-, WHMCS- und DirectAdmin-Funktionen. Sie 
 5. **PHP-Laufzeiterkennung:** Zunaechst messbarer Log-Modus mit Testfixtures und PHP-Handlermatrix; Blockieren bleibt Opt-in und wird nur fuer nachweislich abgedeckte Handler angeboten.
 6. **Datenbank und externe Dienste:** Read-only SQL-Scan und Anbieter-/Datenschutzentscheidung vor Bereinigung oder neuen Cloud-Reputationsquellen.
 7. **Optionale Betriebssystem-Patches:** KernelCare-Status/Integration separat; keine automatische Kernel-/Paketaktualisierung innerhalb der Guardian-Erweiterung.
-8. **Server-Integritaet:** Cronjob-Heuristiken um Distributionenpfade und Testfixtures erweitern; danach Systemdienst-/Konfigurationsauffaelligkeiten und erkannte Admin-Werkzeuge in den Incident-Verlauf aufnehmen. Nur lesend und mit manueller Bewertung.
+8. **Server-Integritaet:** Cronjob-Audit, Systemdienst-/Konfigurationsauffaelligkeiten und erkannte Admin-Werkzeuge in den Incident-Verlauf integrieren. Zunaechst nur lesend und mit manueller Bewertung.
 
 Alle systemweiten Aktionen bleiben standardmaessig aus und werden ausschliesslich auf dem separaten Plesk-Testserver geprueft. Keine echte Plesk-Installation oder Firewall-Aktivierung wird durch CI vorgetaeuscht.
 
