@@ -446,7 +446,7 @@ class ManagementTests(unittest.TestCase):
     def test_wordpress_database_clamav_export_failure_is_not_clean(self):
         result = self.fake_wp_database_stream(b'', export_rc=5)
         self.assertEqual(result['status'], 'partial')
-        self.assertIn('Export', result['error'])
+        self.assertIn('Datenbankexport', result['error'])
 
     def test_repair_preserves_original_and_rollback_refuses_user_changes(self):
         self.write_site('index.php', b'GOOD')
