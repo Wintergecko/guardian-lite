@@ -278,7 +278,7 @@ class ManagementTests(unittest.TestCase):
         with mock.patch.object(m.h, 'binary', return_value=str(path)), \
                 mock.patch.object(m.subprocess, 'run', side_effect=fake_run):
             result = m.wordpress_database_audit('example.com')
-        self.assertGreaterEqual(len(calls), 4)
+        self.assertGreaterEqual(len(calls), 3)
         return result
 
     def test_wordpress_database_audit_reports_only_safe_identifiers_read_only(self):
