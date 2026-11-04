@@ -35,7 +35,7 @@ $domainSelect = function () use ($esc) {
     · Freier Datentraeger: <strong><?= isset($storage['disk']['free_bytes']) && $storage['disk']['free_bytes'] !== null ? $esc($formatBytes($storage['disk']['free_bytes'])) : 'nicht feststellbar' ?></strong></p>
   <p class="guardian-small">Dateisystemmessung: <?= $esc($storage['measured_at'] ?? 'noch nicht ermittelt') ?> (wird hoechstens 15 Sekunden zwischengespeichert).</p>
   <div class="guardian-scroll"><table><thead><tr><th>Bereich</th><th>Groesse</th><th>Dateien</th></tr></thead><tbody>
-    <?php foreach (['backups' => 'PHP-/WAF-Backups', 'baselines' => 'Good-File-Baselines', 'repair-journals' => 'Reparaturprotokolle', 'jobs' => 'Scan-Berichte'] as $area => $label): $usage = $storageAreas[$area] ?? []; ?>
+    <?php foreach (['backups' => 'PHP-/WAF-Backups', 'baselines' => 'Good-File-Baselines', 'repair-journals' => 'Reparaturprotokolle', 'jobs' => 'Scan-Berichte', 'scan-cache' => 'RapidScan-Cache'] as $area => $label): $usage = $storageAreas[$area] ?? []; ?>
       <tr><td><?= $esc($label) ?><?= !empty($usage['incomplete']) ? ' · Pruefung unvollstaendig' : '' ?></td><td><?= $esc($formatBytes($usage['bytes'] ?? 0)) ?></td><td><?= $esc($usage['files'] ?? 0) ?></td></tr>
     <?php endforeach; ?>
   </tbody></table></div>

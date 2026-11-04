@@ -13,7 +13,7 @@ Imunify360 kombiniert einen serverweiten Netzwerk-Firewall-Agenten, dynamische I
 | Imunify360-Bereich | Guardian Lite heute | Fuer vergleichbare Funktion fehlt |
 |---|---|---|
 | Malwaredatei-Scan, Bericht und Historie | Manuelle und geplante ClamAV-Scans pro Domain, Berichte, Historie, FIFO-Warteschlange bis 100 und strikt serielle Worker mit niedriger CPU-Prioritaet | Flexible Zeitplaene, gezielte globale Scan-Auftraege, sichtbare feinere Ressourcenbudgets und ressourcenschonendes Wiederholungsscanning |
-| RapidScan / Cloud-Scan | Begrenzter Metadatenvergleich; ClamAV scannt weiterhin lokal | Verifizierter Hash-Cache und externe Reputations-/Hashquelle; Lizenz-/Datenschutzentscheidung fuer Cloud-Abfragen |
+| RapidScan / Cloud-Scan | Lokaler Cache fuer unveraenderte, saubere Dateien; gebunden an Dateisystem-Metadaten, ClamAV-Binary und Signaturdatei-Metadaten; Cache ist begrenzt und invalidiert bei Aenderung | Kein Cloud-Hashabgleich/Whitelist-Feed und keine 5–20x-Leistungszusage; externe Reputations-/Hashquelle benoetigt Datenschutz-/Anbieterfreigabe |
 | System- und Benutzer-Cronjobs | Neue read-only Heuristikpruefung gaengiger System-/Benutzer-Cronpfade; zeigt Fundregel, Quelldatei und Zeilennummer, aendert nichts | Erweiterte Distributionenabdeckung, kuratierte Erkennungsregeln und validierte Testfixtures; keine vollstaendige Malware-Erkennung |
 | Live-Datei- und Upload-Scanning | Opt-in inotify-Wache mit gezielter ClamAV-Pruefung | fanotify-Abdeckung, FTP-/HTTP-Upload-Hooks, Dateiarchiv-Workflows, Overflow-/Wiederanlauf-Abdeckung und nachvollziehbare Vollstaendigkeit |
 | Bereinigung und Wiederherstellung | Manuelle Quarantaene; opt-in Reparatur nur aus bestaetigter Baseline nach sauberem Vollscan; Storage-Ansicht, 512-MiB-Baseline- und 256-MiB-/200-Eintraege-Backup-Quota sowie bestaetigte manuelle Loeschung | Sichere Vorschlaege fuer unbekannte Funde, granularere Aufbewahrungsregeln, Backup-Import und Bulk-Aktionen |
@@ -40,7 +40,7 @@ Die Dokumentation enthaelt auch cPanel-, WHMCS- und DirectAdmin-Funktionen. Sie 
 
 ## Umsetzung in sicheren Abschnitten
 
-1. **Malware-Arbeitsablauf:** SHA-256-Ausnahmen je Domain, WordPress-Core-/Plugin-Pruefsummen und begrenzter WordPress-Datenbankindikator-Scan (implementiert); danach lokale signaturgebundene Hash-Caches, weitere CMS-Hersteller-Pruefsummen und sichtbare Quota/Aufbewahrung. Datenbanktreffer bleiben reine Hinweise; unbekannte Dateifunde bleiben bis zur Freigabe unveraendert.
+1. **Malware-Arbeitsablauf:** SHA-256-Ausnahmen je Domain, WordPress-Core-/Plugin-Pruefsummen, begrenzter WordPress-Datenbankindikator-Scan und lokaler dateimetadaten-/signaturgebundener RapidScan-Cache (implementiert); danach weitere CMS-Hersteller-Pruefsummen sowie ein signaturbasierter Datenbankscan mit Datenbankbackup/Rollback. Datenbankheuristiktreffer bleiben reine Hinweise; unbekannte Dateifunde bleiben bis zur Freigabe unveraendert.
 2. **Ereignisse und Abwehr:** Vereinheitlichte Incidents aus ClamAV, ModSecurity, Fail2Ban und PHP-Proben; filterbarer Verlauf; E-Mail-Warteschlange und sichere, feste Webhook/Hooks.
 3. **HTTP/WAF:** Signierte Regelquellen, klare Versions-/Regel-Ausnahmen, Testmodus, spezifische Pfad-/IP-Ratenlimits und Wiederherstellung bei fehlgeschlagenem Reload.
 4. **Netzwerk-IP-Schutz:** Guardian-Deny-Regeln verwenden Plesks native Firewall mit Rollback und begrenzten Ablaufzeiten; danach priorisierte Allow-/Notfalllisten, AbuseIPDB-Freigabeworkflow und CIDR-Tests auf dem separaten Plesk-VPS. Kein paralleler nftables-/iptables-Backendmix.

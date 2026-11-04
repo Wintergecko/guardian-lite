@@ -1,3 +1,9 @@
+## 0.18.0 – Lokaler signaturgebundener RapidScan
+
+- Lokaler Cache ueberspringt unveraenderte saubere Dateien nur bei gleichem ClamAV-Binary und unveraenderten lokalen Signaturdateien.
+- Geaenderte/neue Dateien werden ueber eine sichere ClamAV-Dateiliste geprueft; Malwarefunde werden nie als sauber gecacht.
+- Bei unvollstaendigem Inventar, Scannerwarnungen oder unsicherem Stand faellt Guardian auf Vollscan zurueck. Cache ist auf 16 Domains und 4 MiB je Domain begrenzt und in der Speicheranzeige enthalten.
+
 ## 0.17.0 – WordPress-Datenbankindikatoren
 
 - Neue manuelle, read-only WordPress-Datenbankpruefung mit festen SELECT-Abfragen und begrenzter Laufzeit/Ausgabe.

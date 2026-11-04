@@ -1,4 +1,4 @@
-# Guardian Lite v0.17.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.18.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -82,6 +82,13 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - Ausschliesslich read-only SELECT-Abfragen, 101 Zeilen je Tabelle, 2 MiB Ausgabe und 5 Minuten Gesamtzeit. Ausgabe/Bericht enthalten keine Datenbankwerte oder Zugangsdaten.
 - Numerische Zeilen-IDs koennen Website-Strukturen offenlegen und werden nur root-privat gespeichert sowie Administratoren angezeigt.
 - Muster sind heuristisch; Fehlalarme und uebersehene Malware sind moeglich. Kein Imunify MDS, kein ClamAV-Ersatz und keine Datenbankaenderung.
+
+## 0.18.0 – RapidScan-Cache
+
+- Cache-Dateien liegen root-privat. Cachetreffer verlangen exakte Dateisystem-Metadaten inklusive ctime sowie gleiche ClamAV-Binary-/Signaturidentitaet. Ein Signatur- oder Binary-Update invalidiert den gesamten Domaincache.
+- Cacheverwendung setzt ein vollstaendiges, begrenztes Inventar ohne unsichere Pfade voraus. ClamAV prueft nur neue/geaenderte Pfade aus einer root-erstellten, nicht durch Website-Benutzer beschreibbaren Liste; Cache wird nachher nur fuer unveraenderte Dateien aktualisiert.
+- Malwarefund-Dateien werden nicht als sauber gespeichert; Scannerwarnungen, unvollstaendige Logs oder Inventarfehler verhindern Cache-Updates. Cache-Grenzen: 16 Domains, 4 MiB je Domain, 10.000 Dateien. Sonstige Faelle verwenden den regulaeren Vollscan.
+- Wie jeder inkrementelle Scanner hat dies ein Zeitfenster bei gleichzeitig geaenderten Websites; periodische Vollscans bleiben sinnvoll. Dies nutzt keine externe Hash-Reputation.
 
 ## 0.11.0 – WordPress-Plugin-Pruefsummen
 
