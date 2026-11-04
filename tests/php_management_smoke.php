@@ -78,12 +78,18 @@ try { $controller->init(); throw new RuntimeException('Non-admin accepted'); } c
 
 class ManagementView extends stdClass {}
 $view = new ManagementView();
-$view->management = ['handlers' => [], 'cloud' => [], 'backups' => []];
+$view->management = ['handlers' => [['version' => '8.3', 'sha256' => str_repeat('a', 64),
+    'module' => true, 'managed' => false, 'build_missing' => ['phpize']]], 'cloud' => [],
+    'backups' => [['kind' => 'php', 'identity' => '8.3', 'id' => str_repeat('b', 32), 'created_at' => 'test'],
+                  ['kind' => 'waf', 'id' => str_repeat('c', 32), 'created_at' => 'test']],
+    'waf_sha256' => str_repeat('d', 64)];
 $view->managementError = '';
 $view->managementResult = [];
 $view->domains = ['example.com'];
 $view->csrf = 'test-token';
-$view->scan = null;
+$view->scan = ['id' => str_repeat('e', 32), 'findings' => [
+    ['path' => '<script>test</script>.php', 'state' => 'found'],
+    ['path' => 'index.php', 'state' => 'repaired']]];
 $render = function () {
     $esc = static function ($value) { return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
     ob_start();
@@ -93,4 +99,5 @@ $render = function () {
 $html = $render->call($view);
 checkManagement(strpos($html, 'guardian-management') !== false, 'Management partial did not render');
 checkManagement(strpos($html, 'name="csrf"') !== false, 'Management forms lack CSRF');
+checkManagement(strpos($html, '<script>test</script>') === false, 'Finding path was not escaped');
 echo "Management controller and template smoke: OK\n";

@@ -20,6 +20,7 @@ import sys
 import tempfile
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 import uuid
 
@@ -448,8 +449,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def api_json(url, headers, data=None):
     request = urllib.request.Request(url, headers=headers, data=data)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    with opener.open(request, timeout=10) as response:
-        raw = response.read(64_001)
+    try:
+        with opener.open(request, timeout=10) as response:
+            raw = response.read(64_001)
+    except urllib.error.HTTPError as exc:
+        raise ValueError('Cloud-API antwortet mit HTTP %d; Schluessel und API-Limit pruefen.' % exc.code) from None
+    except urllib.error.URLError:
+        raise ValueError('Cloud-API nicht erreichbar; DNS, TLS und ausgehendes HTTPS pruefen.') from None
     if len(raw) > 64000:
         raise ValueError('API-Antwort zu gross.')
     result = json.loads(raw)
@@ -588,10 +594,10 @@ def repair_set(domain, mode):
     return {'message': 'Automatische Reparatur ' + mode}
 
 
-def repair_one(jobid, index):
+def repair_one(jobid, index, blocking=False):
     if not h.JOB_ID.fullmatch(jobid) or type(index) is not int or not 0 <= index < h.MAX_FINDINGS:
         raise ValueError('Ungueltiger Fundverweis.')
-    fd = h.lock_scan()
+    fd = h.lock_scan(blocking=blocking)
     try:
         report = h.load_job(jobid)
         if not report or report.get('status') != 'finished':
@@ -718,7 +724,7 @@ def auto_repair(jobid):
     for index, finding in enumerate(report.get('findings', [])):
         if finding.get('state') == 'found':
             try:
-                repair_one(jobid, index)
+                repair_one(jobid, index, blocking=True)
             except (ValueError, OSError, KeyError, IndexError):
                 h.incident_log('operator', 'warning', report['domain'], 'Automatische Reparatur abgelehnt; manuelle Pruefung erforderlich.', finding.get('path', ''))
 
@@ -1067,7 +1073,7 @@ def main(args):
             run_job(args[1])
             return h.respond({'ok': True})
         if len(args) == 2 and args[0] == 'auto-repair' and h.JOB_ID.fullmatch(args[1]):
-            with locked():
+            with locked(blocking=True):
                 auto_repair(args[1])
             return h.respond({'ok': True})
         if args == ['request']:

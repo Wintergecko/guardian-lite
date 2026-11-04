@@ -1,236 +1,81 @@
-# Guardian Lite v0.7.0 – Plesk Security (Linux)
+# Guardian Lite 0.7.0 – Plesk Security (Linux)
 
-Ein **experimenteller Open-Source-Baukasten** fuer Plesk Obsidian 18.x auf Linux mit Root-Zugriff. Keine offizielle Plesk-/Imunify360-Software, kein Ersatz fuer professionell getestete Malware-Abwehr. **Installation nur zuerst auf Test-VPS / Snapshot.** Fuer die aktuelle Version sind Python >=3.8 und eine Plesk-Umgebung mit Extension-API erforderlich.
+Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf Linux, Python >=3.8. Beta: aktive Schutzfunktionen zuerst auf einem separaten Testserver pruefen. Keine offizielle Plesk-/Imunify360-Software.
 
-## Aktueller Stand 0.7.0
+## Funktionsumfang
 
-Opt-in-Live-Dateiwache (inotify), Incident-Protokoll, JSON-Export und E-Mail-Warnungen sind implementiert. Die periodische Metadatenpruefung bleibt als separate Funktion erhalten. Plesk-Integration und Mailzustellung werden auf einem separaten Testserver geprueft.
+| Bereich | Implementiert | Grenze / Voraussetzung |
+|---|---|---|
+| ClamAV | Manuelle und pro Domain aktivierbare geplante Vollscans, Berichte, Historie | ClamAV mit Signaturen separat installieren; Scans laufen als Website-UID |
+| Scanplanung | Stuendlicher Plesk-Task; ein neuer Scan je Lauf, mindestens 24h je Domain | Kein garantierter taeglicher Scan fuer beliebig viele Domains |
+| Document-Roots | Aufloesung aus Plesk-Hostingdaten, einschliesslich Zusatzdomains | Ziel muss im zugeordneten Webspace liegen und nicht root-eigen sein |
+| Quarantaene | Manuelles Verschieben verifizierter Funde und Wiederherstellen | Fingerprint-Kontrolle; kein Ueberschreiben; gleiches Dateisystem erforderlich |
+| Dateiwache | Opt-in-inotify und gezielte ClamAV-Einzeldateipruefung | Maximal 5 Domains / 450 Verzeichnisse je Domain; keine Ausfuehrungsblockade |
+| Metadatenvergleich | Periodische Stichprobe fuer Domains mit Scanplanung | Bis 1500 Dateien; keine vollstaendige Integritaetspruefung |
+| Incidents / E-Mail | Privates Ereignisprotokoll, JSON-Export, gedrosselte Warnungen | Mailtransport lokal erforderlich; Uebergabe ist kein Zustellnachweis |
+| Fail2Ban | Status bestehender Jails und manuelle IP-Sperren/-Freigaben | Erstellt keine Jails oder globale Firewall-Policies |
+| WAF | ModSecurity-Loganzeige, Domain-Modus und Guardian-Regelverwaltung | Apache ModSecurity v2, mod_unique_id und SecDataDir erforderlich |
+| HTTP-Botlimits | Guardian-Regeln fuer einen Zielhost, Vorschau, Erkennen/429-Sperren, Rollback | Korrekte Real-IP-Konfiguration; kein Netzwerk-DDoS-Schutz |
+| PHP-Runtime | Snuffleupagus-Build aus festem Commit, Simulation, Aktivierung | Passende PHP-Entwicklungswerkzeuge; PHP 8.0–8.5; pro Handler wirksam |
+| PHP-Backup/Rollback | GUI mit Fingerprint-Pruefung, Recovery-Backup und FPM-Pruefung/Reload | Echte Plesk-Requests und Handler-Zuordnung auf dem Testserver pruefen |
+| Good-File-Reparatur | Baselines, manuelle und opt-in automatische Reparatur nach Vollscans, Rollback | Admin-freigegebene Quelle; keine Hersteller-Signatur; unbekannte Dateien bleiben unveraendert |
+| Cloud-Reputation | Manuelle AbuseIPDB-Abfrage, Schema-Pruefung und Stunden-Cache | Eigener API-Key und Zustimmung; keine automatischen Meldungen/Sperren |
+| Bot-Challenges | Cloudflare Turnstile auf ausgewaehlten PHP-Anmeldepfaden | Eigene Keys, HTTPS, PHP-cURL, freie auto_prepend_file-Konfiguration |
+| Diagnose | Sanitisiertes JSON und optionale kurzlebige HTTPS-PHP-Probe | Plesk-Praxistests fuehrt der Betreiber durch |
+| GitHub-Updater | Oeffentliche Releases pruefen und nach Admin-Klick installieren | Passendes ZIP und GitHub-SHA-256 erforderlich; keine stillen Updates |
 
-## Was umgesetzt ist
+Alle neuen aktiven Funktionen sind standardmaessig aus. Details zu Aktivierung, Grenzen, Voraussetzungen und Fehlerfaellen stehen in [MANAGEMENT.md](MANAGEMENT.md).
 
-| Funktion | Stand |
-|---|---|
-| Admin-Dashboard, WAF-Modus, Firewall-, ClamAV- und Fail2Ban-Status | implementiert, nur beobachtend |
-| Malware-Scan pro gehosteter Plesk-Domain mit ClamAV als Website-UID | implementiert, manuell |
-| Automatische Scans | implementiert, opt-in pro Domain, stuendliche Faelligkeitspruefung, maximal ein Scan pro Scheduler-Lauf, mind. 24h Abstand pro Domain |
-| Scan-Berichte/History | 30 zuletzt geaenderte Berichte angezeigt, bis 200 aktive oder bis 90 Tage aufbewahrt; Quarantaene-Berichte laenger |
-| Quarantaene / Wiederherstellung | **nur manuell**, Move nach Fingerprint-Kontrolle; Restore verweigert Ueberschreiben; keine automatische Malware-Reparatur |
-| Metadaten-Dateiueberwachung | zeitversetzte Stichprobe fuer PHP-/Config-Dateien auf opt-in Domains (bis 1500 Dateien pro Lauf), **kein Echtzeit-Schutz** |
-| WAF-Ereignisse | letzte 512 KiB `/var/log/modsec_audit.log` auf Regeln/IPs reduziert; keine HTTP-Bodies |
-| IP sperren / entsperren | manuell ueber aktives Fail2Ban-Jail; keine automatische Bedrohungsbewertung |
+## Installation und Upgrade
 
-**Nicht enthalten:** ClamAV-On-Access, Hersteller-signierte CMS-Reparaturpakete, Netzwerk-DDoS-Schutz, SQL-Datenbank-Scans, Push-Benachrichtigungen und Bearbeitung fremder WAF-Regeln. Alle neuen aktiven Schutzfunktionen sind standardmaessig aus. Details und Grenzen von 0.7.0 stehen in [MANAGEMENT.md](MANAGEMENT.md).
+ClamAV samt aktuellen Signaturen separat einrichten. Unter Debian/Ubuntu beispielsweise `apt install clamav clamav-freshclam`. Fail2Ban und ModSecurity bei Bedarf in Plesk konfigurieren. Vollstaendigen Snapshot und externe Backups vorhalten.
 
-## Vorbedingungen
-
-- Vollstaendigen VPS-Snapshot und externe Backups anlegen, SSH-Zugang pruefen.
-- Testdomain mit Document-Root innerhalb ihres Plesk-Webspaces verwenden. Zusatzdomains und eigene Document-Roots werden aus der Plesk-Datenbank ermittelt. Websites mit root-eigenem Document-Root werden nicht gescannt.
-- Plesk 18.0.55 oder neuer (Obsidian) + Linux, Python >=3.8, PHP fuer Plesk.
-- ClamAV samt aktueller Datenbank installieren; z.B. unter Debian/Ubuntu:
-
-  ```bash
-  apt update
-  apt install clamav clamav-freshclam
-  ```
-
-- Fail2Ban/WAF bei Bedarf in Plesk aktivieren. Guardian erstellt **keine** WAF-Regeln, Firewall-Policies oder Fail2Ban-Jails. Imunify360 kann mit bestimmten Fail2Ban-Integrationen kollidieren; Guardian und Imunify360 nicht ungeregelt parallel betreiben.
-- Fuer kleine VPS auf RAM/CPU achten. Jeder Scan kann bis zu 60 Minuten dauern, maximal 25 MB Einzeldatei / 150 MB Archivscan-Kontext. Dateilimits koennen Funde uebersehen.
-
-## Installation / Upgrade
-
-Paket auf den Server kopieren; vor dem Einspielen Inhalt und Quellcode pruefen. Als **root**:
+Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/guardian-lite/releases). Als root installieren oder aktualisieren:
 
 ```bash
 # Neuinstallation
 plesk bin extension -i /root/guardian-lite-0.7.0.zip
-
-# Upgrade einer vorhandenen guardian-lite 0.1.0 vom lokalen ZIP
+# Vorhandene Installation aktualisieren
 plesk bin extension -g /root/guardian-lite-0.7.0.zip
-
-# Version/Status ansehen
-plesk bin extension -l | grep guardian-lite
+# Installierte Erweiterungen anzeigen
+plesk bin extension -l
 ```
 
-Plesk-Dokumentation: [Extension-CLI](https://docs.plesk.com/en-US/obsidian/cli-linux/using-command-line-utilities/extension-extensions.71031/). `-g` ist der dokumentierte Upgrade-Befehl fuer ein **ZIP** (nicht `--upgrade guardian-lite`, das normalerweise den Katalog abfragt).
+In Plesk als direkt angemeldeter Administrator unter **Erweiterungen → Guardian Lite** oeffnen. Impersonierte Sitzungen sind gesperrt. Die Oberflaeche bietet Uebersicht, Malware & Dateien, Angriffe & Schutz, Updates, Incidents, Verwaltung & Diagnose sowie Feature-Liste.
 
-**Nach Installation:** in Plesk als echter Administrator `Erweiterungen → Meine Erweiterungen → Guardian Lite` oeffnen. Der Plesk-Scheduler registriert automatisch eine stuendliche Guardian-Aufgabe. Diese tut **nichts**, solange du nicht pro Domain `Automatische Scans → Aktivieren` anklickst. Im Panel unter `Tools & Einstellungen → Geplante Aufgaben` verifizieren, dass die Guardian-Aufgabe vorhanden ist.
+Der automatisch registrierte Stundentask startet ohne pro Domain aktivierte Scanplanung keinen Scan. Die neue Schutzverwaltung verlangt jeweils eine ausdrueckliche Aktivierung. Snuffleupagus benoetigt die zum gewaehlten Plesk-PHP-Handler passenden Entwicklungswerkzeuge; fehlende Voraussetzungen werden angezeigt. Paketinstallation und Freigaben auf dem Testserver nimmt der Betreiber vor.
 
-Bei Update von v0.1.0 bleiben Legacy-Scandateien unter `/var/lib/guardian-lite/` als Altbericht erhalten. Neue Scans verwenden das Verzeichnis `jobs/`.
+## Daten und Rechte
 
-## Bedienung
+- Schreibende Webaktionen erfordern Admin-Sitzung, POST und CSRF-Token.
+- Privilegierte Helfer akzeptieren feste Aktionen mit validierten Argumenten; keine frei eingegebenen Shell-Befehle oder Serverpfade.
+- API-Schluessel werden per stdin an den Manager uebergeben und unter `/var/lib/guardian-lite/management/` root-privat gespeichert.
+- Berichte, Quarantaene, Incidents, Baselines und Backups liegen unter `/var/lib/guardian-lite/`. Verzeichnisse 0700, JSON standardmaessig 0600.
+- Quarantaene und Reparatur koennen die laufende Website veraendern. Originale bleiben fuer Wiederherstellung erhalten. Gleichzeitig schreibende Websites koennen eine manuelle Nacharbeit erfordern.
+- Deinstallation nimmt aktive Guardian-Policies zurueck. Fremde Konfigurationsaenderungen koennen die sichere Ruecknahme verhindern und fuehren dann zum Abbruch. Wiederherstellungsdaten, Module und Build-Benutzer bleiben erhalten.
 
-1. Eine kleine Testdomain manuell scannen und anschliessend den Bericht aufrufen.
-2. Falls gewuenscht, automatische Scans fuer einzelne Domains aktivieren. Scheduler prueft stuendlich; aus Lastgruenden nur **ein neuer Scan pro Lauf** (bei vielen Domains verzoegert). Kein Scan, wenn ein anderer laeuft.
-3. Erst nach Pruefung einer ClamAV-Fundmeldung die Schaltflaeche **Quarantaene** nutzen. Der Vorgang verschiebt die Datei physisch in `/var/lib/guardian-lite/quarantine/` und kann deine Website stoeren! Vorher Backup.
-4. Per **Wiederherstellen** wird die Datei nur zurueckgegeben, wenn am Originalpfad **keine** Datei existiert. Zurueckgespielte Malware kann wieder ausgefuehrt werden.
-5. Fail2Ban-IP-Sperren nur nach Pruefung vornehmen. Eigene Administrator-IP nicht sperren.
-6. WAF-Ereignisse sind **keine** vollstaendige Echtzeit-Analyse, nur ein begrenzter Log-Ausschnitt.
-
-## Berechtigungen und Datenablage
-
-- Admin-Sitzung + CSRF-Token fuer jede schreibende Aktion; kein Shell- oder Dateipfadfeld in der Weboberflaeche.
-- Privilegierter Helper nur feste Verben und streng validierte Argumente; Scan unter Website-UID, keine Root-Scans.
-- Serverzustand, Berichte, Dateimonitor und Quarantaene liegen root-eigen unter `/var/lib/guardian-lite/` mit 0700-Verzeichnissen / 0600-JSON-Dateien. Diese Daten werden beim Deinstallieren **nicht** geloescht, um eine Wiederherstellung zu ermoeglichen.
-- Quarantaene verwendet Rename im gleichen Dateisystem; bei unterschiedlichen Mounts wird der Move abgelehnt. Originale werden nicht heimlich geloescht. In der schmalen Race-Condition bei parallel geaenderten Website-Dateien kann manuelle Nacharbeit erforderlich sein. Keine Garantien fuer Live-Systeme.
-- Filewatch erfasst Metadaten, keine Dateiinhalte. Die Metadaten-Stichprobe ist begrenzt und kann Aenderungen uebersehen. Scan-Ereignisse enthalten Dateipfade; WAF-Anzeige IP-Adressen. Auf Datenschutz und Zugriffsrechte achten.
-- Berichte ohne aktive Quarantaene werden nach mehr als 90 Tagen oder bei >200 Berichten nach und nach entfernt. Berichte mit Quarantaene-Dateien bleiben zur Wiederherstellung erhalten.
+Siehe [SECURITY.md](SECURITY.md) fuer das Sicherheitsmodell.
 
 ## Tests und Diagnose
 
 ```bash
-unzip -l guardian-lite-0.7.0.zip
-php -l plib/controllers/IndexController.php
-php -l plib/views/scripts/index/index.phtml
-python3 -m unittest discover -s tests -v
+php tests/php_scan_controller_smoke.php
+php tests/plesk_updater_smoke.php
+php tests/php_management_smoke.php
+sudo python3 -m unittest discover -s tests -v
+python3 tools/build_release.py --tag v0.7.0
 ```
 
-Die Tests laufen offline ohne Plesk. **Keine End-to-End-Installation auf einem realen Plesk-Server getestet.** Vor Produktion muessen Installer, Plesk-Scheduler, Rechte von sbin, Fail2Ban-Integration, Dokumentwurzeln und WAF-Pfade auf deiner spezifischen OS-/Plesk-Version geprueft werden.
+Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.
 
-## Verweise
+Fuer deinen separaten Plesk-Testserver steht die [Testreihenfolge mit Diagnoseexport](MANAGEMENT.md#diagnose-und-testreihenfolge-in-plesk) bereit. Provider-Pruefungen mit eigenen API-Schluesseln, echte Handler-Reloads, Proxy-/WAF-Verhalten und Mailzustellung werden dort geprueft.
 
-- [Plesk Extensions-Aufbau](https://docs.plesk.com/en-US/obsidian/extensions-guide/plesk-extensions-basics/extension-structure.71076/)
-- [Plesk Scheduler](https://docs.plesk.com/en-US/obsidian/extensions-guide/plesk-features-available-for-extensions/scheduling-tasks.71094/)
-- [Plesk ModSecurity Log](https://docs.plesk.com/en-US/obsidian/administrator-guide/server-administration/web-application-firewall-modsecurity.73383/)
-- [ClamAV Scans](https://docs.clamav.net/manual/Usage/Scanning.html)
+## Weitere Entwicklung
 
-## Lizenz
+[FEATURES.md](FEATURES.md) priorisiert weitere Features. Die wichtigsten naechsten Schritte sind Hersteller-Pruefsummen fuer CMS-Dateien, eine granulare Allowlist mit Notfall-Freischaltung sowie eine Baseline-/Backup-Verwaltung mit Aufbewahrungsregeln.
 
-MIT (Guardian Lite); Drittsoftware unter eigenen Lizenzen. Diese Extension enthaelt keine proprietaeren Imunify360-Bestandteile.
+## Referenzen und Lizenz
 
-## GitHub-Releases und Plesk-Updater (v0.4.0)
+[Plesk Extension-Aufbau](https://docs.plesk.com/en-US/obsidian/extensions-guide/plesk-extensions-basics/extension-structure.71076/) · [Plesk Scheduler](https://docs.plesk.com/en-US/obsidian/extensions-guide/plesk-features-available-for-extensions/scheduling-tasks.71094/) · [Extension-CLI](https://docs.plesk.com/en-US/obsidian/cli-linux/using-command-line-utilities/extension-extensions.71031/)
 
-Die Erweiterung enthaelt den Bereich **GitHub-Updater**. In Plesk als Administrator unter `Erweiterungen → Guardian Lite` das oeffentliche GitHub-Repository im Format `owner/repo` eintragen. Die Versionserkennung nutzt die offizielle GitHub-API `releases/latest`. Nur stabile Releases mit Asset `guardian-lite-X.Y.Z.zip` und einem von GitHub gelieferten SHA-256-Digest werden akzeptiert. Update-Installation erfolgt ausschliesslich nach manuellem Admin-Klick mit CSRF-Pruefung, ZIP-Strukturvalidierung und Digest-Vergleich.
-
-**GitHub Release erstellen:** Code auf den Standardbranch hochladen, dann Tag `v0.4.0` pushen. GitHub Actions (`.github/workflows/release.yml`) fuehrt die Offline-Tests aus, baut das ZIP und veroeffentlicht es als GitHub Release. Repository muss GitHub Actions mit Schreibberechtigung fuer Inhalte erlauben. Der Updater verwendet ausschliesslich oeffentliche GitHub-Releases; private Repositories funktionieren damit nicht.
-
-**Sicherheit:** SHA-256 von GitHub ist keine unabhaengige Signatur. Nur ein vertrauenswuerdiges eigenes Repository eintragen und fremde Codeaenderungen vor Freigabe auditieren. Plesk arbeitet beim Upgrade mit Root-Rechten. Vor produktiver Nutzung und vor jedem Update Snapshot und Backups pruefen. Kein unbeaufsichtigtes Auto-Update.
-
-## Neu in v0.4.0: PHP-Runtime und HTTP-Flood-Regeln
-
-- Dashboard zeigt read-only PHP-INI-Inspektion der installierten Plesk-PHP-Handler und ModSecurity-Log-Verfuegbarkeit; dies ist **kein Funktions- oder Abwehrnachweis**.
-- Im Source-Paket `security/php-runtime/guardian.rules`: optionale Snuffleupagus-PHP-Runtime-Regeln.
-- Im Source-Paket `security/http-guard/guardian-modsecurity.conf`: optionale HTTP-Limit-Vorlage fuer ModSecurity v2.
-- **Nicht automatisch aktiv**: siehe `security/README.md`. Keine pauschalen Aenderungen an laufenden FPM-/NGINX-/WAF-Konfigurationen.
-- Eine umfangreiche DDoS-Abwehr benoetigt einen vorgeschalteten Provider/CDN-Schutz.
-
-
-## Oberflaeche seit 0.5.0
-
-Die Administratoroberflaeche verwendet ohne externe JavaScript-Bibliotheken fuenf Tabs:
-Uebersicht, Malware & Dateien, Angriffe & Schutz, Updates und Feature-Liste.
-Der aktuelle Tab bleibt nach Formularaktionen in derselben Browser-Sitzung erhalten; Links mit
-`#guardian-tab-updates` oeffnen den Updater direkt. Ohne JavaScript bleiben alle Bereiche sichtbar.
-Das Feature-Backlog ist bewusst keine Zusage eines vollstaendigen Imunify360-Ersatzes.
-
-
-### Updater-Repository (ab v0.5.2)
-
-Ohne gespeicherte Einstellung wird `Wintergecko/guardian-lite` als Voreinstellung verwendet. Unter Updates ist „Auf neue Version pruefen“ immer sichtbar. Die Extension liest nur GitHub-Releases und installiert Updates erst nach einem ausdruecklichen Admin-Klick. Ein geeignetes veroeffentlichtes Release muss das ZIP-Asset samt GitHub SHA-256-Digest enthalten.
-
-
-## 0.6.0 – Echtzeit-Dateiwache und Incidents (Beta)
-
-**Voraussetzung:** Linux mit `inotify`, Plesk Extension als direkter Administrator und
-ClamAV fuer Live-Einzeldatei-Scans. Auf der Registerkarte **Incidents** muss die
-Ueberwachung pro Domain explizit aktiviert werden. Standardmaessig ist sie aus.
-Maximal fuenf Domains und 450 Verzeichnisse je Domain werden ueberwacht.
-Bei einem inotify-Queue-Overflow oder wenn Limits erreicht sind, gelten
-Ergebnisse als unvollstaendig; dann einen manuellen Vollscan durchfuehren.
-Der Plesk-Stundentask startet ausgefallene aktivierte Beobachter erneut,
-was eine moegliche Luecke bis zum naechsten Stundenlauf bedeutet.
-Monitor-Aus/Einschalten veraendert keine Website-Dateien.
-
-Bei einer erkannten Aenderung wird nur Ereignis-Metadatenprotokoll gespeichert.
-Die ClamAV-Einzeldateipruefung erfolgt nur fuer kleine, sichere Dateien unter
-der Website-UID, soweit ClamAV vorhanden ist. Verdaechtige Dateien werden
-**nicht automatisch** geloescht, repariert oder in Quarantaene verschoben.
-Fuer manuelle Quarantaene wird weiter ein abgeschlossener Vollscan benoetigt.
-
-Incidents werden root-privat unter `/var/lib/guardian-lite/incidents.jsonl`
-(maximal 2 MB und eine rotierte Vorgaengerversion) gespeichert. Nur Administratoren
-koennen die letzten 200 Ereignisse als JSON herunterladen. Das ist kein
-externes SIEM und keine kryptografisch unveraenderbare Ereigniskette.
-
-E-Mail-Benachrichtigungen sind standardmaessig aus und benoetigen einen
-lokalen sendmail-kompatiblen Mail-Transport. Bei Malwareereignissen versucht
-Guardian eine Mail zu senden; das garantiert keine Zustellung. Bei gleichem
-Ereignistyp/Domain wird maximal alle 15 Minuten benachrichtigt, global
-hoechstens alle 60 Sekunden. Eine Testfunktion steht zur Verfuegung.
-
-### PHP-Handler-Backup und manueller Rollback
-
-Keine produktive Aktivierung von Snuffleupagus erfolgt durch Guardian Lite.
-Vor manueller PHP-Handler-Konfigurationsaenderung kann der Admin ein
-root-privates Backup anlegen:
-
-```bash
-sudo python3 security/php-runtime/handler_rollback.py backup 8.3
-```
-
-Bei einem Rollback muss der aktuelle SHA-256-Wert der PHP-Konfiguration bekannt
-sein, damit zwischenzeitliche Aenderungen nicht ungefragt ueberschrieben werden:
-
-```bash
-sudo sha256sum /opt/plesk/php/8.3/etc/php.ini
-sudo python3 security/php-runtime/handler_rollback.py rollback 8.3 8-3-<backup-id>.ini <aktueller-sha256>
-```
-
-Danach PHP-FPM/Dienste kontrolliert neu starten und Websites testen.
-Diese CLI ist **nicht** mit der Plesk-GUI verbunden. Keine automatischen
-Server- oder PHP-Dienst-Neustarts.
-
-### Nicht fertig / benoetigt VPS-Test
-
-- **Automatische Malware-Reparatur:** benoetigt verifizierte, unveraenderbare
-  Good-File-Backups je CMS und sicheres Rollback. Bis dahin bewusst nicht aktiv.
-- **PHP-Laufzeitschutz:** Snuffleupagus muss je Handler installiert, aktiviert
-  und unter echten Requests getestet werden. Eine php.ini-Aenderung kann
-  produktive Sites zerstoeren.
-- **Aktive Bot-Challenges / adaptives Blockieren / Cloud-Reputation:**
-  brauchen stabile Reverse-Proxy-/WAF-Integration, Reputationsanbieter,
-  Datenschutzeinwilligung und Lasttests. Eine zusaetzliche ModSecurity-Regelvorlage
-  liegt unter `security/http-guard/`, bleibt aber deaktiviert.
-- **Plesk-Integrationstests:** Der CI-Testlauf prueft Python-/PHP-Syntax und
-  Unittests auf Ubuntu 22.04/24.04 mit Python 3.11/3.12/3.13. Das ist KEIN
-  Test auf Debian-, AlmaLinux- oder Ubuntu-VPS mit installiertem Plesk.
-
-
-### Update-Pruefung sichtbar (ab v0.6.1)
-
-Die Update-Formulare verwenden die offiziellen Plesk-Action-URLs. Nach dem Klick
-landet man wieder im Tab **Updates**. Erfolg, bereits aktuelle Version und
-Fehler der GitHub-Abfrage werden direkt in diesem Tab angezeigt. Der letzte
-Pruefstatus ist ueber ein Neuladen der Seite hinweg gespeichert. Ein zuvor
-erfolgreich geprueftes Release ist maximal 30 Minuten lang zur Installation
-freigegeben; die Update-Engine prueft das Release beim Start nochmals.
-
-Bei Verbindungsschwierigkeiten wird die Fehlermeldung der privilegierten
-Updater-Engine angezeigt. Es wird **nicht** automatisch installiert.
-
-
-### Plesk Domainauswahl/Scanplanung (v0.6.2)
-
-Alle Formulare verwenden nun `pm_Context::getActionUrl`. Im Tab Malware & Dateien wird nach
-Klick auf Aktivieren/Deaktivieren die Serverantwort (Erfolg oder Fehler) direkt angezeigt.
-Wenn das Aktivieren fehlschlaegt, den Text im rot markierten Statusfeld und die Plesk-Logs pruefen.
-Die Domainauswahl besitzt ein kontrastreiches natives Select und eine zusaetzliche Textausgabe.
-Ein gruenes Erfolgssignal bestaetigt die Rueckgabe von `guardian-helper`, nicht die
-Ausfuehrung des geplanten Scans. Der geplante Scan erfordert weiterhin den Plesk-Scheduler.
-
-
-### Plesk-Document-Roots (ab 0.6.3)
-
-Der privilegierte Scanner liest fuer jede gehostete Domain den konfigurierten `hosting.www_root` sowie `sys_users.home` aus der lokalen Plesk-Datenbank (`plesk db -Ne`). Das unterstuetzt Zusatzdomains und geaenderte Document-Roots innerhalb einer Subscription. Es gibt keinen Fallback auf erratene Pfade. Vor dem Scan werden der kanonische Pfad, die Webspace-Grenze und ein nicht-root-Eigentuemer geprueft. Domain-Eingaben werden strikt validiert, die CLI wird ohne Shell aufgerufen. Auf Servern ohne lesbare Plesk-Hosting-Daten wird der Scan mit Fehlermeldung abgebrochen.
-
-
-### Korrekturen in 0.6.4
-
-- Die Scanplanung prueft alle aufbewahrten Berichte statt nur der 30 sichtbaren Eintraege. Viele manuelle Scans verkuerzen dadurch nicht mehr den 24-Stunden-Abstand geplanter Scans.
-- Bei verschobenen oder geloeschten Verzeichnissen entfernt die Live-Dateiwache die Watches des gesamten alten Teilbaums. Hineinverschobene Verzeichnisse werden unter ihrem neuen Pfad ueberwacht. Wird der Document-Root selbst verschoben oder geloescht, beendet sich der Monitor; der Scheduler kann ihn nach Wiederherstellung neu starten.
-- Feature-Liste und aktuelle Voraussetzungen wurden berichtigt.
-
-## Neue Schutzverwaltung ab 0.7.0
-
-Der Tab **Verwaltung & Diagnose** bietet PHP-Handler-Backup und Rollback, Snuffleupagus-Build/Simulation/Aktivierung, Guardian-WAF-Regeln und Botlimits, AbuseIPDB-Reputationsabfragen, Turnstile fuer PHP-Anmeldepfade sowie opt-in Good-File-Reparatur. Der privilegierte Manager akzeptiert feste Aktionen als begrenztes JSON ueber stdin. API-Schluessel werden root-privat gespeichert und weder in Prozessargumenten noch in Status/Diagnose ausgegeben.
-
-Die frueheren Versionsabschnitte dokumentieren den historischen Stand. Fuer aktuelle Aktivierung, Grenzen und Praxistests gilt [MANAGEMENT.md](MANAGEMENT.md).
+MIT fuer Guardian Lite; Drittsoftware unter eigenen Lizenzen. Keine proprietaeren Imunify360-Bestandteile. Aeltere Entwicklungsstaende sind in [CHANGES.md](CHANGES.md) dokumentiert.

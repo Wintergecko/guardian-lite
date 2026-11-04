@@ -40,7 +40,7 @@ def build(dest, tag=None):
             info.external_attr = (stat.S_IFREG | mode) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
             data = file.read_bytes()
-            if rel in ('sbin/guardian-helper', 'sbin/guardian-updater', 'sbin/guardian-manager') or file.suffix in ('.py', '.php', '.phtml'):
+            if rel in TOP_FILES or rel in ('sbin/guardian-helper', 'sbin/guardian-updater', 'sbin/guardian-manager') or file.suffix in ('.py', '.php', '.phtml', '.css', '.js', '.rules', '.conf', '.example'):
                 # A Windows checkout must still produce executable Unix shebangs.
                 data = data.replace(b'\r\n', b'\n')
             z.writestr(info, data, compresslevel=9)
