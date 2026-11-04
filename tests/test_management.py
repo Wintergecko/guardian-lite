@@ -259,10 +259,7 @@ class ManagementTests(unittest.TestCase):
         os.chown(theme / 'style.css', 65534, 65534)
         (theme / 'index.php').write_bytes(content)
         os.chown(theme / 'index.php', 65534, 65534)
-        cli = self.base / 'wp'
-        cli.write_text('#!/bin/sh\nexit 0\n')
-        os.chmod(cli, 0o755)
-        return theme, cli
+        return theme
 
     def wp_theme_archive(self, slug='sample-theme', version='1.2', content=b'<?php echo "theme";'):
         output = io.BytesIO()
@@ -271,23 +268,22 @@ class ManagementTests(unittest.TestCase):
             archive.writestr(slug + '/index.php', content)
         return output.getvalue()
 
-    def run_wp_theme_audit(self, cli, archive):
-        with mock.patch.object(m, 'WP_CLI_PATHS', (str(cli),)), \
-                mock.patch.object(m.h, 'binary', return_value=str(cli)), \
+    def run_wp_theme_audit(self, archive):
+        with mock.patch.object(m.h, 'binary', side_effect=AssertionError('Theme check must not require WP-CLI')), \
                 mock.patch.object(m, 'wordpress_theme_archive', return_value=archive):
             return m.wordpress_theme_checksum_audit('example.com')
 
     def test_wordpress_org_theme_checksum_matches_exact_version_archive(self):
-        _, cli = self.write_wp_theme()
-        report = self.run_wp_theme_audit(cli, self.wp_theme_archive())
+        self.write_wp_theme()
+        report = self.run_wp_theme_audit(self.wp_theme_archive())
         self.assertEqual(report['status'], 'verified')
         self.assertEqual(report['finding_count'], 0)
         stored = m.public_status()['wordpress_theme_checksum']['example.com']
         self.assertEqual(stored['themes'][0]['status'], 'verified')
 
     def test_wordpress_org_theme_checksum_reports_changed_file_without_content(self):
-        _, cli = self.write_wp_theme(content=b'<?php echo "local";')
-        report = self.run_wp_theme_audit(cli, self.wp_theme_archive())
+        self.write_wp_theme(content=b'<?php echo "local";')
+        report = self.run_wp_theme_audit(self.wp_theme_archive())
         self.assertEqual(report['status'], 'mismatch')
         self.assertEqual(report['finding_count'], 1)
         self.assertEqual(report['themes'][0]['findings'], [{'path': 'index.php', 'rule': 'wordpress-theme-file-mismatch'}])
@@ -295,11 +291,11 @@ class ManagementTests(unittest.TestCase):
         self.assertTrue(any(item['type'] == 'cms_checksum_mismatch' for item in m.h.incident_list()))
 
     def test_wordpress_org_theme_checksum_rejects_archive_path_traversal(self):
-        _, cli = self.write_wp_theme()
+        self.write_wp_theme()
         output = io.BytesIO()
         with zipfile.ZipFile(output, 'w') as archive:
             archive.writestr('../escape.php', b'bad')
-        report = self.run_wp_theme_audit(cli, output.getvalue())
+        report = self.run_wp_theme_audit(output.getvalue())
         self.assertEqual(report['status'], 'partial')
         self.assertIn('unsicheren Dateipfad', report['themes'][0]['note'])
 
@@ -338,9 +334,8 @@ class ManagementTests(unittest.TestCase):
         self.assertTrue(opener.open.call_args_list[1].args[0].full_url.endswith('sample-theme.1.2.zip'))
 
     def test_wordpress_org_theme_checksum_marks_unavailable_vendor_version_partial(self):
-        _, cli = self.write_wp_theme(version='custom-3')
-        with mock.patch.object(m, 'WP_CLI_PATHS', (str(cli),)), \
-                mock.patch.object(m.h, 'binary', return_value=str(cli)), \
+        self.write_wp_theme(version='custom-3')
+        with mock.patch.object(m.h, 'binary', side_effect=AssertionError('Theme check must not require WP-CLI')), \
                 mock.patch.object(m, 'wordpress_theme_archive', side_effect=ValueError('keine Vendor-Version')):
             report = m.wordpress_theme_checksum_audit('example.com')
         self.assertEqual(report['status'], 'partial')

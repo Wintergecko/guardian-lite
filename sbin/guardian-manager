@@ -1208,7 +1208,7 @@ def cron_audit():
     return result
 
 
-def wordpress_cli_context(domain):
+def wordpress_site_context(domain):
     if os.geteuid() != 0 or not h.valid_domain(domain):
         raise ValueError('Gueltige Domain und Root-Verwaltung erforderlich.')
     docroot, uid, gid = h.site_docroot(domain)
@@ -1227,6 +1227,11 @@ def wordpress_cli_context(domain):
                     (index == len(components) - 1 and not stat.S_ISREG(info.st_mode)) or
                     os.path.commonpath((str(docroot), str(resolved))) != str(docroot)):
                 raise ValueError('WordPress-Core-Pruefung lehnt Symlinks und Sonderdateien ab.')
+    return docroot, uid, gid
+
+
+def wordpress_cli_context(domain):
+    docroot, uid, gid = wordpress_site_context(domain)
     cli = h.binary(WP_CLI_PATHS)
     if not cli:
         raise ValueError('WP-CLI fehlt. Fuer die Pruefsummen WP-CLI als root-eigene Systemdatei bereitstellen.')
@@ -1646,7 +1651,7 @@ def wordpress_theme_store(report):
 
 def wordpress_theme_checksum_audit(domain):
     """Compare installed public themes with exact-version HTTPS WordPress.org archives."""
-    docroot, _, _, _ = wordpress_cli_context(domain)
+    docroot, _, _ = wordpress_site_context(domain)
     themes_path = docroot / 'wp-content' / 'themes'
     cursor = docroot
     for component in ('wp-content', 'themes'):
