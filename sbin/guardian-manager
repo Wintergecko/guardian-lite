@@ -203,7 +203,14 @@ def runtime_set(version, mode, expected):
     clean = re.sub(re.escape(BEGIN) + r'.*?' + re.escape(END), '', text, flags=re.S)
     if mode not in ('off', 'simulate', 'enforce'):
         raise ValueError('Ungueltiger Runtime-Modus.')
-    if re.search(r'^\s*(?:extension\s*=.*snuffleupagus|sp\.configuration_file\s*=)', clean, re.M | re.I):
+    external = [clean]
+    for directory in (base / 'etc/php.d', base / 'etc/conf.d'):
+        if directory.is_dir():
+            for candidate in sorted(directory.glob('*.ini')):
+                resolved = candidate.resolve(strict=True)
+                external.append(checked(resolved)[0].decode('utf-8', 'replace'))
+    if any(re.search(r'^\s*(?:extension\s*=.*snuffleupagus|sp\.configuration_file\s*=)',
+                     entry, re.M | re.I) for entry in external):
         raise ValueError('Externe Snuffleupagus-Konfiguration vorhanden; keine Uebernahme.')
     backup = make_backup('php', version, path)
     if mode != 'off':
@@ -707,6 +714,28 @@ def auto_repair(jobid):
                 h.incident_log('operator', 'warning', report['domain'], 'Automatische Reparatur abgelehnt; manuelle Pruefung erforderlich.', finding.get('path', ''))
 
 
+def write_guard(folder, data, gid):
+    folderfd = os.open(str(folder), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    temp = '.guard-' + uuid.uuid4().hex
+    try:
+        st = os.fstat(folderfd)
+        if st.st_uid != 0 or st.st_mode & 0o027:
+            raise ValueError('Guardian-Verzeichnis zwischenzeitlich geaendert.')
+        guardfd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o640, dir_fd=folderfd)
+        with os.fdopen(guardfd, 'wb') as output:
+            os.fchown(output.fileno(), 0, gid)
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.rename(temp, 'guard.php', src_dir_fd=folderfd, dst_dir_fd=folderfd)
+    finally:
+        try:
+            os.unlink(temp, dir_fd=folderfd)
+        except FileNotFoundError:
+            pass
+        os.close(folderfd)
+
+
 def bots_set(domain, mode):
     if mode not in ('on', 'off'):
         raise ValueError('Ungueltiger Bot-Modus.')
@@ -756,21 +785,7 @@ def bots_set(domain, mode):
             if not php:
                 raise ValueError('PHP CLI fuer Syntaxpruefung fehlt.')
             run([php, '-l'], input=template.encode('utf-8'))
-            folderfd = os.open(str(folder), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            try:
-                st = os.fstat(folderfd)
-                if st.st_uid != 0 or st.st_mode & 0o027:
-                    raise ValueError('Guardian-Verzeichnis zwischenzeitlich geaendert.')
-                temp_guard = '.guard-' + uuid.uuid4().hex
-                guardfd = os.open(temp_guard, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o640, dir_fd=folderfd)
-                with os.fdopen(guardfd, 'wb') as output:
-                    os.fchown(output.fileno(), 0, gid)
-                    output.write(template.encode('utf-8'))
-                    output.flush()
-                    os.fsync(output.fileno())
-                os.rename(temp_guard, 'guard.php', src_dir_fd=folderfd, dst_dir_fd=folderfd)
-            finally:
-                os.close(folderfd)
+            write_guard(folder, template.encode('utf-8'), gid)
             block = '\n' + BEGIN + 'auto_prepend_file="%s"\n' % (folder / 'guard.php') + END
             updated = current + block.encode('utf-8')
             record = {'enabled': True, 'before': base64.b64encode(current).decode('ascii'),
@@ -800,6 +815,10 @@ def bots_set(domain, mode):
             if not unchanged:
                 raise ValueError('.user.ini waehrend Aktion geaendert.')
             os.rename(temp, '.user.ini', src_dir_fd=dfd, dst_dir_fd=dfd)
+            if mode == 'off':
+                # Cached .user.ini may still prepend this file. Keep a harmless stub,
+                # removing provider secrets from disk as soon as the guard is disabled.
+                write_guard(folder, b'<?php return; // Guardian disabled\n', gid)
         finally:
             try:
                 os.unlink(temp, dir_fd=dfd)

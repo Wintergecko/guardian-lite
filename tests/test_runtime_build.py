@@ -4,6 +4,7 @@ import importlib.util
 import os
 import pathlib
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -24,8 +25,11 @@ class RuntimeBuildTests(unittest.TestCase):
             php = folder / 'php'
             for name in ('bin', 'etc', 'lib/php/modules'):
                 (php / name).mkdir(parents=True, exist_ok=True)
+            php_config = pathlib.Path(shutil.which('php-config')).resolve()
+            version = subprocess.check_output([str(php_config), '--version'], text=True).strip()
+            major_minor = '.'.join(version.split('.')[:2])
             for name in ('php', 'phpize', 'php-config'):
-                source = pathlib.Path(shutil.which(name)).resolve()
+                source = pathlib.Path(shutil.which(name + major_minor) or shutil.which(name)).resolve()
                 shutil.copy2(source, php / 'bin' / name)
             ini = php / 'etc/php.ini'
             original = b'; isolated runtime build test\n'

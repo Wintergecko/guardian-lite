@@ -39,7 +39,11 @@ def build(dest, tag=None):
             info.create_system = 3
             info.external_attr = (stat.S_IFREG | mode) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
-            z.writestr(info, file.read_bytes(), compresslevel=9)
+            data = file.read_bytes()
+            if rel in ('sbin/guardian-helper', 'sbin/guardian-updater', 'sbin/guardian-manager') or file.suffix in ('.py', '.php', '.phtml'):
+                # A Windows checkout must still produce executable Unix shebangs.
+                data = data.replace(b'\r\n', b'\n')
+            z.writestr(info, data, compresslevel=9)
     digest = hashlib.sha256(out.read_bytes()).hexdigest()
     checksum = dest / (out.name + '.sha256')
     checksum.write_text('%s  %s\n' % (digest, out.name), encoding='utf-8')

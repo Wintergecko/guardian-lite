@@ -28,7 +28,7 @@ $action = static function ($name) use ($esc) {
     </div>
     <span class="guardian-tag">Administratorbereich</span>
   </header>
-  <div class="guardian-alert guardian-important">Beta-Version: Erst nach Snapshot auf Testsystem testen. ClamAV kann Malware uebersehen. Quarantaene entfernt Dateien aus der laufenden Website und kann sie beschaedigen. Keine automatische Bereinigung.</div>
+  <div class="guardian-alert guardian-important">Beta-Version: Erst nach Snapshot auf Testsystem testen. ClamAV kann Malware uebersehen. Quarantaene entfernt Dateien aus der laufenden Website und kann sie beschaedigen. Automatische Good-File-Reparatur nur nach separater Freigabe pro Domain.</div>
   <?php if ($this->helperError): ?>
     <div class="guardian-alert">Helfer nicht erreichbar: <?= $esc($this->helperError) ?></div>
   <?php endif; ?>
@@ -277,7 +277,7 @@ $action = static function ($name) use ($esc) {
   </section>
   <section class="guardian-card guardian-lower" id="guardian-incidents">
     <h2>Echtzeit-Dateiwache &amp; Sicherheitsvorfaelle</h2>
-    <p>Linux inotify ueberwacht neue/geaenderte PHP- und Konfigurationsdateien nach ausdruecklicher Freigabe pro Domain. Bei Aenderungen kann ClamAV die Datei mit Website-Rechten pruefen. <strong>Keine automatische Dateiloeschung oder Reparatur.</strong></p>
+    <p>Linux inotify ueberwacht neue/geaenderte PHP- und Konfigurationsdateien nach ausdruecklicher Freigabe pro Domain. Bei Aenderungen kann ClamAV die Datei mit Website-Rechten pruefen. <strong>Live-Ereignisse veraendern keine Dateien. Good-File-Reparatur arbeitet separat nach Vollscan und Opt-in.</strong></p>
     <p class="guardian-alert">Beta: Maximal fuenf Domains und 450 Verzeichnisse je Domain. Bei Ereignis-Queue-Ueberlauf oder Limit muss ein Vollscan folgen. Vor Aktivierung auf Testdomain beginnen.</p>
     <h3>Domain-Ueberwachung</h3>
     <?php if (empty($this->domains)): ?><p>Keine Domains vorhanden.</p><?php endif; ?>

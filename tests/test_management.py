@@ -160,6 +160,9 @@ class ManagementTests(unittest.TestCase):
                 m.cloud_save({'clear': True, 'consent': False})
             m.bots_set('example.com', 'off')
         self.assertEqual((self.web / '.user.ini').read_bytes(), b'memory_limit=128M\n')
+        guard = pathlib.Path(m.config()['bots']['example.com']['guard']).read_text()
+        self.assertNotIn('TURNSTILE_SECRET_12345', guard)
+        self.assertIn('Guardian disabled', guard)
         self.write_site('.user.ini', b'auto_prepend_file=/external.php\n')
         with self.assertRaises(ValueError):
             m.bots_set('example.com', 'on')

@@ -41,8 +41,9 @@ class WafHttpTests(unittest.TestCase):
                           'LoadModule security2_module /usr/lib/apache2/modules/mod_security2.so\n'
                           'ErrorLog %s/error.log\nDocumentRoot %s\n'
                           '<Directory %s>\nRequire all granted\n</Directory>\n'
-                          'SecRuleEngine On\nSecRequestBodyAccess Off\nSecDataDir %s/data\n') % (
-                              tmp, port, tmp, tmp, tmp, tmp)
+                          'SecRuleEngine On\nSecRequestBodyAccess Off\nSecDataDir %s/data\n'
+                          'SecDebugLog %s/debug.log\nSecDebugLogLevel 9\n') % (
+                              tmp, port, tmp, tmp, tmp, tmp, tmp)
                 conf = folder / 'apache.conf'
                 conf.write_text(config + m.waf_rules('example.com', mode, 10))
                 apache = shutil.which('apache2') or '/usr/sbin/apache2'
@@ -66,8 +67,11 @@ class WafHttpTests(unittest.TestCase):
                             with error:
                                 statuses.append(error.code)
                     if mode == 'enforce':
+                        debug = (folder / 'debug.log').read_text(errors='replace')
+                        summary = '\n'.join(line for line in debug.splitlines() if
+                                            'guardian_requests' in line or 'collection' in line.lower())[-2200:]
                         self.assertEqual(statuses[:10], [200] * 10)
-                        self.assertEqual(statuses[10:], [429, 429])
+                        self.assertEqual(statuses[10:], [429, 429], summary)
                     else:
                         self.assertEqual(statuses, [200] * 12)
                 finally:
