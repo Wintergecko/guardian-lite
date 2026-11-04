@@ -102,7 +102,8 @@ class ManagementTests(unittest.TestCase):
         source.write_bytes(b'# Guardian managed\nSecRuleEngine On\n')
         backup = m.make_backup('waf', 'example.com', source)
         status = m.storage_status()
-        self.assertEqual(status['areas']['backups']['bytes'], len(source.read_bytes()))
+        backup_files = [m.root() / 'backups' / (backup['id'] + suffix) for suffix in ('.bin', '.json')]
+        self.assertEqual(status['areas']['backups']['bytes'], sum(path.stat().st_size for path in backup_files))
         self.assertEqual(status['backup_quota_bytes'], m.BACKUP_QUOTA_BYTES)
         settings = m.config()
         settings['waf'] = {'backup': backup['id']}
