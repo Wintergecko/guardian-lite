@@ -33,7 +33,10 @@ SYSTEMCTL_PATHS = ('/usr/bin/systemctl', '/bin/systemctl')
 FIREWALL_SETTINGS = pathlib.Path('/usr/local/psa/bin/modules/firewall/settings')
 FIREWALL_UNITS = ('plesk-firewall', 'psa-firewall')
 FIREWALL_PENDING = ROOT / 'firewall-pending.json'
+FIREWALL_EXPIRIES = ROOT / 'firewall-expiries.json'
 FIREWALL_RULE_PREFIX = 'Guardian Lite managed deny '
+FIREWALL_TTLS = (0, 3600, 86400, 604800)
+MAX_FIREWALL_EXPIRATIONS_PER_TICK = 10
 DOMAIN_LABEL = re.compile(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$', re.I)
 JAIL_NAME = re.compile(r'^[a-zA-Z0-9_.-]{1,80}$')
 JOB_ID = re.compile(r'^[a-f0-9]{32}$')
@@ -209,6 +212,7 @@ def firewall_rules():
         return {'available': False, 'rules': [], 'pending': pending}
     if not isinstance(decoded, list) or len(decoded) > 2000:
         return {'available': False, 'rules': [], 'pending': pending}
+    expiry_data = read_json(FIREWALL_EXPIRIES, {})
     rules = []
     for item in decoded:
         if not isinstance(item, dict):
@@ -238,8 +242,15 @@ def firewall_rules():
                 continue
         if network not in normalized_sources:
             continue
-        rules.append({'id': str(rule_id), 'name': name, 'network': network,
-                      'ports': str(item.get('ports', ''))[:100]})
+        rule = {'id': str(rule_id), 'name': name, 'network': network,
+                'ports': str(item.get('ports', ''))[:100]}
+        expires_epoch = expiry_data.get(network)
+        if (isinstance(expires_epoch, int) and not isinstance(expires_epoch, bool) and expires_epoch > 0 and
+                expires_epoch <= int(time.time()) + max(FIREWALL_TTLS) + 60):
+            rule['expires_at'] = datetime.datetime.fromtimestamp(
+                expires_epoch, datetime.timezone.utc).isoformat()
+            rule['expires_epoch'] = int(expires_epoch)
+        rules.append(rule)
     rules.sort(key=lambda row: (row['network'], row['id']))
     return {'available': True, 'limited': len(rules) > 100, 'rules': rules[:100],
             'pending': pending}
@@ -262,7 +273,7 @@ def _firewall_target(value):
     return str(network)
 
 
-def _firewall_action(operation, target='', remote_address=''):
+def _firewall_action(operation, target='', remote_address='', ttl_seconds=0):
     """Stage one Plesk-native IP rule; Plesk rolls it back unless separately confirmed."""
     if os.geteuid() != 0:
         raise ValueError('Root-Verwaltung erforderlich.')
@@ -285,10 +296,29 @@ def _firewall_action(operation, target='', remote_address=''):
         elapsed = time.time() - float(pending.get('started_epoch', 0))
         if operation == 'confirm' and elapsed > 55:
             raise ValueError('Plesk-Bestaetigungsfenster ist fast abgelaufen; Firewall-Rollback abwarten und erneut pruefen.')
+        expiry_data = read_json(FIREWALL_EXPIRIES, {})
+        network = pending.get('network', '')
+        staged_expiry = False
+        if operation == 'confirm' and pending.get('action') == 'ban':
+            ttl = pending.get('ttl_seconds', 0)
+            if not isinstance(ttl, int) or isinstance(ttl, bool) or ttl not in FIREWALL_TTLS:
+                raise ValueError('Ungueltige Firewall-Sperrdauer in ausstehender Aenderung.')
+            if ttl:
+                expiry_data[network] = int(time.time()) + ttl
+            else:
+                expiry_data.pop(network, None)
+            write_json(FIREWALL_EXPIRIES, expiry_data)
+            staged_expiry = True
         command = '--confirm' if operation == 'confirm' else '--reset'
         result = execute([plesk, 'ext', 'firewall', command], timeout=12)
         if result is None or result.returncode:
+            if staged_expiry and pending.get('action') == 'ban':
+                expiry_data.pop(network, None)
+                write_json(FIREWALL_EXPIRIES, expiry_data)
             raise ValueError('Plesk Firewall hat die Aenderung nicht bestaetigt/zurueckgesetzt.')
+        if operation == 'confirm' and pending.get('action') == 'unban':
+            expiry_data.pop(network, None)
+            write_json(FIREWALL_EXPIRIES, expiry_data)
         try:
             FIREWALL_PENDING.unlink()
         except FileNotFoundError:
@@ -301,6 +331,9 @@ def _firewall_action(operation, target='', remote_address=''):
     if operation not in ('ban', 'unban'):
         raise ValueError('Ungueltige Guardian-Firewall-Aktion.')
     network = _firewall_target(target)
+    if (not isinstance(ttl_seconds, int) or isinstance(ttl_seconds, bool) or
+            ttl_seconds not in FIREWALL_TTLS or (operation != 'ban' and ttl_seconds != 0)):
+        raise ValueError('Ungueltige Sperrdauer. Erlaubt: dauerhaft, 1 Stunde, 24 Stunden oder 7 Tage.')
     if operation == 'ban':
         try:
             client = ipaddress.ip_address(remote_address)
@@ -350,15 +383,17 @@ def _firewall_action(operation, target='', remote_address=''):
     write_json(FIREWALL_PENDING, {'state': 'awaiting_confirmation', 'action': operation,
                                   'network': network, 'rule_name': name,
                                   'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                                  'started_epoch': now, 'rollback_seconds': 60})
+                                  'started_epoch': now, 'rollback_seconds': 60,
+                                  'ttl_seconds': ttl_seconds})
     incident_log('operator', 'warning', '', 'Plesk-Firewall-Regel fuer ' + network +
                  ' geaendert; wartet auf getrennten Verbindungstest und Bestaetigung.')
     return {'ok': True, 'state': 'awaiting_confirmation', 'action': operation,
             'network': network, 'rollback_seconds': 60,
+            'ttl_seconds': ttl_seconds,
             'message': 'Regel angewendet. Verbindung jetzt in einer getrennten Sitzung testen und innerhalb von 60 Sekunden bestaetigen; ohne Bestaetigung rollt Plesk zurueck.'}
 
 
-def firewall_action(operation, target='', remote_address=''):
+def firewall_action(operation, target='', remote_address='', ttl_seconds=0):
     if os.geteuid() != 0:
         raise ValueError('Root-Verwaltung erforderlich.')
     prepare_dir()
@@ -366,7 +401,7 @@ def firewall_action(operation, target='', remote_address=''):
                      getattr(os, 'O_NOFOLLOW', 0), 0o600)
     try:
         fcntl.flock(lockfd, fcntl.LOCK_EX)
-        return _firewall_action(operation, target, remote_address)
+        return _firewall_action(operation, target, remote_address, ttl_seconds)
     finally:
         os.close(lockfd)
 
@@ -1234,11 +1269,70 @@ def prune_reports():
             pass
 
 
+def firewall_expiry_tick():
+    """Remove expired Guardian deny rules using Plesk's native rollback/confirm workflow."""
+    if os.geteuid() != 0:
+        raise ValueError('Firewall-Ablaufpruefung braucht Root-Rechte.')
+    pending = read_json(FIREWALL_PENDING, {})
+    if pending.get('state') == 'awaiting_confirmation':
+        elapsed = time.time() - float(pending.get('started_epoch', 0))
+        if elapsed <= 90:
+            return {'checked': 0, 'removed': 0, 'pending': True}
+        firewall_action('cancel')
+    expiries = read_json(FIREWALL_EXPIRIES, {})
+    if not expiries:
+        return {'checked': 0, 'removed': 0, 'pending': False}
+    listing = firewall_rules()
+    if not listing.get('available') or listing.get('limited'):
+        raise ValueError('Plesk-Firewallregeln fuer den Ablauf koennen nicht sicher gelesen werden.')
+    active = {item['network'] for item in listing.get('rules', [])}
+    now = time.time()
+    due = []
+    due_count = 0
+    changed = False
+    for network, epoch in list(expiries.items()):
+        try:
+            canonical = str(ipaddress.ip_network(network, strict=True))
+        except (TypeError, ValueError):
+            expiries.pop(network, None)
+            changed = True
+            continue
+        if canonical != network or not isinstance(epoch, int) or isinstance(epoch, bool) or epoch <= 0:
+            expiries.pop(network, None)
+            changed = True
+            continue
+        if network not in active:
+            expiries.pop(network, None)
+            changed = True
+        elif epoch <= now:
+            due_count += 1
+            if len(due) < MAX_FIREWALL_EXPIRATIONS_PER_TICK:
+                due.append(network)
+    if changed:
+        write_json(FIREWALL_EXPIRIES, expiries)
+    removed = 0
+    for network in due:
+        firewall_action('unban', network)
+        firewall_action('confirm')
+        removed += 1
+        incident_log('operator', 'info', '', 'Abgelaufene Guardian-Firewall-Sperre automatisch entfernt: ' + network)
+    return {'checked': len(expiries), 'removed': removed, 'pending': False,
+            'remaining_due': max(0, due_count - removed)}
+
+
 def scheduled_tick():
     """Hourly Plesk scheduler call; runs at most one due scan per invocation."""
     if os.geteuid() != 0:
         raise ValueError('Scheduler braucht Root-Rechte.')
     prepare_dir()
+    try:
+        expiry_result = firewall_expiry_tick()
+        if expiry_result.get('remaining_due', 0):
+            incident_log('operator', 'warning', '',
+                         'Firewall-Ablaufwarteschlange: %d weitere abgelaufene Guardian-Regeln warten auf den naechsten Lauf.' %
+                         expiry_result['remaining_due'])
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        incident_log('operator', 'warning', '', 'Automatische Guardian-Firewall-Entsperrung fehlgeschlagen: ' + str(exc)[:180])
     config = schedules()
     # Watch metadata, limited to three domains per tick to control VPS load.
     selected = sorted(config)
@@ -1483,11 +1577,16 @@ def main(argv):
             return respond(operation(argv[1], int(argv[2])))
         if len(argv) == 4 and argv[0] == 'ip-action':
             return respond(manual_ban(argv[1], argv[2], argv[3]))
-        if len(argv) in (2, 4) and argv[0] == 'firewall-action':
+        if len(argv) in (2, 4, 5) and argv[0] == 'firewall-action':
             operation = argv[1]
-            target = argv[2] if len(argv) == 4 else ''
-            remote = argv[3] if len(argv) == 4 else ''
-            return respond(firewall_action(operation, target, remote))
+            target = argv[2] if len(argv) >= 4 else ''
+            remote = argv[3] if len(argv) >= 4 else ''
+            ttl = 0
+            if len(argv) == 5:
+                if operation != 'ban' or not argv[4].isdigit() or len(argv[4]) > 6:
+                    raise ValueError('Ungueltige Firewall-Sperrdauer.')
+                ttl = int(argv[4])
+            return respond(firewall_action(operation, target, remote, ttl))
         if len(argv) == 4 and argv[0] == 'worker':
             return scan_worker(argv[1], argv[2], int(argv[3]))
         return error('Ungueltige Aktion.')

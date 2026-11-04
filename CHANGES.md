@@ -1,3 +1,11 @@
+## 0.13.0 – Zeitbegrenzte Plesk-Firewall-Sperren
+
+- Guardian-Firewall-Regeln koennen dauerhaft oder fuer 1 Stunde, 24 Stunden beziehungsweise 7 Tage gesetzt werden.
+- Ablaufzeiten werden erst nach erfolgreicher Plesk-Bestaetigung gespeichert; der stündliche Plesk-Scheduler nimmt nur Guardian-eigene Regeln zurueck.
+- Automatische Entsperrung nutzt Plesks Apply/Confirm-Rollback und protokolliert Fehler; maximal zehn abgelaufene Regeln werden pro Lauf bearbeitet.
+- Dashboard zeigt Ablaufzeiten; der stuendliche Scheduler verarbeitet bis zu zehn Ablaufe pro Lauf und protokolliert groessere Rueckstaende.
+- Regressionstests fuer TTL-Validierung, Ablaufmetadaten, sichere Entsperrung und Panel-Weitergabe.
+
 ## 0.12.0 – Plesk-Firewall-IP-Sperrliste
 
 - Manuelle IP-/CIDR-Deny-Regeln ausschliesslich ueber die installierte Plesk-Firewall-CLI.

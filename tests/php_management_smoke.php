@@ -75,8 +75,19 @@ $controller->request->post = ['csrf' => 'test-token', 'operation' => 'ban', 'net
 try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
 $firewallCall = pm_ApiCli::$calls[2];
 checkManagement($firewallCall[0] === 'guardian-helper' &&
-    $firewallCall[1] === ['firewall-action', 'ban', '203.0.113.9', '198.51.100.4'],
-    'Plesk firewall action did not use the fixed helper and socket peer address');
+    $firewallCall[1] === ['firewall-action', 'ban', '203.0.113.9', '198.51.100.4', '0'],
+    'Plesk firewall action did not use the fixed helper, socket peer address and default TTL');
+
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'ban', 'network' => '203.0.113.10', 'ttl' => '3600'];
+try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
+checkManagement(pm_ApiCli::$calls[3][1] === ['firewall-action', 'ban', '203.0.113.10', '198.51.100.4', '3600'],
+    'Firewall TTL was not passed through the fixed helper interface');
+
+$before = count(pm_ApiCli::$calls);
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'ban', 'network' => '203.0.113.11', 'ttl' => '999'];
+try { $controller->firewallAction(); throw new RuntimeException('Invalid firewall TTL was accepted'); }
+catch (pm_Exception $e) {}
+checkManagement(count(pm_ApiCli::$calls) === $before, 'Invalid firewall TTL reached privileged helper');
 
 $before = count(pm_ApiCli::$calls);
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'confirm'];
@@ -86,7 +97,7 @@ checkManagement(count(pm_ApiCli::$calls) === $before, 'Firewall confirmation wit
 
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'confirm', 'tested' => '1'];
 try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
-checkManagement(pm_ApiCli::$calls[3][1] === ['firewall-action', 'confirm'], 'Firewall confirmation action not routed correctly');
+checkManagement(pm_ApiCli::$calls[4][1] === ['firewall-action', 'confirm'], 'Firewall confirmation action not routed correctly');
 
 foreach ([['csrf' => 'wrong', 'operation' => 'cloud-save'],
           ['csrf' => 'test-token', 'operation' => 'shell'],

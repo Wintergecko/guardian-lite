@@ -1,4 +1,4 @@
-# Guardian Lite 0.12.0 – Plesk Security (Linux)
+# Guardian Lite 0.13.0 – Plesk Security (Linux)
 
 Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf Linux, Python >=3.8. Beta: aktive Schutzfunktionen zuerst auf einem separaten Testserver pruefen. Keine offizielle Plesk-/Imunify360-Software.
 
@@ -14,7 +14,7 @@ Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf L
 | Metadatenvergleich | Periodische Stichprobe fuer Domains mit Scanplanung | Bis 1500 Dateien; keine vollstaendige Integritaetspruefung |
 | Incidents / E-Mail | Privates Ereignisprotokoll, JSON-Export, gedrosselte Warnungen | Mailtransport lokal erforderlich; Uebergabe ist kein Zustellnachweis |
 | Fail2Ban | Status bestehender Jails und manuelle IP-Sperren/-Freigaben | `fail2ban-client` und konfigurierte Jails; erstellt keine Jails oder globale Firewall-Policies |
-| Plesk Firewall | Manuelle Guardian-Deny-Regeln fuer IPv4/IPv6 und CIDR; Plesk-60-Sekunden-Rollback und Admin-IP-Schutz | Plesk Firewall installiert und aktiv; getrennten Verbindungstest vor expliziter Bestaetigung ausfuehren; keine automatischen Reputations-Sperren |
+| Plesk Firewall | Manuelle Guardian-Deny-Regeln fuer IPv4/IPv6 und CIDR; optionale 1h/24h/7d Ablaufzeit, stuendlicher Ablauf-Worker, Plesk-60-Sekunden-Rollback und Admin-IP-Schutz | Plesk Firewall installiert und aktiv; getrennten Verbindungstest vor expliziter Bestaetigung ausfuehren; keine automatischen Reputations-Sperren |
 | WAF | ModSecurity-Loganzeige, Domain-Modus und Guardian-Regelverwaltung | Apache ModSecurity v2, `mod_unique_id` und `SecDataDir` erforderlich; Plesk-WAF muss fuer Blockieren aktiv sein |
 | HTTP-Botlimits | Guardian-Regeln fuer einen Zielhost, Vorschau, Erkennen/429-Sperren, Rollback | Korrekte Real-IP-Konfiguration; kein Netzwerk-DDoS-Schutz |
 | PHP-Runtime | Snuffleupagus-Build aus festem Commit, Simulation, Aktivierung | Passendes Plesk-Entwicklerpaket plus git/gcc/make/autoconf; PHP 8.0–8.5; pro Handler wirksam |
@@ -40,9 +40,9 @@ Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.12.0.zip
+plesk bin extension -i /root/guardian-lite-0.13.0.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.12.0.zip
+plesk bin extension -g /root/guardian-lite-0.13.0.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
@@ -69,7 +69,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.12.0
+python3 tools/build_release.py --tag v0.13.0
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.

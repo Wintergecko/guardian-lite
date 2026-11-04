@@ -1,4 +1,4 @@
-# Weitere Features nach 0.12.0
+# Weitere Features nach 0.13.0
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
@@ -7,7 +7,7 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Prioritaet | Feature | Nutzen / konkrete Luecke |
 |---|---|---|
 | Hoch | Weitere CMS-Pruefsummen | WordPress-Core und WordPress.org-Plugins geprueft; Joomla/Magento-Herstellerquellen und sichere, signierte Good-File-Pakete fehlen. Keine automatische Reparatur aus Pruefergebnissen |
-| Hoch | Firewall-Allowlist und Notfall-Freischaltung | Plesk-Firewall-Deny-Regeln sind vorhanden; Admin-Allowlist fuer Monitoring, XML-RPC/API-Clients und legitime Bots sowie TTL-Ausnahmen fehlen |
+| Hoch | Firewall-Allowlist und Notfall-Freischaltung | Plesk-Firewall-Deny-Regeln und begrenzte TTLs sind vorhanden; explizite priorisierte Admin-/Monitoring-Ausnahmen fehlen |
 | Hoch | Baseline-/Backup-Aufbewahrung und Speicheranzeige | Alte/incomplete Snapshots sicher per GUI entfernen, Quota pro Domain, freien Speicher und benoetigte Reparaturquellen anzeigen |
 | Hoch | Cronjob-Regelausbau und Verifikation | Aktueller read-only Heuristikcheck deckt nur gaengige Muster und feste Cron-Pfade ab; Malware-Signaturen und Distributionen-Faelle fehlen |
 | Hoch | Echte Plesk-Testmatrix | Reproduzierbare VPS-Tests mit installierten Plesk-Versionen, Debian/Ubuntu/AlmaLinux und mehreren PHP-Handlern; aktuell nicht automatisiert nachgewiesen |
@@ -20,6 +20,6 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Mittel | Dateiwache fuer groessere Installationen | Watch-Budget je Domain, nachvollziehbare Abdeckung, robuste Wiederaufnahme nach Overflow und kuerzere Healthchecks |
 | Niedrig | Benachrichtigungen/Webhooks | Ereignisse in vorhandene Betriebswerkzeuge integrieren; Geheimnisse und Zielhosts strikt begrenzen |
 
-Fuer die naechste Runde sind eine explizite Firewall-Allowlist/Notfallfreigabe, Snapshot-Verwaltung und flexible Malware-Scan-Warteschlangen am wertvollsten. Sie verbessern Vertrauen, Ruecknahme und den Betrieb auf groesseren Plesk-Servern.
+Fuer die naechste Runde sind Snapshot-Verwaltung mit Quota sowie eine flexible Malware-Scan-Warteschlange am wertvollsten. Eine Firewall-Allowlist benoetigt zuerst Plesk-Regelprioritaetstests, damit Freigaben Deny-Regeln wirklich sicher uebersteuern.
 
 Technische Grundlage fuer Hersteller-Pruefsummen: [WP-CLI core verify-checksums](https://developer.wordpress.org/cli/commands/core/verify-checksums/) vergleicht WordPress-Core-Dateien mit WordPress.org-Pruefsummen, ohne WordPress dafuer zu laden. Premium-Erweiterungen und angepasste Dateien benoetigen eigene Vertrauensquellen.
