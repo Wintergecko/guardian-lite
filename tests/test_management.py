@@ -297,7 +297,7 @@ class ManagementTests(unittest.TestCase):
             archive.writestr('../escape.php', b'bad')
         report = self.run_wp_theme_audit(output.getvalue())
         self.assertEqual(report['status'], 'partial')
-        self.assertIn('unsicheren Dateipfad', report['themes'][0]['note'])
+        self.assertIn('unerwarteten Dateipfad', report['themes'][0]['note'])
 
     def test_wordpress_theme_fetch_rejects_non_wordpress_hosts_before_network(self):
         with mock.patch.object(m.urllib.request, 'urlopen') as open_url:
