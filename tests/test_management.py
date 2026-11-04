@@ -245,6 +245,60 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(result['status'], 'mismatch')
         self.assertEqual(result['findings'][0]['rule'], 'wordpress-plugin-checksum-mismatch')
 
+    def fake_wp_db_cli(self, candidate='42\tpost_content\tobfuscated-execution\n', fail_query=False):
+        self.write_site('wp-load.php', b'<?php // fixture')
+        self.write_site('wp-includes/version.php', b'<?php $wp_version = "6.8.1";')
+        temporary = tempfile.TemporaryDirectory(prefix='guardian-wp-db-cli-test-', dir='/var/lib')
+        self.addCleanup(temporary.cleanup)
+        folder = pathlib.Path(temporary.name)
+        os.chmod(folder, 0o755)
+        path = folder / 'wp'
+        path.write_text('#!/bin/sh\nexit 0\n')
+        os.chmod(path, 0o755)
+        calls = []
+
+        def fake_run(args, **kwargs):
+            calls.append((args, kwargs.get('input')))
+            if args[-2:] == ['db', 'prefix']:
+                output, rc = b'wp_\n', 0
+            elif args[-4:] == ['db', 'tables', '--scope=blog', '--format=list']:
+                output, rc = b'wp_posts\nwp_postmeta\nwp_options\n', 0
+            elif 'query' in args:
+                output = candidate.encode() if b'FROM `wp_posts`' in kwargs['input'] else b''
+                # The fake database never sees data from wp-config; it only receives fixed SELECT statements.
+                self.assertIn(b'SELECT ', kwargs['input'])
+                self.assertIn(b'LIMIT 101', kwargs['input'])
+                self.assertNotIn(b'UPDATE ', kwargs['input'])
+                rc = 1 if fail_query else 0
+            else:
+                self.fail('Unexpected WP-CLI invocation: %r' % args)
+            kwargs['stdout'].write(output)
+            return type('Result', (), {'returncode': rc})()
+
+        with mock.patch.object(m.h, 'binary', return_value=str(path)), \
+                mock.patch.object(m.subprocess, 'run', side_effect=fake_run):
+            result = m.wordpress_database_audit('example.com')
+        self.assertGreaterEqual(len(calls), 3)
+        return result
+
+    def test_wordpress_database_audit_reports_only_safe_identifiers_read_only(self):
+        result = self.fake_wp_db_cli('42\tpost_content\tobfuscated-execution\n')
+        self.assertEqual(result['status'], 'candidates')  # Optional comment tables are absent.
+        self.assertEqual(result['findings'], [{'table': 'posts', 'row_id': '42',
+                                                'column': 'post_content', 'rule': 'obfuscated-execution'}])
+        self.assertNotIn('payload', json.dumps(result))
+        self.assertTrue(any(item['type'] == 'cms_database_indicators' for item in m.h.incident_list()))
+
+    def test_wordpress_database_audit_rejects_non_numeric_database_identifiers(self):
+        result = self.fake_wp_db_cli('1;DROP\tpost_content\tobfuscated-execution\n')
+        self.assertEqual(result['status'], 'partial')
+        self.assertEqual(result['findings'], [])
+
+    def test_wordpress_database_audit_marks_database_query_failure_partial(self):
+        result = self.fake_wp_db_cli(candidate='', fail_query=True)
+        self.assertEqual(result['status'], 'partial')
+        self.assertEqual(result['findings'], [])
+
     def test_repair_preserves_original_and_rollback_refuses_user_changes(self):
         self.write_site('index.php', b'GOOD')
         os.chmod(self.web / 'index.php', 0o600)

@@ -1,4 +1,4 @@
-# Guardian Lite v0.16.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.17.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -75,6 +75,13 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - Die Pruefung ist read-only und auf Adminer/TinyFileManager-Namen plus Marker begrenzt; sie meldet Kandidaten, keine Malware-Verurteilung.
 - Traversal folgt keinen Symlinks und keinen Mountpoints, begrenzt Dateien/Dateisystemeintraege/Dateigroesse/Tiefe/Laufzeit und markiert erkannte Abdeckungsluecken.
 - Treffer enthalten Dateipfad und SHA-256, aber keinen Quelltext. Es gibt keine automatische Quarantaene, Reparatur oder Deaktivierung dieser Kandidaten.
+
+## 0.17.0 – WordPress-Datenbankindikatoren
+
+- WP-CLI laeuft mit Website-UID/GID, isoliertem HOME und deaktivierten Plugins/Themes. Tabellen-/Spaltennamen stammen aus festen Allowlisten; Tabellenpraefixe werden strikt validiert.
+- Ausschliesslich read-only SELECT-Abfragen, 101 Zeilen je Tabelle, 2 MiB Ausgabe und 5 Minuten Gesamtzeit. Ausgabe/Bericht enthalten keine Datenbankwerte oder Zugangsdaten.
+- Numerische Zeilen-IDs koennen Website-Strukturen offenlegen und werden nur root-privat gespeichert sowie Administratoren angezeigt.
+- Muster sind heuristisch; Fehlalarme und uebersehene Malware sind moeglich. Kein Imunify MDS, kein ClamAV-Ersatz und keine Datenbankaenderung.
 
 ## 0.11.0 – WordPress-Plugin-Pruefsummen
 

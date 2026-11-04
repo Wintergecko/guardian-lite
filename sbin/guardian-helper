@@ -500,7 +500,8 @@ def write_json(path, info):
 def incident_log(event_type, severity, domain='', detail='', relative=''):
     """Root-private bounded audit trail; never log file bodies or credentials."""
     prepare_dir()
-    if event_type not in ('file_change', 'malware_detected', 'cron_suspicious', 'cms_checksum_mismatch', 'scan_complete',
+    if event_type not in ('file_change', 'malware_detected', 'cron_suspicious', 'cms_checksum_mismatch',
+                          'cms_database_indicators', 'scan_complete',
                           'monitor_started', 'monitor_stopped', 'monitor_limit',
                           'monitor_overflow', 'operator', 'notification_error'):
         raise ValueError('Unbekannter Ereignistyp.')
@@ -1311,12 +1312,13 @@ def annotate_ignored_findings(domain, findings):
     return count
 
 
-def drop_privileges(uid, gid):
+def drop_privileges(uid, gid, cpu_limit=1800):
     os.setgroups([])
     os.setgid(gid)
     os.setuid(uid)
     os.nice(10)
-    resource.setrlimit(resource.RLIMIT_CPU, (1800, 1800))
+    cpu_limit = max(1, min(1800, int(cpu_limit)))
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit, cpu_limit))
     resource.setrlimit(resource.RLIMIT_FSIZE, (5 * 1024 * 1024, 5 * 1024 * 1024))
 
 

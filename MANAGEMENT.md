@@ -1,4 +1,4 @@
-# Guardian Lite 0.16.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.17.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -114,6 +114,12 @@ Im Verwaltungstab kann der Administrator die Core-Dateien einer gehosteten WordP
 Das Core-Ergebnis meldet erkannte Dateiabweichungen mit Pfad und Regelkennung, speichert einen Bericht und erzeugt einen Incident bei Abweichungen. Dateien werden nicht geaendert. WordPress.org-Core-Pruefsummen verwenden laut WP-CLI MD5-Pruefwerte ueber HTTPS und sind kein signierter Paketnachweis.
 
 Eine zweite Aktion prueft Plugins mit `wp plugin verify-checksums --all`. WordPress.org-Plugins mit vorhandenen Checksums werden verglichen. Plugins ohne oeffentliche Checksums (typischerweise kommerzielle/eigene Plugins) werden separat aufgefuehrt und ergeben den Status **partial**, nicht **verified**. Themes, Must-Use-Plugins, eigene Dateien und automatische Reparatur bleiben unberuecksichtigt. Die Pruefung beweist daher nicht, dass die gesamte Website frei von Malware ist. [WP-CLI-Pluginpruefung](https://developer.wordpress.org/cli/commands/plugin/verify-checksums/)
+
+### WordPress-Datenbankindikatoren
+
+Die manuelle Aktion `WordPress-Datenbank pruefen` scannt `posts`, `postmeta`, `options` sowie vorhandene Kommentar-Tabellen. Sie verwendet WP-CLI `db prefix`, `db tables` und ausschliesslich begrenzte `SELECT`-Abfragen mit SQL-Identifiern aus einer festen Allowlist. Ausgefuehrt wird WP-CLI mit der Website-UID/GID, isoliertem HOME und ohne Plugins/Themes. Guardian erfasst nur Tabellenname, numerische Zeilen-ID, Spalte und feste Regelkennung; SQL-Inhalte, Zugangsdaten und Datenbankwerte werden nicht in Berichte geschrieben. Abfragen sind auf 101 Zeilen je Tabelle, 2 MiB Ausgabe und insgesamt 5 Minuten begrenzt.
+
+Die Heuristik sucht bekannte Kombinationen aus Kodierung/Verschleierung und dynamischer Ausfuehrung. Treffer sind manuell zu untersuchende Kandidaten, keine Malware-Klassifikation; falsch-positive und falsch-negative Ergebnisse sind moeglich. Fehlende Pflichttabellen, Abfragefehler und Grenzwerte ergeben einen Teilstatus. Das ist weder Imunify Malware Database Scanner noch ClamAV-Ersatz. Es gibt keine Datenbankbereinigung, kein Backup und keinen Rollback. [WP-CLI Datenbankabfragen](https://developer.wordpress.org/cli/commands/db/query/) · [Tabellenauflistung](https://developer.wordpress.org/cli/commands/db/tables/)
 
 ## Malware-Ignore-Liste
 
