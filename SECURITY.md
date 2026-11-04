@@ -1,4 +1,4 @@
-# Guardian Lite v0.7.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.7.1 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -16,7 +16,7 @@
 
 Runtime-/HTTP-Flood-Schutz ist nur als Opt-in-Vorlage enthalten. Es gibt bewusst keinen privilegierten Web-Endpunkt zur Aktivierung beliebiger PHP-/Webserver-Regeln. Ein Policy-Rollout muss auf einer Testdomain erfolgen und die produktive Konfiguration sichern.
 
-## 0.7.0 – Aktive Verwaltung
+## 0.7.1 – Aktive Verwaltung
 
 Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nun feste Verwaltungsaktionen fuer vorbereitete Policies, keine freien Regeln oder Shell-Befehle. Anforderungen und Grenzen stehen in [MANAGEMENT.md](MANAGEMENT.md).
 

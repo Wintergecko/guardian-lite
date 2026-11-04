@@ -63,6 +63,36 @@ class GuardianTests(unittest.TestCase):
         self.assertEqual(result['jail_count'], 2)
         self.assertEqual(result['banned_total'], 4)
 
+    def test_firewall_detects_installed_but_inactive_plesk_firewall(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = pathlib.Path(tmp) / 'settings'
+            settings.touch()
+            def fake_execute(args, timeout=5):
+                return subprocess.CompletedProcess(args, 3, 'inactive\n', '')
+            with mock.patch.object(helper, 'FIREWALL_SETTINGS', settings), \
+                     mock.patch.object(helper, 'binary', return_value='/usr/bin/systemctl'), \
+                     mock.patch.object(helper, 'execute', side_effect=fake_execute):
+                result = helper.firewall_status()
+        self.assertTrue(result['installed'])
+        self.assertTrue(result['status_known'])
+        self.assertFalse(result['plesk_firewall_active'])
+
+    def test_firewall_checks_both_current_and_legacy_service_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = pathlib.Path(tmp) / 'settings'
+            settings.touch()
+            def fake_execute(args, timeout=5):
+                if args[-1] == 'plesk-firewall':
+                    return subprocess.CompletedProcess(args, 4, '', 'not-found')
+                return subprocess.CompletedProcess(args, 0, 'active\n', '')
+            with mock.patch.object(helper, 'FIREWALL_SETTINGS', settings), \
+                     mock.patch.object(helper, 'binary', return_value='/usr/bin/systemctl'), \
+                     mock.patch.object(helper, 'execute', side_effect=fake_execute):
+                result = helper.firewall_status()
+        self.assertTrue(result['installed'])
+        self.assertTrue(result['plesk_firewall_active'])
+        self.assertEqual(result['service'], 'psa-firewall')
+
     def test_unknown_command_returns_error(self):
         with mock.patch.object(helper, 'respond', return_value=1) as reply:
             self.assertEqual(helper.main(['shell', 'rm', '-rf', '/']), 1)

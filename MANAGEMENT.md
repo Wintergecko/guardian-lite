@@ -1,8 +1,26 @@
-# Guardian Lite 0.7.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.7.1 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
 Plesk Obsidian **18.0.55 oder neuer**, Linux und Python >=3.8. Die sichere stdin-Schnittstelle von `pm_ApiCli::callSbin` wird fuer API-Schluessel verwendet. Nur direkt angemeldete Administratoren koennen Verwaltungsaktionen ausfuehren. Alle neuen aktiven Funktionen sind nach Installation aus.
+
+## Systemkomponenten je Funktion
+
+Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwendest. Guardian installiert keine Betriebssystempakete selbst.
+
+| Funktion | Benoetigt |
+|---|---|
+| Scans, Historie, Quarantaene, Baselines/Reparatur | ClamAV `clamscan` und aktuelle Signaturen, z. B. unter Debian/Ubuntu `apt install clamav clamav-freshclam`; Signaturen mit `freshclam` aktualisieren. |
+| Fail2Ban-Anzeige und IP-Aktionen | Fail2Ban (`fail2ban-client`) und mindestens ein konfiguriertes Jail. Guardian erstellt keine Jails. |
+| E-Mail-Warnungen | Lokaler Sendmail-kompatibler Mailtransport oder in Plesk funktionierender Mailtransport. |
+| Dateiwache | Linux `inotify` (Kernel-Schnittstelle); kein zusaetzliches PHP-Modul. |
+| Plesk-Firewall-Status | Optionale Plesk-Erweiterung **Firewall**. Die Installation allein aktiviert keine Regeln. Die Erweiterung ist keine Voraussetzung fuer andere Guardian-Funktionen. |
+| Guardian-WAF/HTTP-Limits | Apache-ModSecurity **v2**, geladenes `mod_unique_id`, `SecDataDir` und Plesk-WAF fuer wirksames Blockieren. In Plesk ueber Installer/Komponentenverwaltung einrichten und danach Guardian-Vorschau pruefen. |
+| Snuffleupagus | Pro verwaltetem Plesk-PHP-FPM-Handler das passende Entwicklerpaket, z. B. `plesk-php83-dev`, ausserdem `git`, `gcc`, `make`, `autoconf`; Handler-Version 8.0–8.5. Beispiel Debian/Ubuntu: `apt install plesk-php83-dev git gcc make autoconf`. |
+| Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |
+| AbuseIPDB | HTTPS-Ausgangsverbindung und eigener API-Key; kein Serverpaket. |
+
+Plesk-Pakete/Handler-Komponenten koennen je nach Betriebssystem und PHP-Version abweichen. System-PHP-Entwicklungspakete ersetzen nicht die zum Plesk-Handler gehoerigen Pakete.
 
 Automatisierte Tests ersetzen die Plesk-Praxistests nicht. Die Tests des Betreibers finden auf einem separaten Plesk-Testserver statt. Guardian fuehrt keine pauschale Aktivierung auf vorhandenen Domains durch.
 

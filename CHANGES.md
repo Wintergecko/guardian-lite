@@ -1,3 +1,8 @@
+## 0.7.1 – Abhaengigkeiten und Firewall-Status
+
+- Plesk-Firewall-Erkennung prueft die aktuellen sowie bisherigen systemd-Service-Namen und unterscheidet installierte Erweiterung von aktivierten Regeln.
+- Funktionsbezogene Betriebssystem- und Plesk-Komponenten dokumentiert; unnoetige globale Paketinstallation vermeiden.
+
 ## 0.7.0 – Opt-in-Schutzverwaltung und Diagnose
 
 - Neuer Tab Verwaltung & Diagnose mit CSRF-geschuetzten festen Aktionen; Plesk >=18.0.55 wegen sicherer stdin-Uebergabe erforderlich.
