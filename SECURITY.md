@@ -1,4 +1,4 @@
-# Guardian Lite v0.15.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.16.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -69,6 +69,12 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - Baselines liegen in root-privaten Verzeichnissen. Loeschaktionen akzeptieren nur hexadezimale IDs, pruefen Domain-/Manifest-Zuordnung und verweigern aktuell fuer automatische Reparatur ausgewaehlte Baselines.
 - Backup-Loeschung prueft ID, Dateityp und SHA-256. Das in der Guardian-WAF-Konfiguration referenzierte Rollback-Backup wird abgelehnt.
 - Neue Backups und Baselines werden bei voller Count-/Speicherquote abgelehnt, bevor Konfigurationsaenderungen stattfinden. Es gibt keine automatische Retention oder Hintergrundloeschung.
+
+## 0.16.0 – Admin-Tool-Kandidaten
+
+- Die Pruefung ist read-only und auf Adminer/TinyFileManager-Namen plus Marker begrenzt; sie meldet Kandidaten, keine Malware-Verurteilung.
+- Traversal folgt keinen Symlinks und keinen Mountpoints, begrenzt Dateien/Dateisystemeintraege/Dateigroesse/Tiefe/Laufzeit und markiert erkannte Abdeckungsluecken.
+- Treffer enthalten Dateipfad und SHA-256, aber keinen Quelltext. Es gibt keine automatische Quarantaene, Reparatur oder Deaktivierung dieser Kandidaten.
 
 ## 0.11.0 – WordPress-Plugin-Pruefsummen
 

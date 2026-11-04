@@ -40,8 +40,19 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn("$this->view->scanQueue", controller)
         self.assertIn('warten FIFO', view)
 
+    def test_admin_tool_candidates_are_separate_and_never_automatically_removed(self):
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        helper = (ROOT / 'sbin/guardian-helper').read_text()
+        self.assertIn('Admin-Tools: manuelle Pruefung', view)
+        self.assertIn('keine Malware-Einstufung', view)
+        self.assertIn('admin_tool_candidates', helper)
+        self.assertIn("'state': 'review'", helper)
+        scanner = helper.split('def admin_tool_candidates', 1)[1].split('\ndef ignored_hash_set', 1)[0]
+        self.assertNotIn('unlink(', scanner)
+        self.assertNotIn('rmtree(', scanner)
+
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.15.0')
+        self.assertEqual(version, '0.16.0')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())

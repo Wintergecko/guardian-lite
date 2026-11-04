@@ -1,4 +1,4 @@
-# Guardian Lite 0.15.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.16.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -31,6 +31,8 @@ Baselines sind auf 20 Verzeichnisse, 512 MiB Gesamtspeicher, 64 MiB und 5000 Dat
 ## Malware-Scan-Warteschlange
 
 Manuelle und geplante Vollscans werden FIFO aus einer root-privaten Warteschlange gestartet. Der Plesk-Stundentask kann alle faelligen Domains einreihen; pro Domain bleiben mindestens 24 Stunden zwischen tatsaechlichen Scanstarts. Gleichzeitig laeuft immer nur ein ClamAV-Vollscan. Maximal 100 Auftraege koennen warten; bei voller Queue wird der Auftrag abgelehnt und die Oberflaeche zeigt die wartenden Domains an. Der Worker startet den naechsten Auftrag nach Abschluss oder Fehler des vorherigen. Fuer jeden Scan gelten weiterhin die vorhandenen Dateigroessen-, Dateianzahl-, Laufzeit- und CPU-Prioritaetsgrenzen.
+
+Nach einem ClamAV-Vollscan prueft Guardian ausserdem begrenzt auf Adminer- und TinyFileManager-Kandidaten. Die read-only Pruefung nutzt bekannte PHP-Dateinamen plus Textmarker, maximal 5000 Dateien, 10000 Dateisystemeintraege, 2 MiB je Kandidatendatei, 16 Verzeichnisebenen, zehn Sekunden und 25 Meldungen. Symlinks und andere Dateisysteme werden nicht verfolgt; erkannte Begrenzungen erscheinen als unvollstaendig/begrenzt. Treffer sind Admin-Tool-Hinweise, keine Malware-Befunde; sie zeigen Pfad und SHA-256, aber keinen Quelltext. Guardian deaktiviert, quarantiniert oder loescht diese Dateien nie automatisch.
 
 Plesk-Pakete/Handler-Komponenten koennen je nach Betriebssystem und PHP-Version abweichen. System-PHP-Entwicklungspakete ersetzen nicht die zum Plesk-Handler gehoerigen Pakete.
 

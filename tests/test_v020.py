@@ -188,6 +188,41 @@ class NewFeatureTests(unittest.TestCase):
             self.assertEqual(findings[0]['path'], 'bad.php')
             self.assertEqual(findings[0]['state'], 'found')
 
+    def test_admin_tool_candidates_are_read_only_and_require_known_markers(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp) / 'httpdocs'
+            root.mkdir()
+            adminer = root / 'adminer-4.8.1.php'
+            adminer.write_bytes(b'<?php /* Adminer database management https://www.adminer.org */')
+            tinyfm = root / 'filemanager.php'
+            tinyfm.write_bytes(b'<?php // TinyFileManager web file manager')
+            (root / 'adminer.php.bak').write_bytes(b'Adminer adminer.org')
+            (root / 'adminer-copy.php').write_bytes(b'<?php echo "hello";')
+            (root / 'linked-adminer.php').symlink_to(adminer)
+
+            result = h.admin_tool_candidates(root)
+
+            self.assertEqual({(item['tool'], item['path']) for item in result['findings']}, {
+                ('Adminer', 'adminer-4.8.1.php'), ('TinyFileManager', 'filemanager.php')})
+            self.assertTrue(all(len(item['sha256']) == 64 for item in result['findings']))
+            self.assertTrue(result['incomplete'])  # Symlink skipped; never followed.
+            self.assertFalse(result['truncated'])
+            self.assertTrue(adminer.exists())
+            self.assertTrue(tinyfm.exists())
+
+    def test_admin_tool_candidate_scan_reports_bounds(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / 'adminer.php').write_bytes(b'<?php Adminer adminer.org' + b'x' * h.MAX_ADMIN_TOOL_FILE_BYTES)
+            oversized = h.admin_tool_candidates(root)
+            self.assertEqual(oversized['findings'], [])
+            self.assertTrue(oversized['incomplete'])
+            with mock.patch.object(h, 'MAX_ADMIN_TOOL_FILES', 0):
+                result = h.admin_tool_candidates(root)
+            self.assertEqual(result['findings'], [])
+            self.assertTrue(result['incomplete'])
+            self.assertTrue(result['truncated'])
+
     def test_file_metadata_rejects_symlink_inside_site(self):
         with tempfile.TemporaryDirectory() as tmp:
             docroot = pathlib.Path(tmp)

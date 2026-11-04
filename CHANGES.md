@@ -1,3 +1,10 @@
+## 0.16.0 – Erkennung von Admin-Tools
+
+- Domain-Scans erkennen in begrenztem Umfang Adminer- und TinyFileManager-Dateien anhand von Name und Quelltextmerkmalen.
+- Kandidaten erscheinen separat als Admin-Tools zur manuellen Pruefung, nicht als Malware-Treffer; Guardian aendert oder loescht sie nicht.
+- Symlinks und andere Dateisysteme werden nicht verfolgt. Scanzeit, Dateianzahl, Dateigroesse und Anzahl der Meldungen sind begrenzt; unvollstaendige Pruefungen werden gekennzeichnet.
+- Tests fuer Treffer, harmlose Dateinamen, Symlink-Ausschluss und Grenzen.
+
 ## 0.15.0 – Speicheranzeige und manuelle Aufbewahrung
 
 - Verwaltung zeigt Guardian-Speicher pro Bereich und freien Speicher des Datentraegers an.
