@@ -219,3 +219,11 @@
 ## 0.1.0
 
 - Erstes Admin-Dashboard fuer Fail2Ban/ModSecurity/Firewall, manueller ClamAV-On-Demand-Scan.
+## 0.22.0 – ClamAV-Pruefung fuer Cron-Dateien
+
+- Read-only Cronjob-Audit ergaenzt die bestehenden Heuristiken optional um lokale ClamAV-Signaturen.
+- Nur sicher gelesene, regulaere Cron-Dateien werden in ein privates temporaeres Verzeichnis kopiert; 4-MiB-/45-Sekunden-Grenzen, keine Bereinigung und kein Aendern der Cronjobs.
+- Treffer werden mit urspruenglichem Pfad und bereinigtem Signaturnamen protokolliert; fehlendes ClamAV oder Fehler werden separat ausgewiesen.
+- Imunify360-Cron-Erkennung kann andere proprietaere Regeln verwenden; ClamAV-Treffer sind keine vollstaendige Cron-Malware-Bewertung.
+- Tests pruefen Trefferzuordnung und unveraenderte Quell-Dateien.
+

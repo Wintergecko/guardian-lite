@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import subprocess
 import shlex
 import tempfile
 import time
@@ -151,6 +152,28 @@ class ManagementTests(unittest.TestCase):
         self.assertNotIn('bad.example', json.dumps(result))
         self.assertEqual(source.read_bytes(), content)
         self.assertTrue(link.is_symlink())
+
+    def test_cron_audit_scans_captured_files_with_clamav_without_modifying_them(self):
+        cron_root = self.base / 'cron'
+        cron_root.mkdir()
+        source = cron_root / 'daily-task'
+        content = b'#!/bin/sh\necho scheduled\n'
+        source.write_bytes(content)
+        def fake_run(args, **kwargs):
+            self.assertIn('--infected', args)
+            self.assertIn('--no-summary', args)
+            self.assertTrue(pathlib.Path(args[-1], 'cron-000').is_file())
+            return subprocess.CompletedProcess(args, 1,
+                str(pathlib.Path(args[-1], 'cron-000')) + ': Test.Signature FOUND\n', '')
+        with mock.patch.object(m, 'CRON_FILES', (source,)), \
+                mock.patch.object(m, 'CRON_DIRS', ()), \
+                mock.patch.object(m.h, 'binary', return_value='/usr/bin/clamscan'), \
+                mock.patch.object(m.subprocess, 'run', side_effect=fake_run):
+            result = m.cron_audit()
+        self.assertEqual(result['clamav']['status'], 'found')
+        self.assertEqual(result['clamav']['findings'], [
+            {'source': str(source), 'signature': 'Test.Signature'}])
+        self.assertEqual(source.read_bytes(), content)
 
     def test_uninstall_removes_only_guardian_firewall_rules_through_confirmed_rollback(self):
         managed = {'available': True, 'limited': False, 'pending': {}, 'rules': [

@@ -1,4 +1,10 @@
-# Guardian Lite v0.21.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.22.0 – Sicherheitsmodell und Grenzen
+
+## 0.22.0 – Cronjob-ClamAV-Signaturscan
+
+- Cron-Dateien werden ueber feste Systempfade geoeffnet; Symlinks und unregulaere Dateien werden nicht verfolgt. Der optionale ClamAV-Scan arbeitet auf Kopien in einem privaten temporaeren Verzeichnis und aendert keine Cronjobs.
+- Gesamtinhalt ist auf 4 MiB und Laufzeit auf 45 Sekunden begrenzt. Treffer bleiben manuell zu pruefende ClamAV-Signaturen, keine automatische Klassifikation oder Bereinigung.
+- ClamAV fehlt: Heuristikpruefung laeuft weiter; Signaturscan meldet `unavailable`.
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.

@@ -89,6 +89,9 @@ CRON_PATTERNS = (
     ('php-inline-eval', re.compile(r'\bphp(?:\d+(?:\.\d+)?)?\s+-r\s+[^\n]{0,1000}\b(?:eval|assert|base64_decode)\s*\(', re.I)),
     ('temporary-executable', re.compile(r'(?:^|\s)(?:/tmp|/var/tmp|/dev/shm)/[^\s;|]+\s*(?:;|$)', re.I)),
 )
+CRON_CLAM_TIMEOUT = 45
+CRON_CLAM_MAX_BYTES = 4 * 1024 * 1024
+CRON_CLAM_SIGNATURE = re.compile(r'^(.+?):\s+([A-Za-z0-9_.:+-]{1,128})\s+FOUND\s*$')
 
 
 def root():
@@ -1173,6 +1176,7 @@ def cron_audit():
         files = set(sorted(files, key=str)[:256])
         skipped += 1
     findings = []
+    signature_sources = []
     scanned = 0
     total = 0
     for path in sorted(files, key=str):
@@ -1197,6 +1201,8 @@ def cron_audit():
             skipped += 1
             continue
         scanned += 1
+        if data:
+            signature_sources.append((str(path), data))
         for number, raw in enumerate(data.decode('utf-8', 'replace').splitlines(), 1):
             line = raw.strip()
             if not line or line.startswith('#') or len(line) > 4096:
@@ -1211,13 +1217,65 @@ def cron_audit():
                 break
         if len(findings) >= 100:
             break
+    clamav = {'status': 'unavailable', 'finding_count': 0, 'findings': [],
+              'note': 'ClamAV-Signaturscan fuer Cron-Dateien nicht ausgefuehrt.'}
+    scanner = h.binary(h.CLAM_PATHS)
+    if scanner and signature_sources:
+        total_cron_bytes = sum(len(data) for _, data in signature_sources)
+        if total_cron_bytes > CRON_CLAM_MAX_BYTES:
+            clamav.update(status='partial', note='Cron-Dateien ueberschreiten das 4-MiB-Limit; Signaturscan ausgelassen.')
+        else:
+            try:
+                with tempfile.TemporaryDirectory(prefix='guardian-cron-scan-') as scan_dir:
+                    source_by_name = {}
+                    for index, (source, data) in enumerate(signature_sources):
+                        name = 'cron-%03d' % index
+                        target = pathlib.Path(scan_dir) / name
+                        fd = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                        with os.fdopen(fd, 'wb') as output:
+                            output.write(data)
+                        source_by_name[name] = source
+                    result = subprocess.run(
+                        [scanner, '--infected', '--no-summary', '--max-files=256',
+                         '--max-filesize=131072', '--max-scansize=%d' % CRON_CLAM_MAX_BYTES,
+                         scan_dir], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL, timeout=CRON_CLAM_TIMEOUT, check=False,
+                        close_fds=True, cwd='/', env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
+                raw_output = result.stdout[:65536]
+                output = (raw_output.decode('utf-8', 'replace') if isinstance(raw_output, bytes)
+                          else str(raw_output))
+                hits = []
+                for line in output.splitlines():
+                    match = CRON_CLAM_SIGNATURE.fullmatch(line.strip())
+                    if not match:
+                        continue
+                    name = os.path.basename(match.group(1))
+                    if name in source_by_name and len(hits) < 100:
+                        hits.append({'source': source_by_name[name], 'signature': match.group(2)})
+                if result.returncode == 0:
+                    clamav.update(status='no_signatures', finding_count=0, findings=hits,
+                                   note='Lokaler ClamAV-Signaturscan der erfassten Cron-Dateien; keine Aenderungen.')
+                elif result.returncode == 1:
+                    clamav.update(status='found' if hits else 'partial', finding_count=len(hits), findings=hits,
+                                   note='ClamAV meldete Cron-Datei-Treffer; manuell untersuchen, Guardian aendert nichts.')
+                else:
+                    clamav.update(status='error', note='ClamAV-Cron-Signaturscan fehlgeschlagen (Exit-Code %d).' % result.returncode)
+            except subprocess.TimeoutExpired:
+                clamav.update(status='partial', note='ClamAV-Cron-Signaturscan nach 45 Sekunden abgebrochen.')
+            except (OSError, subprocess.SubprocessError) as exc:
+                clamav.update(status='error', note='ClamAV-Cron-Signaturscan fehlgeschlagen: ' + str(exc)[:120])
+    elif not signature_sources:
+        clamav.update(status='no_sources', note='Keine lesbaren Cron-Dateien mit Inhalt gefunden.')
     result = {'generated_at': h.utc_now(), 'scanned_sources': scanned,
               'finding_count': len(findings), 'findings': findings,
+              'clamav': clamav,
               'partial': skipped > 0, 'skipped_sources': skipped,
-              'note': 'Heuristische, nur lesende Pruefung ueblicher Cron-Pfade. Kein vollstaendiger Malware-Nachweis; Eintraege werden nicht veraendert.'}
+              'note': 'Heuristische Pruefung und optionaler lokaler ClamAV-Signaturscan ueblicher Cron-Pfade. Kein vollstaendiger Malware-Nachweis; Eintraege werden nicht veraendert.'}
     h.write_json(root() / 'cron-audit.json', result)
     if findings:
         h.incident_log('cron_suspicious', 'warning', detail='%d verdaechtige Cron-Eintraege; manuelle Pruefung erforderlich.' % len(findings))
+    if clamav.get('status') == 'found':
+        h.incident_log('cron_suspicious', 'warning', detail='%d ClamAV-Treffer in Cron-Dateien; manuelle Pruefung erforderlich.' % clamav['finding_count'])
     return result
 
 
@@ -2085,7 +2143,7 @@ def wordpress_theme_fetch(url, max_bytes):
     parts = urllib.parse.urlsplit(url)
     if not allowed_target(url) or parts.fragment:
         raise ValueError('Theme-Pruefung akzeptiert nur HTTPS von WordPress.org.')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.21.0 theme-integrity'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.22.0 theme-integrity'})
     class AllowedRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not allowed_target(newurl):
