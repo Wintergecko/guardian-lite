@@ -1,4 +1,4 @@
-# Guardian Lite 0.13.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.14.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -21,6 +21,10 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |
 | WordPress-Core-Pruefsummen | WP-CLI als root-eigene Datei unter `/usr/local/bin/wp`, `/usr/bin/wp` oder `/bin/wp`; systemweite PHP-CLI und ausgehender HTTPS-Zugriff auf WordPress.org. Guardian installiert WP-CLI nicht. |
 | AbuseIPDB | HTTPS-Ausgangsverbindung und eigener API-Key; kein Serverpaket. |
+
+## Malware-Scan-Warteschlange
+
+Manuelle und geplante Vollscans werden FIFO aus einer root-privaten Warteschlange gestartet. Der Plesk-Stundentask kann alle faelligen Domains einreihen; pro Domain bleiben mindestens 24 Stunden zwischen tatsaechlichen Scanstarts. Gleichzeitig laeuft immer nur ein ClamAV-Vollscan. Maximal 100 Auftraege koennen warten; bei voller Queue wird der Auftrag abgelehnt und die Oberflaeche zeigt die wartenden Domains an. Der Worker startet den naechsten Auftrag nach Abschluss oder Fehler des vorherigen. Fuer jeden Scan gelten weiterhin die vorhandenen Dateigroessen-, Dateianzahl-, Laufzeit- und CPU-Prioritaetsgrenzen.
 
 Plesk-Pakete/Handler-Komponenten koennen je nach Betriebssystem und PHP-Version abweichen. System-PHP-Entwicklungspakete ersetzen nicht die zum Plesk-Handler gehoerigen Pakete.
 

@@ -37,9 +37,11 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn("$domain->hasHosting()", controller)
         self.assertIn("guardian_scan_selected_domain", controller)
         self.assertIn("$this->scanSelectedDomain === $domain", view)
+        self.assertIn("$this->view->scanQueue", controller)
+        self.assertIn('warten FIFO', view)
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.13.0')
+        self.assertEqual(version, '0.14.0')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())

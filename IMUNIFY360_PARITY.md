@@ -12,7 +12,7 @@ Imunify360 kombiniert einen serverweiten Netzwerk-Firewall-Agenten, dynamische I
 
 | Imunify360-Bereich | Guardian Lite heute | Fuer vergleichbare Funktion fehlt |
 |---|---|---|
-| Malwaredatei-Scan, Bericht und Historie | Manuelle und taeglich begrenzte ClamAV-Scans pro Domain, Berichte, Historie | Flexible Zeitplaene, gezielte globale Scan-Auftraege, Warteschlange/Laststeuerung und ressourcenschonendes Wiederholungsscanning |
+| Malwaredatei-Scan, Bericht und Historie | Manuelle und geplante ClamAV-Scans pro Domain, Berichte, Historie, FIFO-Warteschlange bis 100 und strikt serielle Worker mit niedriger CPU-Prioritaet | Flexible Zeitplaene, gezielte globale Scan-Auftraege, sichtbare feinere Ressourcenbudgets und ressourcenschonendes Wiederholungsscanning |
 | RapidScan / Cloud-Scan | Begrenzter Metadatenvergleich; ClamAV scannt weiterhin lokal | Verifizierter Hash-Cache und externe Reputations-/Hashquelle; Lizenz-/Datenschutzentscheidung fuer Cloud-Abfragen |
 | System- und Benutzer-Cronjobs | Neue read-only Heuristikpruefung gaengiger System-/Benutzer-Cronpfade; zeigt Fundregel, Quelldatei und Zeilennummer, aendert nichts | Erweiterte Distributionenabdeckung, kuratierte Erkennungsregeln und validierte Testfixtures; keine vollstaendige Malware-Erkennung |
 | Live-Datei- und Upload-Scanning | Opt-in inotify-Wache mit gezielter ClamAV-Pruefung | fanotify-Abdeckung, FTP-/HTTP-Upload-Hooks, Dateiarchiv-Workflows, Overflow-/Wiederanlauf-Abdeckung und nachvollziehbare Vollstaendigkeit |

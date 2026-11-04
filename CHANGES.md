@@ -1,3 +1,10 @@
+## 0.14.0 – Malware-Scan-Warteschlange und Laststeuerung
+
+- Manuelle und geplante Domain-Scans werden in einer root-privaten FIFO-Warteschlange mit maximal 100 wartenden Auftraegen serialisiert.
+- Der stundenweise Plesk-Task reiht alle faelligen Domains ein; je Domain bleiben mindestens 24 Stunden zwischen tatsaechlichen Scanstarts. Ein Worker startet automatisch den naechsten Auftrag.
+- Die Oberflaeche zeigt wartende Domains und Ausloeser an. Vollscans laufen weiterhin einzeln und mit niedriger CPU-Prioritaet; kein paralleler Scan-Sturm.
+- Fehlerfaelle fuer FIFO-Dispatch, volle Warteschlange, Deduplizierung und Warteschlangenstatus abgesichert.
+
 ## 0.13.0 – Zeitbegrenzte Plesk-Firewall-Sperren
 
 - Guardian-Firewall-Regeln koennen dauerhaft oder fuer 1 Stunde, 24 Stunden beziehungsweise 7 Tage gesetzt werden.

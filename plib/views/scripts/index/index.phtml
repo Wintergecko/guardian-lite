@@ -24,7 +24,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.13.0</span></h1>
+      <h1>Guardian Lite <span>v0.14.0</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -103,7 +103,16 @@ $action = static function ($name) use ($esc) {
           <?= $esc($this->malwareAction['message']) ?>
         </div>
       <?php endif; ?>
-      <p>Die in Plesk hinterlegten Document-Roots werden mit ClamAV unter der Website-UID geprueft. Nur ein Scan gleichzeitig.</p>
+      <p>Die in Plesk hinterlegten Document-Roots werden mit ClamAV unter der Website-UID geprueft. Scans laufen einzeln mit niedriger CPU-Prioritaet; faellige manuelle und geplante Auftraege warten FIFO in einer begrenzten Warteschlange.</p>
+      <?php $scanQueue = is_array($this->scanQueue ?? null) ? $this->scanQueue : ['count' => 0, 'jobs' => []]; ?>
+      <p class="guardian-small" role="status">Wartende Scans: <strong><?= $esc($scanQueue['count'] ?? 0) ?></strong> / <?= $esc($scanQueue['limit'] ?? 100) ?>.</p>
+      <?php if (!empty($scanQueue['jobs'])): ?>
+        <div class="guardian-scroll"><table><thead><tr><th>Wartende Domain</th><th>Ausloeser</th><th>Eingereiht</th></tr></thead><tbody>
+        <?php foreach ($scanQueue['jobs'] as $queuedScan): ?>
+          <tr><td><?= $esc($queuedScan['domain'] ?? '') ?></td><td><?= ($queuedScan['trigger'] ?? '') === 'schedule' ? 'Zeitplan' : 'Manuell' ?></td><td><?= $esc($queuedScan['queued_at'] ?? '') ?></td></tr>
+        <?php endforeach; ?>
+        </tbody></table></div>
+      <?php endif; ?>
       <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'scan')) ?>">
         <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
         <label for="guardian-domain">Domain</label>
@@ -118,7 +127,7 @@ $action = static function ($name) use ($esc) {
         <?php if (empty($clam['installed'])): ?><p class="guardian-alert">ClamAV ist nicht installiert. Du kannst Domains auswaehlen, aber erst nach Installation von ClamAV scannen.</p><?php endif; ?>
       </form>
       <h3>Automatische Scans</h3>
-      <p class="guardian-small">Opt-in pro Domain. Der Plesk-Scheduler prueft stuendlich auf faellige Domains und startet maximal einen Scan je Durchlauf (mindestens 24 Stunden Abstand je Domain).</p>
+      <p class="guardian-small">Opt-in pro Domain. Der Plesk-Scheduler prueft stuendlich auf faellige Domains und reiht sie FIFO ein (mindestens 24 Stunden Abstand je Domain). Guardian fuehrt nie parallele Vollscans aus; maximal 100 Auftraege koennen warten.</p>
       <?php if (empty($this->domains)): ?><p>Keine Standard-Plesk-Domains gefunden.</p><?php endif; ?>
       <div class="guardian-scroll"><table><thead><tr><th>Domain</th><th>Automatisch</th><th>Aktion</th></tr></thead><tbody>
         <?php foreach ($this->domains as $domain): $on = isset($schedules[$domain]); ?>
@@ -139,7 +148,7 @@ $action = static function ($name) use ($esc) {
         <p>Es wurde noch kein Scan ausgefuehrt.</p>
       <?php else: ?>
         <p><strong><?= $esc(isset($scan['domain']) ? $scan['domain'] : '–') ?></strong> · <strong><?= $esc(isset($scan['status']) ? $scan['status'] : '–') ?></strong></p>
-        <p>Start: <?= $esc(isset($scan['started_at']) ? $scan['started_at'] : '–') ?> · Ende: <?= $esc(isset($scan['finished_at']) ? $scan['finished_at'] : '–') ?></p>
+        <p><?= ($scan['status'] ?? '') === 'queued' ? 'Eingereiht' : 'Start' ?>: <?= $esc(isset($scan['queued_at']) && ($scan['status'] ?? '') === 'queued' ? $scan['queued_at'] : (isset($scan['started_at']) ? $scan['started_at'] : '–')) ?> · Ende: <?= $esc(isset($scan['finished_at']) ? $scan['finished_at'] : '–') ?></p>
         <?php if (isset($scan['infected'])): ?><div class="guardian-state <?= (int)$scan['infected'] === 0 ? 'is-good' : 'is-warn' ?>">Verifizierte Funde: <?= $esc($scan['infected']) ?></div><?php endif; ?>
         <?php if (!empty($scan['ignored'])): ?><p>Davon mit administrativer SHA-256-Ignore-Regel markiert: <?= $esc($scan['ignored']) ?>. Die Datei wurde trotzdem gescannt.</p><?php endif; ?>
         <?php if (!empty($scan['error'])): ?><p class="guardian-alert"><?= $esc($scan['error']) ?></p><?php endif; ?>
@@ -248,7 +257,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.13.0</h2>
+    <h2>GitHub-Updater · v0.14.0</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -423,6 +432,6 @@ $action = static function ($name) use ($esc) {
     <p class="guardian-small">Volumetrische DDoS-Abwehr muss beim Provider oder vorgelagerten DDoS-/CDN-Dienst erfolgen.</p>
   </section>
   <?php include __DIR__ . '/management.phtml'; ?>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.13.0" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.14.0" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

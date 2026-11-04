@@ -1,4 +1,4 @@
-# Weitere Features nach 0.13.0
+# Weitere Features nach 0.14.0
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
@@ -20,6 +20,6 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Mittel | Dateiwache fuer groessere Installationen | Watch-Budget je Domain, nachvollziehbare Abdeckung, robuste Wiederaufnahme nach Overflow und kuerzere Healthchecks |
 | Niedrig | Benachrichtigungen/Webhooks | Ereignisse in vorhandene Betriebswerkzeuge integrieren; Geheimnisse und Zielhosts strikt begrenzen |
 
-Fuer die naechste Runde sind Snapshot-Verwaltung mit Quota sowie eine flexible Malware-Scan-Warteschlange am wertvollsten. Eine Firewall-Allowlist benoetigt zuerst Plesk-Regelprioritaetstests, damit Freigaben Deny-Regeln wirklich sicher uebersteuern.
+Fuer die naechste Runde sind Snapshot-Verwaltung mit Quota und sichere CMS-Datenbank-Scans am wertvollsten. Eine Firewall-Allowlist benoetigt zuerst Plesk-Regelprioritaetstests, damit Freigaben Deny-Regeln wirklich sicher uebersteuern.
 
 Technische Grundlage fuer Hersteller-Pruefsummen: [WP-CLI core verify-checksums](https://developer.wordpress.org/cli/commands/core/verify-checksums/) vergleicht WordPress-Core-Dateien mit WordPress.org-Pruefsummen, ohne WordPress dafuer zu laden. Premium-Erweiterungen und angepasste Dateien benoetigen eigene Vertrauensquellen.

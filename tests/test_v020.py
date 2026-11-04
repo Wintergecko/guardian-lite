@@ -17,6 +17,109 @@ loader.exec_module(h)
 
 
 class NewFeatureTests(unittest.TestCase):
+    def test_scan_queue_is_fifo_and_dispatches_only_one_worker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            jobs = root / 'jobs'
+            jobs.mkdir()
+            ids = ['a' * 32, 'b' * 32]
+            for jobid in ids:
+                (jobs / (jobid + '.json')).write_text(json.dumps({
+                    'id': jobid, 'domain': 'example-' + jobid[0] + '.com',
+                    'trigger': 'schedule', 'status': 'queued', 'started_at': h.utc_now(),
+                    'epoch': time.time(), 'pid': None, 'findings': []}))
+            h.write_json(root / 'scan-queue.json', {'jobs': ids})
+            scanfd = os.open(os.devnull, os.O_RDONLY)
+            with mock.patch.object(h, 'ROOT', root), \
+                 mock.patch.object(h, 'prepare_dir'), \
+                 mock.patch.object(h, 'lock_scan', return_value=scanfd), \
+                 mock.patch.object(h.subprocess, 'Popen', return_value=mock.Mock(pid=123)) as spawn:
+                result = h.dispatch_next_scan()
+                self.assertEqual(result['id'], ids[0])
+                self.assertEqual(h.queued_jobs(), ids[1:])
+                self.assertEqual(h.load_job(ids[0])['status'], 'starting')
+                self.assertEqual(h.load_job(ids[1])['status'], 'queued')
+                spawn.assert_called_once()
+            os.close(scanfd)
+
+    def test_scan_request_queues_when_another_scan_holds_global_lock(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp) / 'guardian'
+            (root / 'jobs').mkdir(parents=True)
+            with mock.patch.object(h, 'ROOT', root), \
+                 mock.patch.object(h, 'prepare_dir'), \
+                 mock.patch.object(h.os, 'geteuid', return_value=0, create=True), \
+                 mock.patch.object(h, 'site_docroot', return_value=(root, 1000, 1000)), \
+                 mock.patch.object(h, 'binary', return_value='/usr/bin/clamscan'), \
+                 mock.patch.object(h, 'dispatch_next_scan', return_value={'started': False, 'reason': 'busy'}):
+                result = h.scan_start('example.com')
+                self.assertEqual(result['status'], 'queued')
+                self.assertEqual(h.load_job(result['id'])['status'], 'queued')
+                self.assertEqual(h.scan_queue_status()['count'], 1)
+
+    def test_scan_queue_is_bounded_and_deduplicates_queued_domain(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / 'jobs').mkdir()
+            jobid = 'c' * 32
+            h.write_json(root / 'jobs' / (jobid + '.json'), {
+                'id': jobid, 'domain': 'example.com', 'trigger': 'manual', 'status': 'queued',
+                'started_at': h.utc_now(), 'epoch': time.time(), 'findings': []})
+            h.write_json(root / 'scan-queue.json', {'jobs': [jobid]})
+            with mock.patch.object(h, 'ROOT', root), mock.patch.object(h, 'prepare_dir'):
+                duplicate = h.enqueue_scan('example.com', 'manual')
+                self.assertEqual(duplicate['id'], jobid)
+                self.assertTrue(duplicate['duplicate'])
+                full_ids = []
+                for index in range(h.MAX_SCAN_QUEUE):
+                    current = '%032x' % (index + 1000)
+                    full_ids.append(current)
+                    h.write_json(root / 'jobs' / (current + '.json'), {
+                        'id': current, 'domain': 'd%d.example.com' % index, 'status': 'queued'})
+                h.write_json(root / 'scan-queue.json', {'jobs': full_ids})
+                with self.assertRaisesRegex(ValueError, 'Warteschlange voll'):
+                    h.enqueue_scan('overflow.example.com', 'manual')
+
+    def test_hourly_scheduler_enqueues_every_due_domain(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with mock.patch.object(h, 'ROOT', pathlib.Path(temp)), \
+                 mock.patch.object(h.os, 'geteuid', return_value=0, create=True), \
+                 mock.patch.object(h, 'prepare_dir'), \
+                 mock.patch.object(h, 'firewall_expiry_tick', return_value={'remaining_due': 0}), \
+                 mock.patch.object(h, 'dispatch_next_scan', return_value={'started': False}), \
+                 mock.patch.object(h, 'schedules', return_value={
+                     'a.example.com': {'enabled': True}, 'b.example.com': {'enabled': True}}), \
+                 mock.patch.object(h, 'watch_changes'), \
+                 mock.patch.object(h, 'monitor_config', return_value={}), \
+                 mock.patch.object(h, 'prune_reports'), \
+                 mock.patch.object(h, 'history', return_value=[]), \
+                 mock.patch.object(h, 'site_docroot'), \
+                 mock.patch.object(h, 'scan_start', return_value={'ok': True, 'status': 'queued'}) as start:
+                result = h.scheduled_tick()
+        self.assertEqual(result['accepted'], 2)
+        self.assertEqual(start.call_args_list, [
+            mock.call('a.example.com', 'schedule'), mock.call('b.example.com', 'schedule')])
+
+    def test_hourly_scheduler_reports_queue_saturation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with mock.patch.object(h, 'ROOT', pathlib.Path(temp)), \
+                 mock.patch.object(h.os, 'geteuid', return_value=0, create=True), \
+                 mock.patch.object(h, 'prepare_dir'), \
+                 mock.patch.object(h, 'firewall_expiry_tick', return_value={'remaining_due': 0}), \
+                 mock.patch.object(h, 'dispatch_next_scan', return_value={'started': False}), \
+                 mock.patch.object(h, 'schedules', return_value={'full.example.com': {'enabled': True}}), \
+                 mock.patch.object(h, 'watch_changes'), \
+                 mock.patch.object(h, 'monitor_config', return_value={}), \
+                 mock.patch.object(h, 'prune_reports'), \
+                 mock.patch.object(h, 'history', return_value=[]), \
+                 mock.patch.object(h, 'site_docroot'), \
+                 mock.patch.object(h, 'scan_start', side_effect=ValueError('Scan-Warteschlange voll')), \
+                 mock.patch.object(h, 'incident_log') as incident:
+                result = h.scheduled_tick()
+        self.assertEqual(result['deferred'], 1)
+        self.assertIn('beim naechsten Lauf erneut geprueft', result['message'])
+        incident.assert_called_once()
+
     def test_scheduler_keeps_24h_interval_beyond_visible_history(self):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)

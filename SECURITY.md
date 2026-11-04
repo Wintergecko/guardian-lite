@@ -1,4 +1,4 @@
-# Guardian Lite v0.13.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.14.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -6,7 +6,7 @@
 - Fail2Ban: nur validierte aktive Jail-Namen und per ipaddress gepruefte IPv4/IPv6-Adressen. Die Sperre einer externen Administrator-IP bleibt moeglich; Panel bestaetigt vor der Aktion.
 - Plesk Firewall: nur Plesks eigene CLI und Guardian-eigene Regeln; fremde Regeln und firewalld werden nicht umgeschrieben. Aktuelle `REMOTE_ADDR` wird bei Sperren ausgespart, breite Netze sowie loopback/link-local/multicast werden abgelehnt. Nach `--apply` sind getrennte Verbindungspruefung und explizite Bestaetigung erforderlich; sonst rollt Plesk nach 60 Sekunden zurueck.
 - Scanner folgt keinen Symlinks, laeuft mit Website-UID; CPU/Log/Groessen-/Zeit-Limits. Ist nicht gleichbedeutend mit sicherer PHP-Laufzeit-Analyse.
-- Ein Scan/Quarantaene-Vorgang zur Zeit durch `flock`; Job-Reports atomar geschrieben. Plesk-Scheduler nur Opt-in.
+- ClamAV-Vollscans laufen durch `flock` strikt einzeln. Eine root-private FIFO-Warteschlange nimmt bis zu 100 Scan-Auftraege an; Queue-Zugriff wird separat gesperrt, Job-Reports atomar geschrieben. Plesk-Scheduler nur Opt-in.
 - Quarantaene speichert Dateien in privatem root-Verzeichnis, Restore ueberschreibt nie. Bei Crash im Status `pending` kann Restore die Dateiverschiebung rueckgaengig machen, wenn die Datei tatsaechlich in Quarantaene liegt.
 - WAF-Parser speichert keine unredigierten HTTP-Requests im Dashboard, nur Regel-ID und IP aus maximal 512 KiB Audit-Log. Das Betriebssystem bewahrt sein eigenes Audit-Log unabhaengig davon auf.
 - `watch_changes` ist ein begrenzter periodischer Metadatenvergleich. Separat existiert eine opt-in inotify-Dateiwache mit gezielten ClamAV-Pruefungen, ohne automatische Quarantaene oder Ausfuehrungsblockade. Verschobene Teilbaeume werden vom alten Pfad getrennt; ein verschobener Document-Root beendet den Monitor.
@@ -56,6 +56,12 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - Nur feste TTL-Werte von 1h, 24h oder 7d sind zulaessig; dauerhaft bleibt explizit waehlbar.
 - Ablaufdaten werden privat gespeichert und erst nach manueller Plesk-Bestaetigung aktiviert. Ein stuendlicher Scheduler entfernt nur passende Guardian-Regeln und bestaetigt deren Entsperrung.
 - Bei nicht lesbarer Regelliste oder offener Aenderung erfolgt keine automatische Firewall-Aenderung. Der Scheduler kann den Ablauf bis zu einer Stunde verzoegern.
+
+## 0.14.0 – Malware-Scan-Warteschlange
+
+- Nur valide Plesk-Domains und feste Scan-Trigger gelangen in die Warteschlange. Job-IDs werden streng validiert; wartende Jobs werden atomar persistiert und nacheinander aus einer root-privaten Queue-Datei entnommen.
+- Die Queue nimmt hoechstens 100 wartende Scans an. Ein Scheduler-Lauf reiht faellige Domains ein; das 24-Stunden-Intervall wird zwischen tatsaechlichen Scanstarts berechnet. Ein aktiver Worker behaelt den globalen `flock`; es laufen keine parallelen Vollscans.
+- Scannerprozess bleibt unter Website-UID/GID, startet mit niedriger CPU-Prioritaet und bestehenden CPU-/Dateigroessenlimits. Die Warteschlange reduziert Parallelitaet, garantiert aber keine Laufzeit und setzt ClamAV nicht in einen isolierten Container.
 
 ## 0.11.0 – WordPress-Plugin-Pruefsummen
 
