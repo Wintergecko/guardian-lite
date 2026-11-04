@@ -99,6 +99,22 @@ $controller->request->post = ['csrf' => 'test-token', 'operation' => 'confirm', 
 try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
 checkManagement(pm_ApiCli::$calls[4][1] === ['firewall-action', 'confirm'], 'Firewall confirmation action not routed correctly');
 
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'baseline-delete',
+    'baseline_id' => str_repeat('a', 32), 'domain' => 'example.com'];
+try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
+$baselineCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+$baselineRequest = json_decode($baselineCall[3], true);
+checkManagement(($baselineRequest['action'] ?? '') === 'baseline-delete' &&
+    $baselineRequest['baseline_id'] === str_repeat('a', 32) && $baselineRequest['domain'] === 'example.com',
+    'Baseline deletion did not reach the fixed manager request');
+
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'backup-delete', 'backup' => str_repeat('b', 32)];
+try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
+$backupCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+$backupRequest = json_decode($backupCall[3], true);
+checkManagement(($backupRequest['action'] ?? '') === 'backup-delete' &&
+    $backupRequest['backup'] === str_repeat('b', 32), 'Backup deletion did not reach the fixed manager request');
+
 foreach ([['csrf' => 'wrong', 'operation' => 'cloud-save'],
           ['csrf' => 'test-token', 'operation' => 'shell'],
           ['csrf' => 'test-token', 'operation' => 'diagnostics', 'domain' => 'unknown.com'],
@@ -122,7 +138,13 @@ $view->management = ['handlers' => [['version' => '8.3', 'sha256' => str_repeat(
     'ignore_hashes' => ['example.com' => [str_repeat('c', 64)]],
     'backups' => [['kind' => 'php', 'identity' => '8.3', 'id' => str_repeat('b', 32), 'created_at' => 'test'],
                   ['kind' => 'waf', 'id' => str_repeat('c', 32), 'created_at' => 'test']],
-    'waf_sha256' => str_repeat('d', 64)];
+    'waf_sha256' => str_repeat('d', 64),
+    'storage' => ['areas' => ['backups' => ['bytes' => 1, 'files' => 2], 'baselines' => ['bytes' => 3, 'files' => 1],
+        'repair-journals' => ['bytes' => 0, 'files' => 0], 'jobs' => ['bytes' => 4, 'files' => 3]],
+        'managed_bytes' => 8, 'baseline_quota_bytes' => 536870912, 'backup_quota_bytes' => 268435456,
+        'disk' => ['free_bytes' => 1000]],
+    'baseline_inventory' => [['id' => str_repeat('d', 32), 'domain' => 'example.com', 'created_at' => 'test',
+        'files' => 1, 'bytes' => 3, 'incomplete' => false, 'active' => true, 'autorepair' => false]]];
 $view->managementError = '';
 $view->managementResult = [];
 $view->domains = ['example.com'];
@@ -142,4 +164,7 @@ checkManagement(strpos($html, 'name="csrf"') !== false, 'Management forms lack C
 checkManagement(strpos($html, '<script>test</script>') === false, 'Finding path was not escaped');
 checkManagement(strpos($html, 'ignore-add') !== false, 'Malware ignore action not rendered');
 checkManagement(strpos($html, 'ignore-remove') !== false, 'Malware ignore removal not rendered');
+checkManagement(strpos($html, 'Speicher und Wiederherstellungspunkte') !== false, 'Storage overview not rendered');
+checkManagement(strpos($html, 'backup-delete') !== false, 'Backup retention action not rendered');
+checkManagement(strpos($html, 'baseline-delete') !== false, 'Baseline retention action not rendered');
 echo "Management controller and template smoke: OK\n";

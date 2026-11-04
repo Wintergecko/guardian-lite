@@ -1,4 +1,4 @@
-# Weitere Features nach 0.14.0
+# Weitere Features nach 0.15.0
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
@@ -8,7 +8,7 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 |---|---|---|
 | Hoch | Weitere CMS-Pruefsummen | WordPress-Core und WordPress.org-Plugins geprueft; Joomla/Magento-Herstellerquellen und sichere, signierte Good-File-Pakete fehlen. Keine automatische Reparatur aus Pruefergebnissen |
 | Hoch | Firewall-Allowlist und Notfall-Freischaltung | Plesk-Firewall-Deny-Regeln und begrenzte TTLs sind vorhanden; explizite priorisierte Admin-/Monitoring-Ausnahmen fehlen |
-| Hoch | Baseline-/Backup-Aufbewahrung und Speicheranzeige | Alte/incomplete Snapshots sicher per GUI entfernen, Quota pro Domain, freien Speicher und benoetigte Reparaturquellen anzeigen |
+| Hoch | Baseline-/Backup-Aufbewahrung und Speicheranzeige | Globale Speicheranzeige und manuelle Loeschung vorhanden; Quota pro Domain, Aufbewahrungsregeln, Backups ausserhalb der verwalteten PHP-/WAF-Metadaten und Reparaturquellenanzeige fehlen |
 | Hoch | Cronjob-Regelausbau und Verifikation | Aktueller read-only Heuristikcheck deckt nur gaengige Muster und feste Cron-Pfade ab; Malware-Signaturen und Distributionen-Faelle fehlen |
 | Hoch | Echte Plesk-Testmatrix | Reproduzierbare VPS-Tests mit installierten Plesk-Versionen, Debian/Ubuntu/AlmaLinux und mehreren PHP-Handlern; aktuell nicht automatisiert nachgewiesen |
 | Hoch | Transaktionale Service-Rollouts | Aenderungen mit vorher/nachher Diff, FPM-/WAF-Gesundheitsprobe und zeitgesteuerter Ruecknahme, falls ein Betreiber den Rollout nicht bestaetigt |

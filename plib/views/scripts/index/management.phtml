@@ -1,6 +1,9 @@
 <?php
 $management = is_array($this->management) ? $this->management : [];
 $cloud = $management['cloud'] ?? [];
+$storage = is_array($management['storage'] ?? null) ? $management['storage'] : [];
+$storageAreas = is_array($storage['areas'] ?? null) ? $storage['areas'] : [];
+$formatBytes = static function ($bytes) { return number_format(max(0, (float)$bytes) / 1048576, 2, ',', '.') . ' MiB'; };
 $form = function ($operation, array $fields, $label, $confirmation = '') use ($esc) {
     echo '<form method="post" action="' . $esc(pm_Context::getActionUrl('index', 'manage')) . '"';
     if ($confirmation !== '') { echo ' onsubmit="return confirm(' . $esc(json_encode($confirmation)) . ');"'; }
@@ -25,6 +28,30 @@ $domainSelect = function () use ($esc) {
       <pre><?= $esc(json_encode($this->managementResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
     </div>
   <?php endif; ?>
+  <h3>Speicher und Wiederherstellungspunkte</h3>
+  <p>Guardian-Verbrauch: <strong><?= $esc($formatBytes($storage['managed_bytes'] ?? 0)) ?></strong>
+    · Baselines: <strong><?= $esc($formatBytes($storageAreas['baselines']['bytes'] ?? 0)) ?> / <?= $esc($formatBytes($storage['baseline_quota_bytes'] ?? 536870912)) ?></strong>
+    · Backups: <strong><?= $esc($formatBytes($storageAreas['backups']['bytes'] ?? 0)) ?> / <?= $esc($formatBytes($storage['backup_quota_bytes'] ?? 268435456)) ?></strong>
+    · Freier Datentraeger: <strong><?= isset($storage['disk']['free_bytes']) && $storage['disk']['free_bytes'] !== null ? $esc($formatBytes($storage['disk']['free_bytes'])) : 'nicht feststellbar' ?></strong></p>
+  <p class="guardian-small">Dateisystemmessung: <?= $esc($storage['measured_at'] ?? 'noch nicht ermittelt') ?> (wird hoechstens 15 Sekunden zwischengespeichert).</p>
+  <div class="guardian-scroll"><table><thead><tr><th>Bereich</th><th>Groesse</th><th>Dateien</th></tr></thead><tbody>
+    <?php foreach (['backups' => 'PHP-/WAF-Backups', 'baselines' => 'Good-File-Baselines', 'repair-journals' => 'Reparaturprotokolle', 'jobs' => 'Scan-Berichte'] as $area => $label): $usage = $storageAreas[$area] ?? []; ?>
+      <tr><td><?= $esc($label) ?><?= !empty($usage['incomplete']) ? ' · Pruefung unvollstaendig' : '' ?></td><td><?= $esc($formatBytes($usage['bytes'] ?? 0)) ?></td><td><?= $esc($usage['files'] ?? 0) ?></td></tr>
+    <?php endforeach; ?>
+  </tbody></table></div>
+  <p class="guardian-small">Quotas: Baselines 512 MiB; PHP-/WAF-Backups 256 MiB und 200 Eintraege. Guardian loescht Wiederherstellungspunkte nie automatisch.</p>
+  <h4>Backups verwalten</h4>
+  <?php if (!empty($management['backups'])): ?>
+    <div class="guardian-scroll"><table><thead><tr><th>Typ / Ziel</th><th>Erstellt</th><th>Groesse</th><th>Aktion</th></tr></thead><tbody>
+    <?php foreach ($management['backups'] as $backup): ?>
+      <tr><td><?= $esc($backup['kind'] ?? 'unbekannt') ?> · <?= $esc($backup['identity'] ?? '') ?><br><small><?= $esc($backup['id'] ?? '') ?></small></td>
+        <td><?= $esc($backup['created_at'] ?? '') ?></td><td><?= $esc($formatBytes($backup['bytes'] ?? 0)) ?></td>
+        <td><?php if (($management['waf']['backup'] ?? '') !== ($backup['id'] ?? '')) {
+              $form('backup-delete', ['backup' => $backup['id']], 'Dauerhaft loeschen', 'Dieses Wiederherstellungsbackup dauerhaft loeschen? Die zugehoerige Rollback-Moeglichkeit geht verloren.');
+            } else { echo 'Aktuell fuer WAF-Rollback geschuetzt'; } ?></td></tr>
+    <?php endforeach; ?>
+    </tbody></table></div>
+  <?php else: ?><p>Keine Backups gespeichert.</p><?php endif; ?>
   <h3>PHP-Handler: Backup, Snuffleupagus und Rollback</h3>
   <p>Installation baut Snuffleupagus 0.14.0 aus einem festgelegten Upstream-Commit als unprivilegierter Benutzer. Benoetigt passende Plesk-PHP-Entwicklungswerkzeuge, git, gcc, make und autoconf. Aktivierung sichert php.ini, prueft PHP/FPM und laedt FPM neu. Zuerst Simulation verwenden.</p>
   <div class="guardian-scroll"><table><thead><tr><th>Handler</th><th>Modul</th><th>Aktionen</th></tr></thead><tbody>
@@ -89,7 +116,7 @@ $domainSelect = function () use ($esc) {
   <pre><?= $esc(json_encode($management['bots'] ?? [], JSON_PRETTY_PRINT)) ?></pre>
 
   <h3>Good-File-Baselines und automatische Reparatur</h3>
-  <p>Nur aus einer von dir als sauber freigegebenen Installation erstellen; ein ClamAV-Ergebnis allein beweist keine saubere Herkunft. Benoetigt einen fehlerfreien Vollscan ohne Funde, hoechstens eine Stunde alt. Speichert PHP-/Konfigurationsdateien bis 2 MiB je Datei, 5000 Dateien und 64 MiB insgesamt. Kein Hersteller-Abgleich. Neue oder unbekannte Malwaredateien werden nicht automatisch geloescht.</p>
+  <p>Nur aus einer von dir als sauber freigegebenen Installation erstellen; ein ClamAV-Ergebnis allein beweist keine saubere Herkunft. Benoetigt einen fehlerfreien Vollscan ohne Funde, hoechstens eine Stunde alt. Speichert PHP-/Konfigurationsdateien bis 2 MiB je Datei, 5000 Dateien und 64 MiB je Baseline; insgesamt gelten 512 MiB. Kein Hersteller-Abgleich. Neue oder unbekannte Malwaredateien werden nicht automatisch geloescht.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="baseline-create"><?php $domainSelect(); ?>
     <label><input type="checkbox" name="trusted" value="1" required> Ich habe die saubere Herkunft dieser Website geprueft</label><button>Baseline erstellen</button>
@@ -97,7 +124,21 @@ $domainSelect = function () use ($esc) {
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Automatische Wiederherstellung passender Malwarefunde aus der freigegebenen Baseline aendern? CMS-Updates koennen dadurch zurueckgesetzt werden.');">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="repair-set"><?php $domainSelect(); ?><select name="mode"><option value="off">Automatische Reparatur aus</option><option value="on">Automatische Reparatur an</option></select><button>Reparaturmodus setzen</button>
   </form>
-  <pre><?= $esc(json_encode(['baselines' => $management['baselines'] ?? [], 'autorepair' => $management['autorepair'] ?? []], JSON_PRETTY_PRINT)) ?></pre>
+  <?php $baselineInventory = $management['baseline_inventory'] ?? []; ?>
+  <?php if (!empty($baselineInventory)): ?>
+    <div class="guardian-scroll"><table><thead><tr><th>Domain / ID</th><th>Erstellt</th><th>Dateien / Groesse</th><th>Status / Aktion</th></tr></thead><tbody>
+    <?php foreach ($baselineInventory as $baseline): ?>
+      <tr><td><?= $esc($baseline['domain'] ?: 'Unvollstaendige Baseline') ?><br><small><?= $esc($baseline['id']) ?></small></td>
+        <td><?= $esc($baseline['created_at'] ?: 'unbekannt') ?></td>
+        <td><?= $esc($baseline['files']) ?> / <?= $esc($formatBytes($baseline['bytes'])) ?></td>
+        <td><?= !empty($baseline['autorepair']) ? 'Fuer Auto-Reparatur aktiv' : (!empty($baseline['active']) ? 'Ausgewaehlt, Auto-Reparatur aus' : 'Historisch / unvollstaendig') ?>
+          <?php if (empty($baseline['autorepair'])) { $fields = ['baseline_id' => $baseline['id']]; if (!empty($baseline['domain'])) { $fields['domain'] = $baseline['domain']; }
+            $form('baseline-delete', $fields, 'Dauerhaft loeschen', 'Diese Baseline dauerhaft loeschen? Damit geht die Good-File-Wiederherstellungsquelle verloren.'); } ?>
+        </td></tr>
+    <?php endforeach; ?>
+    </tbody></table></div>
+  <?php else: ?><p>Noch keine Baselines gespeichert.</p><?php endif; ?>
+  <pre>Aktive Zuordnung: <?= $esc(json_encode(['baselines' => $management['baselines'] ?? [], 'autorepair' => $management['autorepair'] ?? []], JSON_PRETTY_PRINT)) ?></pre>
   <?php if (is_array($this->scan) && !empty($this->scan['findings'])): foreach ($this->scan['findings'] as $i => $finding): ?>
     <?php $currentIgnoreHashes = $management['ignore_hashes'][$this->scan['domain'] ?? ''] ?? [];
       $sha = $finding['fingerprint']['sha256'] ?? '';
