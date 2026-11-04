@@ -1,0 +1,1094 @@
+#!/usr/bin/python3
+"""Fixed-operation Guardian management API. Secrets arrive on stdin, never argv."""
+import contextlib
+import base64
+import ctypes
+import fcntl
+import hashlib
+import importlib.util
+import importlib.machinery
+import ipaddress
+import json
+import os
+import pathlib
+import pwd
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+import urllib.error
+import urllib.request
+import uuid
+
+HERE = pathlib.Path(__file__).resolve().parent
+loader = importlib.machinery.SourceFileLoader('guardian_managed_helper', str(HERE / 'guardian-helper'))
+spec = importlib.util.spec_from_loader(loader.name, loader)
+h = importlib.util.module_from_spec(spec)
+loader.exec_module(h)
+PHP_BASE = pathlib.Path('/opt/plesk/php')
+SNuffle_COMMIT = '1d8614af85a1baa52656f3adbd4684772df91288'
+VERSION = re.compile(r'^8\.[0-5]$')
+HEX = re.compile(r'^[a-f0-9]{64}$')
+BEGIN = '; BEGIN GUARDIAN MANAGED\n'
+END = '; END GUARDIAN MANAGED\n'
+
+
+def root():
+    return h.ROOT / 'management'
+
+
+def prepare():
+    if os.geteuid() != 0:
+        raise ValueError('Root-Rechte erforderlich.')
+    h.prepare_dir()
+    h.ensure_private_dir(root())
+    for name in ('backups', 'baselines', 'repair-journals', 'jobs'):
+        h.ensure_private_dir(root() / name)
+
+
+@contextlib.contextmanager
+def locked(blocking=False):
+    prepare()
+    fd = os.open(str(root() / 'lock'), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        yield
+    finally:
+        os.close(fd)
+
+
+def run(argv, timeout=30, diagnostic=False, **kwargs):
+    result = subprocess.run([str(a) for a in argv], stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, timeout=timeout, check=False,
+                            env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C'}, **kwargs)
+    if result.returncode:
+        # Commands may process secrets; never echo command arguments or raw stderr.
+        detail = ''
+        if diagnostic:
+            detail = ' ' + re.sub(r'[\x00-\x1f]+', ' ', result.stderr.decode('utf-8', 'replace')[-180:])
+        raise ValueError('Systemaktion fehlgeschlagen: %s (Exit %d).%s' %
+                         (pathlib.Path(str(argv[0])).name, result.returncode, detail))
+    return result.stdout.decode('utf-8', 'replace').strip()
+
+
+def plesk(args):
+    binary = h.binary(h.PLESK_BINARIES)
+    if not binary:
+        raise ValueError('Plesk CLI fehlt.')
+    return run([binary, 'bin'] + args, timeout=120)
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def checked(path, limit=2_000_000):
+    fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_nlink != 1 or st.st_size > limit or st.st_mode & 0o022:
+            raise ValueError('Unsichere oder zu grosse Konfigurationsdatei.')
+        with os.fdopen(fd, 'rb', closefd=False) as stream:
+            data = stream.read(limit + 1)
+        if len(data) > limit:
+            raise ValueError('Datei zu gross.')
+        return data, st
+    finally:
+        os.close(fd)
+
+
+def atomic(path, data, mode=0o600, uid=0, gid=0):
+    if path.is_symlink():
+        raise ValueError('Symlink als Ziel abgelehnt.')
+    temp = path.with_name('.guardian-' + uuid.uuid4().hex)
+    fd = os.open(str(temp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
+    try:
+        with os.fdopen(fd, 'wb') as output:
+            os.fchown(output.fileno(), uid, gid)
+            os.fchmod(output.fileno(), mode)
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(str(temp), str(path))
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def config():
+    return h.read_json(root() / 'config.json', {})
+
+
+def save_config(data):
+    h.write_json(root() / 'config.json', data)
+
+
+def handler(version):
+    if not VERSION.fullmatch(version):
+        raise ValueError('Unterstuetzt werden Plesk PHP 8.0 bis 8.5.')
+    path = PHP_BASE / version
+    # Every parent is root-owned, not writable by website users, and not a symlink.
+    for candidate in (PHP_BASE, path, path / 'etc', path / 'bin'):
+        st = candidate.lstat()
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
+            raise ValueError('Unsicherer PHP-Handlerpfad.')
+    checked(path / 'etc/php.ini')
+    checked(path / 'bin/php', 100_000_000)
+    return path
+
+
+def make_backup(kind, identity, path):
+    data, st = checked(path)
+    token = uuid.uuid4().hex
+    atomic(root() / 'backups' / (token + '.bin'), data)
+    record = {'id': token, 'kind': kind, 'identity': identity, 'sha256': digest(data),
+              'mode': stat.S_IMODE(st.st_mode), 'gid': st.st_gid, 'created_at': h.utc_now()}
+    h.write_json(root() / 'backups' / (token + '.json'), record)
+    return record
+
+
+def php_backup(version):
+    path = handler(version) / 'etc/php.ini'
+    return make_backup('php', version, path)
+
+
+def reload_handler(version):
+    base = handler(version)
+    run([base / 'sbin/php-fpm', '-t'], timeout=30)
+    ctl = h.binary(h.SYSTEMCTL_PATHS)
+    if not ctl:
+        raise ValueError('systemctl fehlt.')
+    run([ctl, 'reload', 'plesk-php%s-fpm' % version.replace('.', '')])
+
+
+def php_restore(version, token, expected):
+    path = handler(version) / 'etc/php.ini'
+    if not re.fullmatch(r'[a-f0-9]{32}', token) or not HEX.fullmatch(expected):
+        raise ValueError('Backup-ID oder aktueller Fingerprint ungueltig.')
+    meta = h.read_json(root() / 'backups' / (token + '.json'), {})
+    data, _ = checked(root() / 'backups' / (token + '.bin'))
+    current, st = checked(path)
+    if meta.get('kind') != 'php' or meta.get('identity') != version or digest(data) != meta.get('sha256'):
+        raise ValueError('Backup passt nicht zum Handler oder ist beschaedigt.')
+    if digest(current) != expected:
+        raise ValueError('Konfiguration wurde zwischenzeitlich geaendert; Seite neu laden.')
+    recovery = make_backup('php', version, path)
+    atomic(path, data, meta['mode'], gid=st.st_gid)
+    try:
+        reload_handler(version)
+    except Exception:
+        atomic(path, current, stat.S_IMODE(st.st_mode), gid=st.st_gid)
+        reload_handler(version)
+        raise
+    h.incident_log('operator', 'warning', detail='PHP %s Rollback %s' % (version, token))
+    return {'backup': recovery['id'], 'message': 'PHP-Konfiguration wiederhergestellt und FPM neu geladen.'}
+
+
+def runtime_policy(mode):
+    if mode not in ('simulate', 'enforce'):
+        raise ValueError('Ungueltiger Runtime-Modus.')
+    suffix = '.simulation()' if mode == 'simulate' else ''
+    return ''.join('sp.disable_function.function("%s").drop()%s;\n' % (name, suffix)
+                   for name in ('system', 'shell_exec', 'passthru', 'exec', 'proc_open', 'popen'))
+
+
+def runtime_set(version, mode, expected):
+    base = handler(version)
+    path = base / 'etc/php.ini'
+    data, st = checked(path)
+    if not HEX.fullmatch(expected) or digest(data) != expected:
+        raise ValueError('PHP-Konfiguration geaendert; Seite neu laden.')
+    text = data.decode('utf-8')
+    if text.count(BEGIN) != text.count(END) or text.count(BEGIN) > 1:
+        raise ValueError('Beschaedigter Guardian-Konfigurationsblock.')
+    clean = re.sub(re.escape(BEGIN) + r'.*?' + re.escape(END), '', text, flags=re.S)
+    if mode not in ('off', 'simulate', 'enforce'):
+        raise ValueError('Ungueltiger Runtime-Modus.')
+    external = [clean]
+    for directory in (base / 'etc/php.d', base / 'etc/conf.d'):
+        if directory.is_dir():
+            for candidate in sorted(directory.glob('*.ini')):
+                resolved = candidate.resolve(strict=True)
+                external.append(checked(resolved)[0].decode('utf-8', 'replace'))
+    if any(re.search(r'^\s*(?:extension\s*=.*snuffleupagus|sp\.configuration_file\s*=)',
+                     entry, re.M | re.I) for entry in external):
+        raise ValueError('Externe Snuffleupagus-Konfiguration vorhanden; keine Uebernahme.')
+    backup = make_backup('php', version, path)
+    if mode != 'off':
+        module = base / 'lib/php/modules/snuffleupagus.so'
+        checked(module, 20_000_000)
+        rules = base / 'etc' / ('guardian-' + mode + '.rules')
+        atomic(rules, runtime_policy(mode).encode('ascii'), 0o644)
+        # Verify ABI, configuration syntax, and benign PHP execution before changing ini.
+        output = run([base / 'bin/php', '-n', '-d', 'display_errors=stderr', '-d', 'log_errors=0', '-d', 'extension=' + str(module), '-d',
+                      'sp.configuration_file=' + str(rules), '-r',
+                      'echo extension_loaded("snuffleupagus") ? "GUARDIAN_OK" : "MISSING";'])
+        if output != 'GUARDIAN_OK':
+            raise ValueError('Snuffleupagus konnte nicht geladen werden.')
+        probe = subprocess.run([str(base / 'bin/php'), '-n', '-d', 'display_errors=stderr', '-d', 'log_errors=0', '-d', 'extension=' + str(module), '-d',
+                                'sp.configuration_file=' + str(rules), '-r',
+                                'echo shell_exec("printf GUARDIAN_PROBE");'], stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, timeout=10, check=False,
+                               env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
+        if mode == 'simulate' and (probe.returncode or probe.stdout != b'GUARDIAN_PROBE'):
+            raise ValueError('Runtime-Simulation hat den harmlosen Test unerwartet blockiert.')
+        if mode == 'enforce' and (probe.returncode == 0 or b'snuffleupagus' not in probe.stderr.lower()):
+            raise ValueError('Runtime-Blockade konnte im isolierten PHP-Test nicht bestaetigt werden.')
+        clean += '\n' + BEGIN + 'extension="%s"\nsp.configuration_file="%s"\n' % (module, rules) + END
+    atomic(path, clean.encode('utf-8'), stat.S_IMODE(st.st_mode), gid=st.st_gid)
+    try:
+        reload_handler(version)
+    except Exception:
+        atomic(path, data, stat.S_IMODE(st.st_mode), gid=st.st_gid)
+        reload_handler(version)
+        raise
+    h.incident_log('operator', 'warning', detail='PHP %s Runtime %s' % (version, mode))
+    return {'backup': backup['id'], 'mode': mode, 'message': 'Handler-Konfiguration geprueft und FPM neu geladen; Webrequests separat testen.'}
+
+
+def runtime_install(version):
+    base = handler(version)
+    for path in (base / 'bin/phpize', base / 'bin/php-config'):
+        if not path.is_file():
+            raise ValueError('Passendes Plesk-PHP-Entwicklungspaket fehlt: ' + path.name)
+        checked(path, 2_000_000)
+    for program in ('git', 'make', 'gcc', 'autoconf'):
+        if not shutil.which(program):
+            raise ValueError('Build-Voraussetzung fehlt: ' + program)
+    target = base / 'lib/php/modules/snuffleupagus.so'
+    if target.exists() or target.is_symlink():
+        raise ValueError('Modul ist bereits vorhanden; kein automatisches Ueberschreiben.')
+    try:
+        user = pwd.getpwnam('guardian-build')
+    except KeyError:
+        run(['/usr/sbin/useradd', '--system', '--no-create-home', '--home-dir', '/nonexistent',
+             '--shell', '/usr/sbin/nologin', 'guardian-build'])
+        user = pwd.getpwnam('guardian-build')
+    if not 0 < user.pw_uid < 1000 or user.pw_dir != '/nonexistent' or user.pw_shell != '/usr/sbin/nologin':
+        raise ValueError('Build-Benutzer muss ein gesondertes gesperrtes Systemkonto sein.')
+    def unprivileged():
+        os.setgroups([])
+        os.setgid(user.pw_gid)
+        os.setuid(user.pw_uid)
+        os.nice(10)
+    # No configure/make/install step ever runs as root.
+    with tempfile.TemporaryDirectory(prefix='guardian-build-') as tmp:
+        folder = pathlib.Path(tmp)
+        os.chown(folder, user.pw_uid, user.pw_gid)
+        source = folder / 'source'
+        run(['/usr/bin/git', 'clone', '--depth=1', '--branch', 'v0.14.0',
+             'https://github.com/jvoisin/snuffleupagus.git', str(source)], timeout=180,
+            cwd=folder, preexec_fn=unprivileged, diagnostic=True)
+        commit = run(['/usr/bin/git', '-C', source, 'rev-parse', 'HEAD'], cwd=folder, preexec_fn=unprivileged, diagnostic=True)
+        if commit != SNuffle_COMMIT:
+            raise ValueError('Upstream-Tag stimmt nicht mit dem freigegebenen Commit ueberein.')
+        src = source / 'src'
+        run([base / 'bin/phpize'], timeout=120, cwd=src, preexec_fn=unprivileged, diagnostic=True)
+        run([src / 'configure', '--enable-snuffleupagus', '--with-php-config=' + str(base / 'bin/php-config')],
+            timeout=180, cwd=src, preexec_fn=unprivileged, diagnostic=True)
+        run(['/usr/bin/make', '-j2'], timeout=600, cwd=src, preexec_fn=unprivileged, diagnostic=True)
+        built = src / 'modules/snuffleupagus.so'
+        fd = os.open(str(built), os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, 'rb') as inp:
+            module = inp.read(20_000_001)
+        if len(module) > 20_000_000 or not module.startswith(b'\x7fELF'):
+            raise ValueError('Ungueltiges Build-Artefakt.')
+        atomic(target, module, 0o644)
+    return {'message': 'Snuffleupagus 0.14.0 fuer PHP %s installiert, noch nicht aktiviert.' % version}
+
+
+def waf_rules(domain, mode, limit):
+    if not h.valid_domain(domain) or mode not in ('off', 'detect', 'enforce'):
+        raise ValueError('Ungueltige WAF-Einstellung.')
+    limit = int(limit)
+    if not 10 <= limit <= 10000:
+        raise ValueError('Limit muss zwischen 10 und 10000 liegen.')
+    if mode == 'off':
+        return ''
+    # Stable IDs are per server, not dependent on input or hash collisions.
+    action = 'deny,status:429' if mode == 'enforce' else 'pass'
+    return ('SecAction "id:9974100,phase:1,pass,nolog,initcol:ip=%%{REMOTE_ADDR}"\n'
+            'SecRule &IP:guardian_requests "@eq 0" "id:9974101,phase:1,pass,nolog,setvar:ip.guardian_requests=0,expirevar:ip.guardian_requests=60"\n'
+            'SecRule REQUEST_HEADERS:Host "@rx ^%s(?::[0-9]+)?$" '
+            '"id:9974102,phase:1,pass,nolog,t:lowercase,setvar:ip.guardian_requests=+1"\n'
+            'SecRule REQUEST_HEADERS:Host "@rx ^%s(?::[0-9]+)?$" '
+            '"id:9974103,phase:1,chain,t:lowercase,%s,log,msg:\'Guardian request limit\'"\n'
+            'SecRule IP:guardian_requests "@gt %d"\n') % (re.escape(domain), re.escape(domain), action, limit)
+
+
+def waf_file():
+    # Plesk's Apache include dirs; only Guardian-owned rules are changed.
+    options = (pathlib.Path('/etc/apache2/modsecurity.d'), pathlib.Path('/etc/httpd/conf/modsecurity.d'))
+    for path in options:
+        if path.is_dir() and not path.is_symlink():
+            return path / 'zz-guardian.conf'
+    raise ValueError('Unterstuetztes Apache-ModSecurity-Include-Verzeichnis fehlt.')
+
+
+def waf_set(domain, mode, limit, expected):
+    h.site_docroot(domain)
+    path = waf_file()
+    current = checked(path)[0] if path.exists() else b''
+    if not HEX.fullmatch(expected) or digest(current) != expected:
+        raise ValueError('WAF-Konfiguration geaendert; Seite neu laden.')
+    if current and not current.startswith(b'# Guardian managed\n'):
+        raise ValueError('Vorhandene fremde Regeldatei wird nicht ueberschrieben.')
+    # One explicit target domain per managed policy avoids accidental global rollout.
+    rules = waf_rules(domain, mode, limit)
+    data = b'# Guardian managed\n' + rules.encode('ascii')
+    if path.exists():
+        backup = make_backup('waf', domain, path)['id']
+    else:
+        backup = None
+    ctl = h.binary(('/usr/sbin/apache2ctl', '/usr/sbin/apachectl'))
+    systemctl = h.binary(h.SYSTEMCTL_PATHS)
+    if not ctl or not systemctl:
+        raise ValueError('Apache-Konfigurationspruefung oder systemctl fehlt.')
+    # Reject absent ModSecurity and unconfigured persistent collections.
+    modules = run([ctl, '-M'])
+    if 'security2_module' not in modules:
+        raise ValueError('Apache ModSecurity v2 ist nicht geladen.')
+    if 'unique_id_module' not in modules:
+        raise ValueError('Apache mod_unique_id als ModSecurity-Voraussetzung fehlt.')
+    included = run([ctl, '-t', '-D', 'DUMP_INCLUDES'])
+    datadir = None
+    for filename in re.findall(r'(/[^\s]+\.conf)', included):
+        candidate = pathlib.Path(filename).resolve()
+        if os.path.commonpath(('/etc', str(candidate))) != '/etc':
+            continue
+        try:
+            text = checked(candidate)[0].decode('utf-8', 'replace')
+        except (OSError, ValueError):
+            continue
+        match = re.search(r'^\s*SecDataDir\s+"?([^"\s]+)', text, re.M)
+        if match:
+            datadir = pathlib.Path(match.group(1))
+    if mode != 'off' and (datadir is None or not datadir.is_dir()):
+        raise ValueError('ModSecurity SecDataDir fuer persistente IP-Counter fehlt.')
+    atomic(path, data, 0o644)
+    try:
+        run([ctl, '-t'])
+        # DUMP_INCLUDES proves the managed file is actually included.
+        includes = run([ctl, '-t', '-D', 'DUMP_INCLUDES'])
+        if str(path) not in includes:
+            raise ValueError('Guardian-Regeldatei wird von Apache nicht eingebunden.')
+        run([systemctl, 'reload', 'apache2' if 'apache2' in str(ctl) else 'httpd'])
+    except Exception:
+        if current:
+            atomic(path, current, 0o644)
+        else:
+            path.unlink(missing_ok=True)
+        run([ctl, '-t'])
+        raise
+    settings = config()
+    settings['waf'] = {'domain': domain, 'mode': mode, 'limit': int(limit), 'sha256': digest(data), 'backup': backup}
+    save_config(settings)
+    h.incident_log('operator', 'warning', domain, 'Guardian WAF ' + mode)
+    return {'message': 'WAF-Regeln installiert und Apache neu geladen. HTTP-Wirksamkeitspruefung erforderlich.', 'backup': backup}
+
+
+def waf_engine(domain, mode):
+    h.site_docroot(domain)
+    if mode not in ('on', 'off', 'detection-only'):
+        raise ValueError('Ungueltiger WAF-Engine-Modus.')
+    before = plesk(['subscription', '--show-web-app-firewall', domain])
+    previous = before.strip().lower()
+    match = re.search(r'(?:waf[-_ ]rule[-_ ]engine|rule[-_ ]engine|mode|modus)\s*[:=]\s*(on|off|detection[- ]?only)', previous)
+    if match:
+        previous = match.group(1)
+    previous = {'detectiononly': 'detection-only', 'detection only': 'detection-only'}.get(previous, previous)
+    if previous not in ('on', 'off', 'detection-only'):
+        raise ValueError('Vorheriger Plesk-WAF-Modus konnte nicht eindeutig ermittelt werden; keine Aenderung.')
+    token = uuid.uuid4().hex
+    atomic(root() / 'backups' / (token + '.bin'), before.encode('utf-8'))
+    settings = config()
+    settings.setdefault('waf_engines', {}).setdefault(domain, previous)
+    save_config(settings)
+    plesk(['subscription', '--update-web-app-firewall', domain, '-waf-rule-engine', mode])
+    h.incident_log('operator', 'warning', domain, 'Plesk WAF-Engine ' + mode)
+    return {'message': 'Plesk WAF-Engine auf %s gesetzt. Vorheriger Status als Diagnosebackup %s gespeichert.' % (mode, token)}
+
+
+def waf_restore(token, expected):
+    if not re.fullmatch(r'[a-f0-9]{32}', token) or not HEX.fullmatch(expected):
+        raise ValueError('Ungueltiger WAF-Backupverweis.')
+    meta = h.read_json(root() / 'backups' / (token + '.json'), {})
+    data, _ = checked(root() / 'backups' / (token + '.bin'))
+    path = waf_file()
+    current, _ = checked(path)
+    if meta.get('kind') != 'waf' or digest(data) != meta.get('sha256') or not data.startswith(b'# Guardian managed\n'):
+        raise ValueError('Kein gueltiges Guardian-WAF-Backup.')
+    if digest(current) != expected:
+        raise ValueError('WAF-Konfiguration zwischenzeitlich geaendert.')
+    backup = make_backup('waf', meta.get('identity', ''), path)
+    ctl = h.binary(('/usr/sbin/apache2ctl', '/usr/sbin/apachectl'))
+    systemctl = h.binary(h.SYSTEMCTL_PATHS)
+    if not ctl or not systemctl:
+        raise ValueError('Apache-Werkzeuge fehlen.')
+    atomic(path, data, 0o644)
+    try:
+        run([ctl, '-t'])
+        run([systemctl, 'reload', 'apache2' if 'apache2' in str(ctl) else 'httpd'])
+    except Exception:
+        atomic(path, current, 0o644)
+        raise
+    settings = config()
+    settings['waf'] = {'mode': 'restored', 'backup': token, 'sha256': digest(data)}
+    save_config(settings)
+    return {'message': 'Guardian-WAF-Backup wiederhergestellt.', 'backup': backup['id']}
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        raise ValueError('API-Weiterleitung abgelehnt.')
+
+
+def api_json(url, headers, data=None):
+    request = urllib.request.Request(url, headers=headers, data=data)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    try:
+        with opener.open(request, timeout=10) as response:
+            raw = response.read(64_001)
+    except urllib.error.HTTPError as exc:
+        raise ValueError('Cloud-API antwortet mit HTTP %d; Schluessel und API-Limit pruefen.' % exc.code) from None
+    except urllib.error.URLError:
+        raise ValueError('Cloud-API nicht erreichbar; DNS, TLS und ausgehendes HTTPS pruefen.') from None
+    if len(raw) > 64000:
+        raise ValueError('API-Antwort zu gross.')
+    result = json.loads(raw)
+    if not isinstance(result, dict):
+        raise ValueError('Ungueltige API-Antwort.')
+    return result
+
+
+def reputation(ip):
+    address = ipaddress.ip_address(ip)
+    if not address.is_global:
+        raise ValueError('Nur oeffentliche IP-Adressen duerfen abgefragt werden.')
+    settings = config()
+    key = settings.get('abuseipdb_key', '')
+    if not key or not settings.get('cloud_consent'):
+        raise ValueError('AbuseIPDB-Schluessel und Zustimmung zur IP-Uebermittlung fehlen.')
+    cache = h.read_json(root() / 'reputation.json', {})
+    cached = cache.get(str(address), {})
+    if time.time() - cached.get('checked_at', 0) < 3600:
+        return cached
+    reply = api_json('https://api.abuseipdb.com/api/v2/check?' + urllib.parse.urlencode(
+        {'ipAddress': str(address), 'maxAgeInDays': 30}), {'Key': key, 'Accept': 'application/json'})
+    record = reply.get('data', {})
+    score = record.get('abuseConfidenceScore')
+    if record.get('ipAddress') != str(address) or type(score) is not int or not 0 <= score <= 100:
+        raise ValueError('AbuseIPDB-Antwort passt nicht zur Abfrage.')
+    result = {'ip': str(address), 'score': score, 'reports': record.get('totalReports', 0),
+              'checked_at': time.time(), 'country': str(record.get('countryCode', ''))[:2]}
+    cache[str(address)] = result
+    cache = dict(sorted(cache.items(), key=lambda x: x[1].get('checked_at', 0), reverse=True)[:200])
+    h.write_json(root() / 'reputation.json', cache)
+    return result
+
+
+def cloud_save(request):
+    settings = config()
+    if any(item.get('enabled') for item in settings.get('bots', {}).values()) and (
+            request.get('clear') is True or request.get('consent') is not True or
+            request.get('turnstile_sitekey') or request.get('turnstile_secret')):
+        raise ValueError('Zuerst aktive Bot-Pruefungen deaktivieren, bevor Turnstile-Schluessel oder Zustimmung geaendert werden.')
+    for key in ('abuseipdb_key', 'turnstile_sitekey', 'turnstile_secret'):
+        value = request.get(key, '')
+        if value:
+            if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_-]{10,200}', value):
+                raise ValueError('Ungueltiger API-Schluessel.')
+            settings[key] = value
+    settings['cloud_consent'] = request.get('consent') is True
+    if request.get('clear') is True:
+        for key in ('abuseipdb_key', 'turnstile_sitekey', 'turnstile_secret'):
+            settings.pop(key, None)
+    save_config(settings)
+    return {'message': 'Cloud-Einstellungen gespeichert. Es werden keine IPs automatisch gemeldet oder gesperrt.'}
+
+
+def baseline(domain, trusted):
+    if trusted is not True:
+        raise ValueError('Die saubere Herkunft muss ausdruecklich bestaetigt werden.')
+    docroot, uid, gid = h.site_docroot(domain)
+    latest = next((item for item in h.history(limit=None) if item.get('domain') == domain), None)
+    if not latest or latest.get('status') != 'finished' or latest.get('infected') != 0:
+        raise ValueError('Zuerst einen fehlerfreien Vollscan ohne Funde durchfuehren.')
+    report = h.load_job(latest['id'])
+    if time.time() - float(report.get('epoch', 0)) > 3600 or report.get('warning'):
+        raise ValueError('Sauberer Scan muss weniger als eine Stunde alt sein.')
+    token = uuid.uuid4().hex
+    if shutil.disk_usage(root()).free < 128 * 1024 * 1024:
+        raise ValueError('Mindestens 128 MiB freier Speicher fuer eine Baseline erforderlich.')
+    if sum(1 for _ in (root() / 'baselines').iterdir()) >= 20:
+        raise ValueError('Maximal 20 Baselines. Nicht mehr benoetigte Baselines zuerst entfernen.')
+    destination = root() / 'baselines' / token
+    destination.mkdir(mode=0o700)
+    entries = {}
+    total = 0
+    try:
+        for directory, dirs, names in os.walk(docroot, followlinks=False):
+            dirs[:] = [name for name in dirs if not (pathlib.Path(directory) / name).is_symlink()]
+            for name in names:
+                if not name.lower().endswith(h.WATCH_SUFFIXES):
+                    continue
+                relative = (pathlib.Path(directory) / name).relative_to(docroot).as_posix()
+                if len(entries) >= 5000 or total > 64 * 1024 * 1024:
+                    raise ValueError('Baseline-Limit ueberschritten (5000 Dateien / 64 MiB).')
+                before, dfd, leaf = h.file_metadata(docroot, relative, max_bytes=2 * 1024 * 1024)
+                try:
+                    original_mode = stat.S_IMODE(os.stat(leaf, dir_fd=dfd, follow_symlinks=False).st_mode) & 0o755
+                    fd = os.open(leaf, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dfd)
+                    with os.fdopen(fd, 'rb') as stream:
+                        data = stream.read(2 * 1024 * 1024 + 1)
+                    after, second_fd, _ = h.file_metadata(docroot, relative, max_bytes=2 * 1024 * 1024)
+                    os.close(second_fd)
+                    if before != after or digest(data) != before['sha256'] or before['uid'] != uid:
+                        raise ValueError('Datei waehrend Baseline-Erstellung geaendert oder fremder Eigentuemer.')
+                finally:
+                    os.close(dfd)
+                total += len(data)
+                if total > 64 * 1024 * 1024:
+                    raise ValueError('Baseline zu gross.')
+                blob = before['sha256']
+                if not (destination / blob).exists():
+                    atomic(destination / blob, data, 0o400)
+                entries[relative] = {'sha256': blob, 'size': len(data), 'mode': original_mode}
+        if not entries:
+            raise ValueError('Keine geeigneten Dateien fuer Baseline vorhanden.')
+        info = {'id': token, 'domain': domain, 'docroot': str(docroot), 'uid': uid, 'gid': gid,
+                'files': entries, 'created_at': h.utc_now(), 'scan': latest['id'],
+                'trust': 'administrator-attested; not vendor-authenticated'}
+        h.write_json(destination / 'manifest.json', info)
+        os.chmod(destination / 'manifest.json', 0o400)
+        settings = config()
+        settings.setdefault('baselines', {})[domain] = {'id': token, 'files': len(entries),
+                                                      'created_at': info['created_at']}
+        # A new baseline must never silently change the source of automatic repair.
+        settings.setdefault('autorepair', {}).pop(domain, None)
+        save_config(settings)
+    except Exception:
+        # Preserve incomplete captures for diagnosis; they are never selected.
+        raise
+    h.incident_log('operator', 'warning', domain, 'Good-File-Baseline vom Administrator freigegeben: ' + token)
+    return {'message': 'Baseline mit %d Dateien gespeichert. Automatische Reparatur bleibt aus.' % len(entries)}
+
+
+def repair_set(domain, mode):
+    h.site_docroot(domain)
+    if mode not in ('on', 'off'):
+        raise ValueError('Ungueltiger Reparaturmodus.')
+    settings = config()
+    if mode == 'on':
+        item = settings.get('baselines', {}).get(domain, {})
+        if not item.get('id'):
+            raise ValueError('Zuerst eine vertrauenswuerdige Baseline erstellen.')
+        settings.setdefault('autorepair', {})[domain] = item['id']
+    else:
+        settings.setdefault('autorepair', {}).pop(domain, None)
+    save_config(settings)
+    h.incident_log('operator', 'warning', domain, 'Automatische Reparatur ' + mode)
+    return {'message': 'Automatische Reparatur ' + mode}
+
+
+def repair_one(jobid, index, blocking=False):
+    if not h.JOB_ID.fullmatch(jobid) or type(index) is not int or not 0 <= index < h.MAX_FINDINGS:
+        raise ValueError('Ungueltiger Fundverweis.')
+    fd = h.lock_scan(blocking=blocking)
+    try:
+        report = h.load_job(jobid)
+        if not report or report.get('status') != 'finished':
+            raise ValueError('Abgeschlossener Scan erforderlich.')
+        finding = report['findings'][index]
+        if finding.get('state') != 'found' or not finding.get('fingerprint'):
+            raise ValueError('Unveraenderter, verifizierter Fund erforderlich.')
+        domain = report['domain']
+        item = config().get('baselines', {}).get(domain, {})
+        token = item.get('id', '')
+        if not re.fullmatch(r'[a-f0-9]{32}', token):
+            raise ValueError('Keine Baseline vorhanden.')
+        folder = root() / 'baselines' / token
+        manifest = h.read_json(folder / 'manifest.json', {}, max_bytes=2_000_000)
+        docroot, uid, gid = h.site_docroot(domain)
+        if manifest.get('domain') != domain or manifest.get('docroot') != str(docroot) or manifest.get('uid') != uid:
+            raise ValueError('Baseline passt nicht zum aktuellen Webspace.')
+        relative = finding['path']
+        good = manifest.get('files', {}).get(relative, {})
+        sha = good.get('sha256', '')
+        if not HEX.fullmatch(sha):
+            raise ValueError('Kein bekanntes Good-File fuer diesen Fund; manuelle Quarantaene verwenden.')
+        data, _ = checked(folder / sha)
+        if digest(data) != sha or len(data) != good.get('size'):
+            raise ValueError('Baseline-Pruefsumme stimmt nicht.')
+        before, dfd, name = h.file_metadata(docroot, relative)
+        qfd = os.open(str(h.ROOT / 'quarantine'), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        temp = '.guardian-repair-' + uuid.uuid4().hex
+        quarantine = jobid + '-' + str(index) + '-' + uuid.uuid4().hex
+        moved_original = False
+        try:
+            if before != finding['fingerprint'] or before['uid'] != uid:
+                raise ValueError('Funddatei inzwischen geaendert.')
+            output_fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dfd)
+            with os.fdopen(output_fd, 'wb') as output:
+                os.fchown(output.fileno(), uid, gid)
+                os.fchmod(output.fileno(), int(good.get('mode', 0o600)) & 0o755)
+                output.write(data)
+                output.flush()
+                os.fsync(output.fileno())
+            finding.update(state='pending', quarantine_id=quarantine)
+            h.save_job(report)
+            os.rename(name, quarantine, src_dir_fd=dfd, dst_dir_fd=qfd)
+            moved_original = True
+            moved = os.stat(quarantine, dir_fd=qfd, follow_symlinks=False)
+            if moved.st_ino != before['ino'] or moved.st_dev != before['dev']:
+                raise ValueError('Datei waehrend Reparatur verschoben; manuelle Pruefung erforderlich.')
+            # link refuses to overwrite a file concurrently recreated by the site.
+            os.link(temp, name, src_dir_fd=dfd, dst_dir_fd=dfd, follow_symlinks=False)
+            finding.update(state='repaired', repaired_at=h.utc_now(), baseline=token,
+                           repaired_sha256=sha)
+            h.save_job(report)
+            h.incident_log('operator', 'warning', domain, 'Good-File-Reparatur ausgefuehrt; Original in Quarantaene.', relative)
+        except Exception:
+            if moved_original:
+                try:
+                    os.link(quarantine, name, src_dir_fd=qfd, dst_dir_fd=dfd, follow_symlinks=False)
+                    os.unlink(quarantine, dir_fd=qfd)
+                    finding.update(state='found')
+                    finding.pop('quarantine_id', None)
+                except OSError:
+                    finding['state'] = 'error_review'
+            else:
+                finding['state'] = 'found'
+                finding.pop('quarantine_id', None)
+            h.save_job(report)
+            raise
+        finally:
+            try:
+                os.unlink(temp, dir_fd=dfd)
+            except FileNotFoundError:
+                pass
+            os.close(dfd)
+            os.close(qfd)
+        return {'message': 'Good-File eingespielt; infiziertes Original bleibt fuer Rollback in Quarantaene.'}
+    finally:
+        os.close(fd)
+
+
+def repair_rollback(jobid, index):
+    if not h.JOB_ID.fullmatch(jobid) or type(index) is not int or not 0 <= index < h.MAX_FINDINGS:
+        raise ValueError('Ungueltiger Fundverweis.')
+    fd = h.lock_scan()
+    try:
+        report = h.load_job(jobid)
+        finding = report['findings'][index]
+        if finding.get('state') != 'repaired':
+            raise ValueError('Kein reparierter Fund.')
+        docroot, _, _ = h.site_docroot(report['domain'])
+        current, dfd, leaf = h.file_metadata(docroot, finding['path'])
+        qfd = os.open(str(h.ROOT / 'quarantine'), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            if current['sha256'] != finding['repaired_sha256']:
+                raise ValueError('Reparierte Datei wurde geaendert; Rollback verweigert.')
+            qname = finding['quarantine_id']
+            if not re.fullmatch(r'[a-f0-9-]{67,75}', qname):
+                raise ValueError('Ungueltige Quarantaene-ID.')
+            # Atomic exchange never leaves the destination missing and retains good-file copy.
+            libc = ctypes.CDLL(None, use_errno=True)
+            exchange = getattr(libc, 'renameat2', None)
+            if exchange is None:
+                raise ValueError('Sicherer Rollback benoetigt Linux renameat2.')
+            if exchange(dfd, os.fsencode(leaf), qfd, os.fsencode(qname), 2) != 0:
+                raise OSError(ctypes.get_errno(), 'Rollback-Austausch fehlgeschlagen')
+            finding.update(state='rolled_back', rolled_back_at=h.utc_now())
+            h.save_job(report)
+        finally:
+            os.close(dfd)
+            os.close(qfd)
+        h.incident_log('operator', 'critical', report['domain'], 'Reparatur zurueckgenommen; Malware kann wieder aktiv sein.', finding['path'])
+        return {'message': 'Original zurueckgespielt. Achtung: Die Datei kann infiziert sein.'}
+    finally:
+        os.close(fd)
+
+
+def auto_repair(jobid):
+    report = h.load_job(jobid)
+    if not report:
+        return
+    settings = config()
+    selected = settings.get('autorepair', {}).get(report['domain'])
+    if not selected or selected != settings.get('baselines', {}).get(report['domain'], {}).get('id'):
+        return
+    for index, finding in enumerate(report.get('findings', [])):
+        if finding.get('state') == 'found':
+            try:
+                repair_one(jobid, index, blocking=True)
+            except (ValueError, OSError, KeyError, IndexError):
+                h.incident_log('operator', 'warning', report['domain'], 'Automatische Reparatur abgelehnt; manuelle Pruefung erforderlich.', finding.get('path', ''))
+
+
+def write_guard(folder, data, gid):
+    folderfd = os.open(str(folder), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    temp = '.guard-' + uuid.uuid4().hex
+    try:
+        st = os.fstat(folderfd)
+        if st.st_uid != 0 or st.st_mode & 0o027:
+            raise ValueError('Guardian-Verzeichnis zwischenzeitlich geaendert.')
+        guardfd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o640, dir_fd=folderfd)
+        with os.fdopen(guardfd, 'wb') as output:
+            os.fchown(output.fileno(), 0, gid)
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.rename(temp, 'guard.php', src_dir_fd=folderfd, dst_dir_fd=folderfd)
+    finally:
+        try:
+            os.unlink(temp, dir_fd=folderfd)
+        except FileNotFoundError:
+            pass
+        os.close(folderfd)
+
+
+def bots_set(domain, mode):
+    if mode not in ('on', 'off'):
+        raise ValueError('Ungueltiger Bot-Modus.')
+    docroot, uid, gid = h.site_docroot(domain)
+    settings = config()
+    # Store guard outside document root but inside subscription. Website UID can read it.
+    home = pathlib.Path(h.plesk_hosting_path(domain)[1]).resolve(strict=True)
+    if os.path.commonpath((str(home), str(docroot))) != str(home):
+        raise ValueError('Webspace geaendert.')
+    folder = home / ('.guardian-' + hashlib.sha256(domain.encode('ascii')).hexdigest()[:16])
+    if re.search(r'["\\\r\n\x00]', str(folder)):
+        raise ValueError('Webspace-Pfad kann nicht sicher in PHP-INI dargestellt werden.')
+    record = settings.get('bots', {}).get(domain, {})
+    dfd = os.open(str(docroot), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        try:
+            fd = os.open('.user.ini', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dfd)
+            with os.fdopen(fd, 'rb') as stream:
+                st = os.fstat(stream.fileno())
+                if not stat.S_ISREG(st.st_mode) or st.st_size > 64000 or st.st_uid not in (0, uid):
+                    raise ValueError('Unsichere .user.ini.')
+                current = stream.read(64001)
+        except FileNotFoundError:
+            current = b''
+        text = current.decode('utf-8')
+        if mode == 'on':
+            if record.get('enabled'):
+                raise ValueError('Bot-Pruefung ist bereits konfiguriert; zuerst deaktivieren.')
+            if re.search(r'^\s*auto_prepend_file\s*=', text, re.M | re.I):
+                raise ValueError('Bestehendes auto_prepend_file wird nicht ueberschrieben.')
+            if not settings.get('cloud_consent') or not settings.get('turnstile_sitekey') or not settings.get('turnstile_secret'):
+                raise ValueError('Turnstile-Schluessel und Zustimmung fehlen.')
+            if folder.exists() or folder.is_symlink():
+                # Existing directory is accepted only when it is our root-owned private directory.
+                st = folder.lstat()
+                if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o027:
+                    raise ValueError('Unsicheres Guardian-Verzeichnis im Webspace.')
+            else:
+                folder.mkdir(mode=0o750)
+                os.chown(folder, 0, gid)
+            data = {'domain': domain, 'sitekey': settings['turnstile_sitekey'],
+                    'secret': settings['turnstile_secret'], 'signing_key': os.urandom(32).hex()}
+            template = (HERE / 'guardian-bot-guard.php').read_text(encoding='utf-8')
+            encoded = base64.b64encode(json.dumps(data).encode()).decode('ascii')
+            template = template.replace('/* GUARDIAN_CONFIG */', "$guardianConfig = json_decode(base64_decode('%s'), true);" % encoded)
+            php = h.binary(('/usr/bin/php', '/opt/plesk/php/8.3/bin/php'))
+            if not php:
+                raise ValueError('PHP CLI fuer Syntaxpruefung fehlt.')
+            run([php, '-l'], input=template.encode('utf-8'))
+            write_guard(folder, template.encode('utf-8'), gid)
+            block = '\n' + BEGIN + 'auto_prepend_file="%s"\n' % (folder / 'guard.php') + END
+            updated = current + block.encode('utf-8')
+            record = {'enabled': True, 'before': base64.b64encode(current).decode('ascii'),
+                      'installed_sha256': digest(updated), 'guard': str(folder / 'guard.php')}
+        else:
+            if not record.get('enabled'):
+                raise ValueError('Kein von Guardian aktivierter Bot-Schutz vorhanden.')
+            if digest(current) != record.get('installed_sha256'):
+                raise ValueError('.user.ini zwischenzeitlich geaendert; keine automatische Ruecksetzung.')
+            updated = base64.b64decode(record['before'], validate=True)
+            record = {'enabled': False, 'guard': str(folder / 'guard.php')}
+        temp = '.guardian-ini-' + uuid.uuid4().hex
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=dfd)
+        try:
+            with os.fdopen(fd, 'wb') as output:
+                os.fchown(output.fileno(), uid, gid)
+                output.write(updated)
+                output.flush()
+                os.fsync(output.fileno())
+            # Require unchanged source immediately before replacing it.
+            try:
+                checkfd = os.open('.user.ini', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dfd)
+                with os.fdopen(checkfd, 'rb') as inp:
+                    unchanged = inp.read(64001) == current
+            except FileNotFoundError:
+                unchanged = current == b''
+            if not unchanged:
+                raise ValueError('.user.ini waehrend Aktion geaendert.')
+            os.rename(temp, '.user.ini', src_dir_fd=dfd, dst_dir_fd=dfd)
+            if mode == 'off':
+                # Cached .user.ini may still prepend this file. Keep a harmless stub,
+                # removing provider secrets from disk as soon as the guard is disabled.
+                write_guard(folder, b'<?php return; // Guardian disabled\n', gid)
+        finally:
+            try:
+                os.unlink(temp, dir_fd=dfd)
+            except FileNotFoundError:
+                pass
+    finally:
+        os.close(dfd)
+    settings.setdefault('bots', {})[domain] = record
+    save_config(settings)
+    # Keep guard when disabling: PHP user_ini cache can still refer to it for 300 seconds.
+    h.incident_log('operator', 'warning', domain, 'Turnstile PHP-Anmeldeschutz ' + mode)
+    return {'message': 'Bot-Schutz konfiguriert. PHP .user.ini-Cache kann bis zu 5 Minuten benoetigen; HTTPS-Anmeldung testen.'}
+
+
+def diagnostics(domain='', http_probe=False):
+    result = {'generated_at': h.utc_now(), 'checks': [], 'domain': domain,
+              'note': 'Keine API-Schluessel, Dateiinhalte oder vollstaendigen Serverkonfigurationen enthalten.'}
+    def check(name, callback):
+        try:
+            value = callback()
+            result['checks'].append({'name': name, 'ok': True, 'result': value})
+        except (OSError, ValueError, subprocess.SubprocessError):
+            result['checks'].append({'name': name, 'ok': False, 'result': 'Pruefung fehlgeschlagen oder Voraussetzung fehlt.'})
+    check('Plesk', lambda: run([h.binary(h.PLESK_BINARIES) or '/usr/sbin/plesk', 'version']).splitlines()[0])
+    check('ClamAV', lambda: run([h.binary(h.CLAM_PATHS) or '/usr/bin/clamscan', '--version']))
+    check('Fail2Ban', lambda: h.fail2ban_status())
+    check('WAF Log', lambda: {'available': h.waf_status()['available']})
+    check('Dateiwache', lambda: h.monitor_status())
+    if domain:
+        check('Document-Root', lambda: {'uid': h.site_docroot(domain)[1], 'resolved': True})
+    if http_probe is True and domain:
+        docroot, uid, gid = h.site_docroot(domain)
+        token = uuid.uuid4().hex
+        name = 'guardian-probe-' + token + '.php'
+        dfd = os.open(str(docroot), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=dfd)
+            with os.fdopen(fd, 'wb') as output:
+                os.fchown(output.fileno(), uid, gid)
+                output.write(('<?php header("Cache-Control: no-store"); header("Content-Type: application/json"); '
+                              'echo json_encode(["token"=>"%s","php"=>PHP_VERSION,"snuffleupagus"=>extension_loaded("snuffleupagus"),'
+                              '"curl"=>extension_loaded("curl"),"prepend"=>(bool)ini_get("auto_prepend_file")]);' % token).encode('ascii'))
+            def probe():
+                response = api_json('https://' + domain + '/' + name, {'Accept': 'application/json'})
+                if response.get('token') != token:
+                    raise ValueError('HTTP-Test erreicht nicht die angelegte Testdatei.')
+                return {k: response.get(k) for k in ('php', 'snuffleupagus', 'curl', 'prepend')}
+            check('HTTPS PHP Request', probe)
+        finally:
+            os.unlink(name, dir_fd=dfd)
+            os.close(dfd)
+    h.write_json(root() / 'diagnostics.json', result)
+    return result
+
+
+def public_status():
+    prepare()
+    settings = config()
+    handlers = []
+    for path in sorted(PHP_BASE.glob('8.*')):
+        if not VERSION.fullmatch(path.name):
+            continue
+        try:
+            base = handler(path.name)
+            data, _ = checked(base / 'etc/php.ini')
+            handlers.append({'version': path.name, 'sha256': digest(data),
+                             'module': (base / 'lib/php/modules/snuffleupagus.so').is_file(),
+                             'build_missing': [name for name in ('phpize', 'php-config') if not (base / 'bin' / name).is_file()] +
+                                              [name for name in ('git', 'gcc', 'make', 'autoconf') if not shutil.which(name)],
+                             'managed': BEGIN.encode() in data})
+        except (OSError, ValueError):
+            continue
+    backups = []
+    for path in (root() / 'backups').glob('*.json'):
+        item = h.read_json(path, {})
+        if item:
+            backups.append(item)
+    backups.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+    try:
+        path = waf_file()
+        waf_sha = digest(checked(path)[0] if path.exists() else b'')
+    except (ValueError, OSError):
+        waf_sha = ''
+    return {'ok': True, 'handlers': handlers, 'backups': backups[:50], 'waf': settings.get('waf', {}),
+            'waf_sha256': waf_sha, 'cloud': {'consent': bool(settings.get('cloud_consent')),
+            'abuseipdb_configured': bool(settings.get('abuseipdb_key')),
+            'turnstile_configured': bool(settings.get('turnstile_sitekey') and settings.get('turnstile_secret'))},
+            'baselines': settings.get('baselines', {}), 'autorepair': settings.get('autorepair', {}),
+            'bots': {d: {'enabled': v.get('enabled', False)} for d, v in settings.get('bots', {}).items()},
+            'diagnostics': h.read_json(root() / 'diagnostics.json', {}),
+            'jobs': [h.read_json(p, {}) for p in sorted((root() / 'jobs').glob('*.json'),
+                     key=lambda x: x.stat().st_mtime, reverse=True)[:10]],
+            'reputation': list(h.read_json(root() / 'reputation.json', {}).values())[-20:]}
+
+
+def uninstall_cleanup():
+    # Removing an extension must undo its own active policies, not leave orphaned guards.
+    settings = config()
+    for domain, item in settings.get('bots', {}).items():
+        if item.get('enabled'):
+            bots_set(domain, 'off')
+    for item in public_status()['handlers']:
+        if item['managed']:
+            runtime_set(item['version'], 'off', item['sha256'])
+    try:
+        path = waf_file()
+    except ValueError:
+        path = None
+    if path is not None and path.exists():
+        data, _ = checked(path)
+        if data.startswith(b'# Guardian managed\n'):
+            if digest(data) != settings.get('waf', {}).get('sha256'):
+                raise ValueError('Guardian-WAF-Datei wurde extern geaendert; vor Deinstallation manuell pruefen.')
+            ctl = h.binary(('/usr/sbin/apache2ctl', '/usr/sbin/apachectl'))
+            systemctl = h.binary(h.SYSTEMCTL_PATHS)
+            if not ctl or not systemctl:
+                raise ValueError('Guardian-WAF-Regeln vor der Deinstallation manuell deaktivieren.')
+            atomic(path, b'# Guardian managed\n', 0o644)
+            try:
+                run([ctl, '-t'])
+                run([systemctl, 'reload', 'apache2' if 'apache2' in str(ctl) else 'httpd'])
+            except Exception:
+                atomic(path, data, 0o644)
+                raise
+    for domain in list(h.monitor_config()):
+        h.monitor_set(domain, 'off')
+    for domain, mode in config().get('waf_engines', {}).items():
+        if h.valid_domain(domain) and mode in ('on', 'off', 'detection-only'):
+            plesk(['subscription', '--update-web-app-firewall', domain, '-waf-rule-engine', mode])
+    settings = config()
+    settings['autorepair'] = {}
+    settings['waf_engines'] = {}
+    save_config(settings)
+    return {'message': 'Guardian-eigene aktive Policies deaktiviert. Backups, Module und Quarantaene bleiben erhalten.'}
+
+
+def start_job(request):
+    for path in (root() / 'jobs').glob('*.json'):
+        item = h.read_json(path, {})
+        if item.get('status') in ('queued', 'running') and time.time() - item.get('epoch', 0) < 1200:
+            raise ValueError('Ein Verwaltungsauftrag laeuft bereits.')
+    token = uuid.uuid4().hex
+    path = root() / 'jobs' / (token + '.json')
+    item = {'id': token, 'action': request['action'], 'domain': request.get('domain', ''),
+            'version': request.get('version', ''), 'status': 'queued', 'epoch': time.time()}
+    # Long-running actions have no API secrets and store only their validated fields.
+    h.write_json(path, item)
+    child = subprocess.Popen([sys.executable, str(HERE / 'guardian-manager'), 'job', token],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             close_fds=True, start_new_session=True, cwd='/')
+    return {'job': token, 'pid': child.pid, 'message': 'Auftrag gestartet. Status nach Neuladen unter Verwaltung sichtbar.'}
+
+
+def run_job(token):
+    if not re.fullmatch(r'[a-f0-9]{32}', token):
+        raise ValueError('Ungueltige Job-ID.')
+    with locked(blocking=True):
+        path = root() / 'jobs' / (token + '.json')
+        item = h.read_json(path, {})
+        if item.get('status') != 'queued':
+            raise ValueError('Kein wartender Auftrag.')
+        item['status'] = 'running'
+        h.write_json(path, item)
+        try:
+            if item['action'] == 'runtime-install':
+                result = runtime_install(item['version'])
+            elif item['action'] == 'baseline-create':
+                scanlock = h.lock_scan()
+                try:
+                    result = baseline(item['domain'], True)
+                finally:
+                    os.close(scanlock)
+            else:
+                raise ValueError('Unbekannter Hintergrundauftrag.')
+            item.update(status='finished', result=result)
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            message = str(exc)[:240] if isinstance(exc, ValueError) else 'Systemaktion fehlgeschlagen; Build-Voraussetzungen pruefen.'
+            item.update(status='error', error=message)
+        item['finished_at'] = h.utc_now()
+        h.write_json(path, item)
+
+
+def dispatch(request):
+    if not isinstance(request, dict):
+        raise ValueError('JSON-Objekt erforderlich.')
+    action = request.get('action')
+    with locked():
+        if action == 'php-backup':
+            return php_backup(request.get('version', ''))
+        if action == 'php-restore':
+            return php_restore(request.get('version', ''), request.get('backup', ''), request.get('sha256', ''))
+        if action == 'runtime-set':
+            return runtime_set(request.get('version', ''), request.get('mode', ''), request.get('sha256', ''))
+        if action == 'runtime-install':
+            version = request.get('version', '')
+            handler(version)
+            return start_job({'action': action, 'version': version})
+        if action == 'waf-preview':
+            return {'rules': waf_rules(request.get('domain', ''), request.get('mode', ''), request.get('limit', 120))}
+        if action == 'waf-set':
+            return waf_set(request.get('domain', ''), request.get('mode', ''), request.get('limit', 120), request.get('sha256', ''))
+        if action == 'waf-engine':
+            return waf_engine(request.get('domain', ''), request.get('mode', ''))
+        if action == 'waf-restore':
+            return waf_restore(request.get('backup', ''), request.get('sha256', ''))
+        if action == 'cloud-save':
+            return cloud_save(request)
+        if action == 'reputation':
+            return reputation(request.get('ip', ''))
+        if action == 'baseline-create':
+            domain = request.get('domain', '')
+            h.site_docroot(domain)
+            if request.get('trusted') is not True:
+                raise ValueError('Saubere Herkunft der Baseline ausdruecklich bestaetigen.')
+            return start_job({'action': action, 'domain': domain})
+        if action == 'repair-set':
+            return repair_set(request.get('domain', ''), request.get('mode', ''))
+        if action == 'repair':
+            return repair_one(request.get('jobid', ''), int(request.get('index', -1)))
+        if action == 'repair-rollback':
+            return repair_rollback(request.get('jobid', ''), int(request.get('index', -1)))
+        if action == 'bots-set':
+            return bots_set(request.get('domain', ''), request.get('mode', ''))
+        if action == 'diagnostics':
+            return diagnostics(request.get('domain', ''), request.get('http_probe') is True)
+        raise ValueError('Unbekannte Verwaltungsaktion.')
+
+
+def main(args):
+    try:
+        if args == ['status']:
+            return h.respond(public_status())
+        if args == ['uninstall']:
+            with locked():
+                return h.respond({'ok': True, 'result': uninstall_cleanup()})
+        if len(args) == 2 and args[0] == 'job':
+            run_job(args[1])
+            return h.respond({'ok': True})
+        if len(args) == 2 and args[0] == 'auto-repair' and h.JOB_ID.fullmatch(args[1]):
+            with locked(blocking=True):
+                auto_repair(args[1])
+            return h.respond({'ok': True})
+        if args == ['request']:
+            raw = sys.stdin.buffer.read(16385)
+            if len(raw) > 16384:
+                raise ValueError('Anfrage zu gross.')
+            result = dispatch(json.loads(raw))
+            return h.respond({'ok': True, 'result': result})
+        raise ValueError('Unbekannter Aufruf.')
+    except ValueError as exc:
+        return h.respond({'ok': False, 'error': str(exc)[:240]}, 1)
+    except (OSError, TypeError, KeyError, IndexError, subprocess.SubprocessError):
+        # No raw HTTP exceptions: they may contain secrets or provider responses.
+        return h.respond({'ok': False, 'error': 'Verwaltungsaktion fehlgeschlagen. Voraussetzungen und aktuelle Fingerprints pruefen.'}, 1)
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

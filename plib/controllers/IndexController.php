@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.6.4';
+    private const GUARDIAN_VERSION = '0.7.0';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -68,6 +68,79 @@ class IndexController extends pm_Controller_Action
                 ? (string)$data['error'] : 'Guardian-Updater nicht erreichbar.');
         }
         return $data;
+    }
+
+    private function manager($request = null)
+    {
+        // Plesk >= 18.0.55 supports stdin; API secrets never enter process arguments.
+        $stdin = $request === null ? '' : json_encode($request, JSON_INVALID_UTF8_SUBSTITUTE);
+        if (!is_string($stdin) || strlen($stdin) > 16384) {
+            throw new RuntimeException('Verwaltungsanfrage ungueltig oder zu gross.');
+        }
+        $result = pm_ApiCli::callSbin('guardian-manager', [$request === null ? 'status' : 'request'],
+                                    pm_ApiCli::RESULT_FULL, [], $stdin);
+        $data = json_decode($result['stdout'] ?? '', true);
+        if (!is_array($data) || !empty($result['code']) || empty($data['ok'])) {
+            throw new RuntimeException(is_array($data) ? ($data['error'] ?? 'Verwaltungsaktion fehlgeschlagen.') : 'Guardian-Verwaltung nicht erreichbar.');
+        }
+        return $data;
+    }
+
+    public function manageAction()
+    {
+        $this->verifyPost();
+        $post = $this->getRequest();
+        $operation = (string)$post->getPost('operation', '');
+        $allowed = ['php-backup', 'php-restore', 'runtime-set', 'runtime-install', 'waf-preview',
+                    'waf-set', 'waf-engine', 'waf-restore', 'cloud-save', 'reputation', 'baseline-create',
+                    'repair-set', 'repair', 'repair-rollback', 'bots-set', 'diagnostics'];
+        if (!in_array($operation, $allowed, true)) {
+            throw new pm_Exception('Unbekannte Verwaltungsaktion.');
+        }
+        $request = ['action' => $operation];
+        foreach (['domain', 'version', 'mode', 'sha256', 'backup', 'jobid', 'ip',
+                  'abuseipdb_key', 'turnstile_sitekey', 'turnstile_secret'] as $key) {
+            $value = $post->getPost($key, '');
+            if (!is_string($value) || strlen($value) > 254) {
+                throw new pm_Exception('Ungueltiges Eingabefeld.');
+            }
+            if ($value !== '') { $request[$key] = trim($value); }
+        }
+        if (isset($request['domain']) && !$this->isDomainKnown($request['domain'])) {
+            throw new pm_Exception('Unbekannte gehostete Domain.');
+        }
+        foreach (['limit', 'index'] as $key) {
+            $value = $post->getPost($key, '');
+            if ($value !== '') {
+                if (!is_string($value) || !preg_match('/^\d{1,5}$/D', $value)) {
+                    throw new pm_Exception('Ungueltiger Zahlenwert.');
+                }
+                $request[$key] = (int)$value;
+            }
+        }
+        foreach (['trusted', 'consent', 'clear', 'http_probe'] as $key) {
+            $request[$key] = $post->getPost($key, '') === '1';
+        }
+        try {
+            $result = $this->manager($request);
+            $record = ['ok' => true, 'operation' => $operation, 'at' => time(), 'result' => $result['result'] ?? []];
+        } catch (\Throwable $e) {
+            $record = ['ok' => false, 'operation' => $operation, 'at' => time(), 'error' => substr($e->getMessage(), 0, 300)];
+        }
+        // Only the manager's sanitized response is persisted, never the request with keys.
+        pm_Settings::set('guardian_management_result', json_encode($record, JSON_INVALID_UTF8_SUBSTITUTE));
+        $this->redirect(pm_Context::getBaseUrl() . '#guardian-tab-management');
+    }
+
+    public function managementExportAction()
+    {
+        $data = $this->manager();
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+        $this->getResponse()->setHeader('Content-Type', 'application/json; charset=UTF-8', true)
+            ->setHeader('Content-Disposition', 'attachment; filename="guardian-diagnostics.json"', true)
+            ->setHeader('Cache-Control', 'no-store', true)
+            ->setBody(json_encode($data['diagnostics'] ?? [], JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE));
     }
 
     private function updateRepository()
@@ -181,6 +254,14 @@ class IndexController extends pm_Controller_Action
 
     public function indexAction()
     {
+        $this->view->management = [];
+        $this->view->managementError = '';
+        $this->view->managementResult = json_decode((string)pm_Settings::get('guardian_management_result'), true) ?: [];
+        try {
+            $this->view->management = $this->manager();
+        } catch (\Throwable $e) {
+            $this->view->managementError = $e->getMessage();
+        }
         $this->view->csrf = $this->csrfToken();
         $this->view->baseUrl = pm_Context::getBaseUrl();
         $this->view->helperError = null;

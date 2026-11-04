@@ -1,0 +1,84 @@
+# Guardian Lite 0.7.0 – Schutzverwaltung und Plesk-Praxistest
+
+## Voraussetzungen und Reichweite
+
+Plesk Obsidian **18.0.55 oder neuer**, Linux und Python >=3.8. Die sichere stdin-Schnittstelle von `pm_ApiCli::callSbin` wird fuer API-Schluessel verwendet. Nur direkt angemeldete Administratoren koennen Verwaltungsaktionen ausfuehren. Alle neuen aktiven Funktionen sind nach Installation aus.
+
+Automatisierte Tests ersetzen die Plesk-Praxistests nicht. Die Tests des Betreibers finden auf einem separaten Plesk-Testserver statt. Guardian fuehrt keine pauschale Aktivierung auf vorhandenen Domains durch.
+
+## PHP-Handler und Snuffleupagus
+
+Unter **Verwaltung & Diagnose** werden unterstuetzte Plesk-PHP-Handler 8.0–8.5 angezeigt. Ein Handler gilt fuer alle ihm zugeordneten Websites. Keine automatische Umschaltung von Domains auf andere Handler.
+
+1. **Backup erstellen** speichert php.ini root-privat mit SHA-256.
+2. **Modul installieren** startet einen Hintergrundauftrag. Voraussetzungen: die zum Handler passenden `phpize`/`php-config`, git, gcc, make und autoconf. Fehlende Pakete werden nicht ungefragt installiert. Der Build verwendet Snuffleupagus 0.14.0 mit festem Commit `1d8614af85a1baa52656f3adbd4684772df91288`. Build-Schritte laufen unter dem gesonderten Systembenutzer `guardian-build`; nur das fertige Modul wird als root installiert. Ein vorhandenes Modul wird nicht ueberschrieben.
+3. **Simulation** oder **Blockieren** prueft Modul/Regeln und eine harmlose PHP-CLI-Probe. Guardian ergaenzt einen markierten php.ini-Block, testet FPM und laedt nur den gewaehlten FPM-Dienst neu. Bei Fehler wird die vorherige Konfiguration zurueckgeschrieben. Fremde Snuffleupagus-Konfigurationen werden nicht uebernommen.
+4. **Rollback** verweigert das Ueberschreiben einer seit dem Seitenaufruf geaenderten Konfiguration. Vor dem Rollback wird erneut ein Recovery-Backup erstellt.
+
+Die Policy betrifft `system`, `shell_exec`, `passthru`, `exec`, `proc_open` und `popen`. Blockieren kann legitime CMS-/Backup-Funktionen beeintraechtigen. CLI-Proben und FPM-Syntaxtests beweisen noch keine Wirksamkeit unter echten Webrequests. System-PHP, Apache-PHP und herstellerspezifische TuxCare-Handler werden nicht automatisch verwaltet. Fuer CGI-/FastCGI-Handler ohne passenden FPM-Dienst scheitert die Aktivierung und wird zurueckgenommen.
+
+Fehlende Build-Werkzeuge werden je Handler in der Oberflaeche angezeigt. Beispiel fuer PHP 8.3 auf Debian/Ubuntu, vom Betreiber als root auszufuehren: `apt install plesk-php83-dev git gcc make autoconf`. Fuer andere Handler das passende Entwicklungs-Paket verwenden. [Plesk dokumentiert die handler-spezifischen Entwicklerpakete](https://support.plesk.com/hc/en-us/articles/12377651968023-How-to-install-uninstall-memcached-PHP-extension-for-Plesk-PHP-handlers).
+
+Referenzen: [Snuffleupagus-Installation](https://snuffleupagus.readthedocs.io/installation.html), [Konfiguration und Simulation](https://snuffleupagus.readthedocs.io/config.html).
+
+## WAF und HTTP-Botlimits
+
+Guardian verwaltet ausschliesslich `zz-guardian.conf` in einem unterstuetzten Apache-ModSecurity-Include-Verzeichnis. Es wird **ein Zielhost** verwaltet; ein neues Ziel ersetzt das bisherige Guardian-Ziel. Die Regel-IDs 9974100–9974103 sind reserviert. Bestehende Drittanbieter-Regeln werden nicht editiert.
+
+- **Vorschau** zeigt die erzeugten Regeln ohne Installation.
+- **Nur protokollieren** schreibt bei Ueberschreitung einen Logeintrag.
+- **Sperren** verwendet HTTP 429 oberhalb des Limits in einem festen 60-Sekunden-IP-Fenster.
+- **Deaktivieren** entfernt die aktiven Guardian-Regeln aus der eigenen Datei.
+- **WAF-Rollback** stellt ein Guardian-Backup nach Fingerprint-Pruefung wieder her.
+
+Apache muss ModSecurity v2 und `mod_unique_id` geladen haben und ein vorhandenes `SecDataDir` verwenden. Guardian prueft Syntax und tatsaechliche Einbindung, bevor Apache neu geladen wird. Die Plesk-WAF muss fuer wirksames Blockieren eingeschaltet sein. Der Domain-WAF-Modus wird ueber die dokumentierte Plesk-CLI gesetzt.
+
+Hinter CDN/Reverse-Proxy muss die vertrauenswuerdige Real-IP-Konfiguration bereits stimmen. Guardian interpretiert keine ungeprueften Forwarded-Header. NAT-Nutzer teilen sich ein Limit. Andere Aliase als der gewaehlte Hostname, statische NGINX-Antworten und volumetrische DDoS-Angriffe koennen ausserhalb dieser Apache-Regeln liegen.
+
+Referenzen: [Plesk Custom Rules](https://support.plesk.com/hc/en-us/articles/12388798361495-How-to-add-a-custom-rule-to-Web-Application-Firewall-ModSecurity-in-Plesk), [Plesk WAF CLI](https://support.plesk.com/hc/en-us/articles/12377452876439-How-to-manage-Web-Application-Firewall-ModSecurity-on-Plesk-server-via-CLI).
+
+## AbuseIPDB und Turnstile
+
+Schluessel im Tab **Verwaltung & Diagnose** eingeben und Uebermittlung ausdruecklich erlauben. Die private Datei `/var/lib/guardian-lite/management/config.json` hat Modus 0600; Status und Diagnose geben keine Schluessel aus. Leere Formularfelder behalten gespeicherte Werte.
+
+AbuseIPDB fragt nur oeffentliche IPs ueber den festen CHECK-Endpunkt ab und prueft IP sowie Score der Antwort. Ergebnisse werden eine Stunde zwischengespeichert. Keine automatischen Meldungen, Reports oder IP-Sperren. API-Limits/Verbindungsfehler erzeugen einen Fehler, keinen vermeintlich sicheren Score.
+
+Turnstile wird pro Domain ueber einen markierten `.user.ini`-Eintrag `auto_prepend_file` eingebunden. Eine schon vorhandene Prepend-Konfiguration wird abgelehnt. Der Guard liegt ausserhalb des Document-Roots im Webspace, ist root-eigen und fuer die Website-Gruppe lesbar. Er schuetzt PHP-Anmeldepfade (`wp-login.php`, `xmlrpc.php`, `administrator/`, `login`) und verwendet:
+
+- HTTPS und PHP-cURL;
+- serverseitige Siteverify-Pruefung mit festem HTTPS-Endpunkt und ohne Redirects;
+- Pruefung von `success`, Hostname und Action;
+- zeitlich begrenzte, signierte Formularzustaende;
+- signierte, User-Agent-gebundene `__Host-guardian_clearance`-Cookies fuer 30 Minuten, Secure/HttpOnly/SameSite=Lax.
+
+Requests ohne gueltige Freigabe erreichen den geschuetzten PHP-Endpunkt nicht. Anmelde-POSTs werden nicht zwischengespeichert oder automatisch wiederholt. XML-RPC-Clients koennen blockiert werden. Fuer REST-/API-Ausnahmen gibt es in dieser Version keine freie Konfiguration.
+
+Der PHP-INI-Cache kann eine Aenderung bis zu fuenf Minuten verzoegern. Nach Deaktivierung bleibt die Guard-Datei fuer ausstehende INI-Caches erhalten. Eine geaenderte `.user.ini` wird nicht automatisch zurueckgesetzt; zuerst die lokale Aenderung pruefen. Aktive Bot-Pruefungen muessen deaktiviert werden, bevor Turnstile-Schluessel/Zustimmung geaendert werden koennen. Die Turnstile-Integration ersetzt keine serverweite WAF oder statischen Bot-/DDoS-Schutz.
+
+Referenzen: [AbuseIPDB CHECK](https://docs.abuseipdb.com/#check-endpoint), [Turnstile Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/).
+
+## Good-File-Reparatur
+
+Die Vertrauensquelle ist eine vom Administrator als sauber freigegebene Website, **kein** signiertes Herstellerpaket. ClamAV allein kann die saubere Herkunft nicht beweisen.
+
+1. Saubere Testwebsite aus bekannter Quelle bereitstellen und fehlerfreien Guardian-Vollscan ohne Funde ausfuehren.
+2. Innerhalb einer Stunde eine Baseline erstellen und die saubere Herkunft bestaetigen.
+3. Guardian speichert PHP-/Konfigurationsdateien root-privat mit SHA-256, Domain-/UID-/Document-Root-Zuordnung. Limits: 2 MiB pro Datei, 5000 Dateien, 64 MiB insgesamt, 20 aufbewahrte Baselines und mindestens 128 MiB freier Speicher. Dateien mit unpassenden Besitzern, Symlinks oder Aenderungen waehrend der Aufnahme werden abgelehnt.
+4. Automatische Reparatur separat pro Domain aktivieren. Sie arbeitet **nach abgeschlossenen Vollscans**, nicht unmittelbar auf Live-Dateiwache-Ereignissen.
+5. Nur passende, unveraenderte Malwarefunde mit bekanntem Baseline-Pfad werden ersetzt. Das Original bleibt in Quarantaene. Neue/unbekannte Dateien werden nicht automatisch geloescht.
+6. Manuelle Reparatur und Rollback stehen beim gewaehlten Scanbericht im Verwaltungstab zur Verfuegung. Rollback verweigert inzwischen geaenderte reparierte Dateien und tauscht das Original atomar zurueck. Dadurch kann Malware erneut aktiv werden.
+
+Nach CMS-Updates eine neue saubere Baseline erstellen. Eine neue Baseline deaktiviert vorher aktivierte automatische Reparaturen. Baselines sind durch private root-Rechte und Digests geschuetzt, nicht durch WORM-Speicher oder eine externe Signatur. Bei gleichzeitig schreibenden Websites bleiben Race-Conditions moeglich; abgelehnte Vorgaenge und erhaltene Quarantaene-Journale manuell pruefen. Ein voller Website-/Datenbank-Rollback ist nicht enthalten.
+
+## Diagnose und Testreihenfolge in Plesk
+
+1. ZIP installieren/aktualisieren und Guardian als direkter Administrator oeffnen. **Verwaltung & Diagnose** muss ohne Helferfehler laden.
+2. Fuer eine Testdomain **Diagnose ausfuehren**. Optional HTTPS-PHP-Probe aktivieren: Guardian legt kurz eine zufaellig benannte PHP-Datei an, ruft sie mit TLS-Pruefung ab und entfernt sie im Abschlussblock. Der Bericht prueft PHP-Version, geladenes Snuffleupagus, PHP-cURL und Prepend-Anzeige. Abstuerze/harte Prozessabbrueche koennen eine Testdatei zuruecklassen; sie enthaelt keine Geheimnisse.
+3. **Letztes Diagnoseergebnis als JSON herunterladen** und zur Auswertung weitergeben. Der Export enthaelt Domainnamen und Betriebsstatus, keine API-Schluessel oder vollstaendigen Konfigurationen.
+4. PHP-Backup → Installation → Simulation → echte Website-Requests → Blockieren → legitime Requests/absichtlich blockierte harmlose Testfunktion → Rollback testen.
+5. WAF-Vorschau → Nur protokollieren → Logs/HTTP pruefen → niedrigen Testschwellwert setzen → HTTP 429 pruefen → Deaktivieren/Rollback.
+6. AbuseIPDB-Abfrage mit eigenem Key pruefen. Turnstile fuer einen passend konfigurierten Testhost aktivieren, INI-Cache abwarten, Anmeldung ohne Cookie/mit gueltiger Challenge/mit manipuliertem Cookie testen und wieder deaktivieren.
+7. Baseline einer sauberen Testwebsite erstellen, eine Testdatei gezielt mit einer ClamAV-Testsignatur veraendern und Vollscan ausfuehren. Nur auf der Testdomain Reparatur, unbekannten Dateipfad und Rollback pruefen.
+8. Deinstallation pruefen: Guardian deaktiviert seine aktiven Policies und Dateiwachen. Falls fremde Aenderungen eine sichere Ruecknahme verhindern, wird die Deinstallation mit Fehler abgebrochen. Backups, Quarantaene, installierte Module und Build-Benutzer bleiben fuer Wiederherstellung erhalten.
+
+Automatisierte CI prueft bislang Python-/PHP-Logik, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits in einem isolierten Apache. Echte Plesk-Handler, Dienstnamen, Include-Pfade und externe Dienste mit Kundenschluesseln bleiben Gegenstand der obigen Betreiberpruefung.

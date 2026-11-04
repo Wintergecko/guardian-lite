@@ -23,12 +23,12 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.6.4</span></h1>
+      <h1>Guardian Lite <span>v0.7.0</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
   </header>
-  <div class="guardian-alert guardian-important">Beta-Version: Erst nach Snapshot auf Testsystem testen. ClamAV kann Malware uebersehen. Quarantaene entfernt Dateien aus der laufenden Website und kann sie beschaedigen. Keine automatische Bereinigung.</div>
+  <div class="guardian-alert guardian-important">Beta-Version: Erst nach Snapshot auf Testsystem testen. ClamAV kann Malware uebersehen. Quarantaene entfernt Dateien aus der laufenden Website und kann sie beschaedigen. Automatische Good-File-Reparatur nur nach separater Freigabe pro Domain.</div>
   <?php if ($this->helperError): ?>
     <div class="guardian-alert">Helfer nicht erreichbar: <?= $esc($this->helperError) ?></div>
   <?php endif; ?>
@@ -196,7 +196,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.6.4</h2>
+    <h2>GitHub-Updater · v0.7.0</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -277,7 +277,7 @@ $action = static function ($name) use ($esc) {
   </section>
   <section class="guardian-card guardian-lower" id="guardian-incidents">
     <h2>Echtzeit-Dateiwache &amp; Sicherheitsvorfaelle</h2>
-    <p>Linux inotify ueberwacht neue/geaenderte PHP- und Konfigurationsdateien nach ausdruecklicher Freigabe pro Domain. Bei Aenderungen kann ClamAV die Datei mit Website-Rechten pruefen. <strong>Keine automatische Dateiloeschung oder Reparatur.</strong></p>
+    <p>Linux inotify ueberwacht neue/geaenderte PHP- und Konfigurationsdateien nach ausdruecklicher Freigabe pro Domain. Bei Aenderungen kann ClamAV die Datei mit Website-Rechten pruefen. <strong>Live-Ereignisse veraendern keine Dateien. Good-File-Reparatur arbeitet separat nach Vollscan und Opt-in.</strong></p>
     <p class="guardian-alert">Beta: Maximal fuenf Domains und 450 Verzeichnisse je Domain. Bei Ereignis-Queue-Ueberlauf oder Limit muss ein Vollscan folgen. Vor Aktivierung auf Testdomain beginnen.</p>
     <h3>Domain-Ueberwachung</h3>
     <?php if (empty($this->domains)): ?><p>Keine Domains vorhanden.</p><?php endif; ?>
@@ -343,30 +343,31 @@ $action = static function ($name) use ($esc) {
           <li>Manuelle Quarantaene und Wiederherstellung nach Bestaetigung</li>
           <li>Fail2Ban-Status und manuelle IP-Aktionen</li>
           <li>ModSecurity-Loganzeige und periodische Datei-Metadatenpruefung</li>
-          <li>Manuelle GitHub-Release-Pruefung und Update-Vorbereitung</li>
+          <li>Manuelle GitHub-Release-Pruefung und bestaetigte Installation</li>
         </ul>
       </div>
       <div>
         <h3>Nur teilweise / manuell</h3>
         <ul>
-          <li>PHP-Laufzeitabwehr: Snuffleupagus-Regelvorlagen, keine automatische Aktivierung</li>
-          <li>HTTP-Bot-Schutz: ModSecurity-Rate-Limit-Vorlagen, nicht aktiv geschaltet</li>
+          <li>Snuffleupagus: Installation, Simulation, Aktivierung und PHP-Handler-Rollback im Tab Verwaltung</li>
+          <li>HTTP-Botlimits: Guardian-Regeln mit Vorschau, Syntaxpruefung und Rollback; pro Ziel-Domain aktivierbar</li>
           <li>GitHub-Updater: oeffentliche Releases; Installation nur nach Admin-Bestaetigung</li>
-          <li>WAF: Log-Auswertung, keine automatische Regelverwaltung</li>
+          <li>WAF-Modus und Guardian-Regeln verwaltbar; bestehende Drittanbieter-Regeln werden nicht bearbeitet</li>
         </ul>
       </div>
       <div>
-        <h3>Noch nicht umgesetzt</h3>
+        <h3>Grenzen und offene Praxistests</h3>
         <ul>
-          <li>Automatische Malware-Reparatur mit verifizierten Good-File-Backups und sicherem Rollback</li>
-          <li>PHP-Laufzeitschutz: Konfigurationserkennung und Regelvorlage vorhanden; produktive Handler-Aktivierung/Rollback noch nicht getestet</li>
-          <li>Bot-Challenges und Cloud-Reputation: benoetigen getestete Proxy-/WAF-Integration und Drittanbieter-Zustimmung</li>
+          <li>Automatische Reparatur aus admin-freigegebenen Baselines implementiert; Hersteller-signierte CMS-Originaldateien fehlen noch</li>
+          <li>PHP-/WAF-Verwaltung implementiert; echte Plesk-Requests und distributionsspezifische Rollouts noch auf deinem Testserver pruefen</li>
+          <li>Turnstile-PHP-Anmeldeschutz und AbuseIPDB-Abfrage implementiert; benoetigen eigene Schluessel, Zustimmung und Plesk-Praxistest</li>
           <li>Automatisierte Linux-Testmatrix vorhanden; echte Plesk-Integrationstests auf mehreren Distributionen noch offen</li>
         </ul>
       </div>
     </div>
     <p class="guardian-small">Volumetrische DDoS-Abwehr muss beim Provider oder vorgelagerten DDoS-/CDN-Dienst erfolgen.</p>
   </section>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.6.4" defer></script>
-  <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie oder automatische Bereinigung.</footer>
+  <?php include __DIR__ . '/management.phtml'; ?>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.7.0" defer></script>
+  <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

@@ -1,1 +1,1 @@
-Guardian Lite: Plesk Security Dashboard mit Opt-in-Live-Dateiwache, Incident-Log, E-Mail-Warnungen, ClamAV, Fail2Ban und GitHub-Updater. Beta; automatische Malware-Reparatur und Cloud-Reputation noch nicht enthalten.
+Guardian Lite: Plesk Security mit ClamAV, Dateiwache, Incidents, PHP-/WAF-Verwaltung, opt-in Good-File-Reparatur, AbuseIPDB, Turnstile und Diagnoseexport. Beta; aktive Policies separat freigeben und auf dem Testserver pruefen.

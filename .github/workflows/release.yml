@@ -20,13 +20,15 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install PHP CLI
-        run: sudo apt-get update && sudo apt-get install -y php-cli
+        run: sudo apt-get update && sudo apt-get install -y php-cli php-curl apache2 libapache2-mod-security2
       - name: Check PHP syntax
         run: |
-          find htdocs plib -name '*.php' -print0 | xargs -0 -n1 php -l
+          find htdocs plib sbin -name '*.php' -print0 | xargs -0 -n1 php -l
           find plib -name '*.phtml' -print0 | xargs -0 -n1 php -l
       - name: PHP scan controller smoke test
         run: php tests/php_scan_controller_smoke.php
+      - name: Management controller and template smoke test
+        run: php tests/php_management_smoke.php
       - name: Python tests
         run: sudo "$(command -v python3)" -m unittest discover -s tests -v
       - name: Plesk updater controller smoke test
