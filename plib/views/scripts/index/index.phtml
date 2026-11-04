@@ -195,9 +195,9 @@ $action = static function ($name) use ($esc) {
        Eine GitHub-Pruefsumme ist <strong>keine unabhaengige digitale Signatur</strong>. Bei kompromittiertem Repository ist auch das Update gefaehrdet.</p>
     <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'update-repo'])) ?>">
       <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
-      <label for="guardian-update-repo">Vertrauenswuerdiges GitHub-Repository (owner/repo)</label>
+      <label for="guardian-update-repo">GitHub-Repository (URL oder owner/repo)</label>
       <div class="guardian-formline">
-        <input id="guardian-update-repo" name="repo" type="text" value="<?= $esc($this->updateRepo) ?>" maxlength="140" placeholder="benutzername/guardian-lite" />
+        <input id="guardian-update-repo" name="repo" type="text" value="<?= $esc($this->updateRepo) ?>" maxlength="200" placeholder="https://github.com/Wintergecko/guardian-lite" />
         <button type="submit">Speichern</button>
       </div>
     </form>
@@ -233,7 +233,7 @@ $action = static function ($name) use ($esc) {
       <?php if (!empty($updateState['error'])): ?><p class="guardian-alert"><?= $esc($updateState['error']) ?></p><?php endif; ?>
     <?php endif; ?>
     <?php if ($this->updateError): ?><p class="guardian-alert">Update-Status nicht abrufbar: <?= $esc($this->updateError) ?></p><?php endif; ?>
-    <p class="guardian-small">Fuer den Updater ist keine Verbindung deines GitHub-Kontos mit Plesk erforderlich. Er liest ausschliesslich oeffentliche Releases. Private Repositories werden nicht unterstuetzt.</p>
+    <p class="guardian-small">Fuer den Updater ist keine Verbindung deines GitHub-Kontos mit Plesk erforderlich. Er liest ausschliesslich oeffentliche Releases. Das Repository kann gespeichert werden, aber Update-Pruefungen funktionieren nur bei oeffentlichen Releases; private Repositories werden noch nicht unterstuetzt.</p>
   </section>
   <section class="guardian-card guardian-lower">
     <h2>Dateiaenderungen (zeitversetzte Erkennung)</h2>
