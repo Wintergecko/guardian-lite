@@ -1939,20 +1939,26 @@ def cms_database_clamav_audit(domain, cms):
 
     def read_scan_output(source):
         read_total = 0
-        while True:
-            line = source.readline(4096)
-            if not line:
-                break
-            read_total += len(line)
-            if read_total > WP_DB_SIGNATURE_MAX_OUTPUT:
-                state['output_truncated'] = True
-                continue
-            text_line = line.decode('utf-8', 'replace').strip()
-            match = WP_DB_SIGNATURE_HIT.fullmatch(text_line)
-            if match and len(state['findings']) < WP_DB_SIGNATURE_MAX_HITS:
-                state['findings'].append({'signature': match.group(1), 'rule': 'clamav-database-signature'})
-            elif match:
-                state['output_truncated'] = True
+        try:
+            while True:
+                line = source.readline(4096)
+                if not line:
+                    break
+                read_total += len(line)
+                if read_total > WP_DB_SIGNATURE_MAX_OUTPUT:
+                    state['output_truncated'] = True
+                    continue
+                text_line = line.decode('utf-8', 'replace').strip()
+                match = WP_DB_SIGNATURE_HIT.fullmatch(text_line)
+                if match and len(state['findings']) < WP_DB_SIGNATURE_MAX_HITS:
+                    state['findings'].append({'signature': match.group(1), 'rule': 'clamav-database-signature'})
+                elif match:
+                    state['output_truncated'] = True
+        finally:
+            try:
+                source.close()
+            except OSError:
+                pass
 
     try:
         with tempfile.TemporaryDirectory(prefix='guardian-cms-db-clamav-') as home:

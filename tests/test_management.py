@@ -467,7 +467,7 @@ class ManagementTests(unittest.TestCase):
             b'<?php class JConfig { public $host = "localhost"; public $user = "u"; '
             b'// public $password = "stale-commented-value";\n'
             b'public $password = getenv("DB_PASSWORD"); public $db = "joomla_db"; }')
-        with self.assertRaisesRegex(ValueError, 'statischen Literalen'):
+        with self.assertRaisesRegex(ValueError, 'statische Literale'):
             m.static_joomla_database_config(config, self.web)
 
     def test_magento_database_config_parses_literal_return_array_without_execution(self):
