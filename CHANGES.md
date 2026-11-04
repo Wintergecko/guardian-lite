@@ -1,3 +1,10 @@
+## 0.5.1 – GitHub-Updater Release-Pipeline repariert
+
+- GitHub Actions testet die root-gebundenen Helper-Funktionen mit Root-Rechten auf isolierten Runnern.
+- Python-3.11-kompatibles Path-Mocking im PHP-Runtime-Test.
+- Release-Workflow baut erst nach bestandenen Tests eine installierbare ZIP-Datei mit SHA-256.
+- Keine automatischen Änderungen am Schutzstatus, WAF, PHP oder Firewall.
+
 ## 0.5.0 – Uebersichtliche Plesk-Tabs und Feature-Liste
 
 - Fuenf Bereiche: Uebersicht, Malware & Dateien, Angriffe & Schutz, Updates, Feature-Liste.

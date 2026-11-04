@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.5.0';
+    private const GUARDIAN_VERSION = '0.5.1';
 
     public function init()
     {

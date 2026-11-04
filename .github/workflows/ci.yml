@@ -21,6 +21,6 @@ jobs:
           find htdocs plib -name '*.php' -print0 | xargs -0 -n1 php -l
           find plib -name '*.phtml' -print0 | xargs -0 -n1 php -l
       - name: Python tests
-        run: python3 -m unittest discover -s tests -v
+        run: sudo "$(command -v python3)" -m unittest discover -s tests -v
       - name: Build ZIP
         run: python3 tools/build_release.py

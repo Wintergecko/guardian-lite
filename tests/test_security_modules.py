@@ -19,7 +19,7 @@ class SecurityModulesTest(unittest.TestCase):
             ini = handlers / '8.3/etc/php.ini'
             ini.parent.mkdir(parents=True)
             ini.write_text(';extension=snuffleupagus.so\n;sp.configuration_file=/tmp/no.rules\n')
-            original_path = helper.pathlib.Path
+            original_path = pathlib.PosixPath
             with mock.patch.object(helper.pathlib, 'Path', side_effect=lambda p: original_path(tmp) if p == '/opt/plesk/php' else original_path(p)):
                 result = helper.php_runtime_status()
             self.assertFalse(result['confirmed'])
