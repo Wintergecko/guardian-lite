@@ -192,11 +192,11 @@ $domainSelect = function () use ($esc) {
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="wp-db-scan"><?php $domainSelect(); ?><button>WordPress-Datenbank pruefen</button>
   </form>
   <pre><?= $esc(json_encode($management['wordpress_db_scans'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
-  <p>Optional kann ClamAV ausserdem einen vollstaendigen WordPress-SQL-Export gegen lokale ClamAV-Signaturen pruefen. Der Export wird direkt durch eine Pipe geleitet, nicht als Klartextdatei gespeichert. Ueber 512 MiB, Exportfehler, Zeitueberschreitung oder fehlende Signaturen ergeben keinen sauberen Befund. Das ist kein Imunify-MDS-Ersatz; es gibt keine Bereinigung oder Datenbankaenderung.</p>
+  <p>Optional kann ClamAV einen vollstaendigen WordPress-, Joomla- oder Magento-SQL-Export gegen lokale ClamAV-Signaturen pruefen. Guardian erkennt das CMS im Document-Root und liest ausschliesslich statische Datenbankwerte; PHP-Konfigurationen werden nie ausgefuehrt. Der Export wird direkt durch eine Pipe geleitet, nicht als Klartextdatei gespeichert. Ueber 512 MiB, Exportfehler, Zeitueberschreitung oder fehlende Signaturen ergeben keinen sauberen Befund. Das ist kein Imunify-MDS-Ersatz; es gibt keine Bereinigung oder Datenbankaenderung. Dynamische Konfigurationen und andere Datenbanktreiber werden als nicht unterstuetzt abgelehnt.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
-    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="wp-db-clamav-scan"><?php $domainSelect(); ?><button>WordPress-Datenbank mit ClamAV pruefen</button>
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cms-db-clamav-scan"><?php $domainSelect(); ?><button>CMS-Datenbank mit ClamAV pruefen</button>
   </form>
-  <pre><?= $esc(json_encode($management['wordpress_db_clamav_scans'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <pre><?= $esc(json_encode($management['cms_db_clamav_scans'] ?? $management['wordpress_db_clamav_scans'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
   <h3>Diagnose fuer deinen Plesk-Test</h3>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="diagnostics"><?php $domainSelect(); ?>

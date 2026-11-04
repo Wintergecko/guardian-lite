@@ -448,6 +448,90 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(result['status'], 'partial')
         self.assertIn('Datenbankexport', result['error'])
 
+    def test_joomla_database_config_reads_only_static_literal_properties(self):
+        config = self.write_site(
+            'configuration.php',
+            b'<?php class JConfig { public $dbtype = "mysqli"; public $host = "127.0.0.1"; '
+            b'public $user = "joomla_user"; public $password = "p\\"ass"; '
+            b'public $db = "joomla_db"; public $dbprefix = "jml_"; }')
+        parsed = m.static_joomla_database_config(config, self.web)
+        self.assertEqual(parsed['host'], '127.0.0.1')
+        self.assertEqual(parsed['user'], 'joomla_user')
+        self.assertEqual(parsed['password'], 'p"ass')
+        self.assertEqual(parsed['db'], 'joomla_db')
+        self.assertEqual(parsed['prefix'], 'jml_')
+
+    def test_joomla_database_config_rejects_dynamic_credentials(self):
+        config = self.write_site(
+            'configuration.php',
+            b'<?php class JConfig { public $host = "localhost"; public $user = "u"; '
+            b'// public $password = "stale-commented-value";\n'
+            b'public $password = getenv("DB_PASSWORD"); public $db = "joomla_db"; }')
+        with self.assertRaisesRegex(ValueError, 'statischen Literalen'):
+            m.static_joomla_database_config(config, self.web)
+
+    def test_magento_database_config_parses_literal_return_array_without_execution(self):
+        config = self.write_site(
+            'app/etc/env.php',
+            b"<?php return ['db' => ['table_prefix' => 'mg_', 'connection' => ['default' => "
+            b"['host' => 'localhost', 'dbname' => 'shop', 'username' => 'shop_user', "
+            b"'password' => 'secret', 'port' => 3307]]]];")
+        parsed = m.magento_database_config(config, self.web)
+        self.assertEqual(parsed, {'host': 'localhost', 'user': 'shop_user', 'password': 'secret',
+                                  'db': 'shop', 'prefix': 'mg_', 'port': 3307})
+
+    def test_magento_database_config_rejects_php_expressions(self):
+        config = self.write_site(
+            'app/etc/env.php',
+            b"<?php return ['db' => ['connection' => ['default' => "
+            b"['host' => 'localhost', 'dbname' => 'shop', 'username' => 'u', "
+            b"'password' => getenv('DB_PASSWORD')]]]];")
+        with self.assertRaisesRegex(ValueError, 'Dynamischer PHP-Konfigurationswert'):
+            m.magento_database_config(config, self.web)
+
+    def test_joomla_clamav_export_uses_private_option_file_and_stream(self):
+        self.write_site(
+            'configuration.php',
+            b'<?php class JConfig { public $dbtype = "mysqli"; public $host = "localhost"; '
+            b'public $user = "joomla_user"; public $password = "test-secret"; '
+            b'public $db = "joomla_db"; }')
+        temporary = tempfile.TemporaryDirectory(prefix='guardian-cms-db-test-', dir='/var/lib')
+        self.addCleanup(temporary.cleanup)
+        folder = pathlib.Path(temporary.name)
+        os.chmod(folder, 0o755)
+        dump = folder / 'mysqldump'
+        observed = folder / 'observed-option-path'
+        observed.touch()
+        os.chmod(observed, 0o666)
+        dump.write_text(
+            '#!/bin/sh\n'
+            '[ "$(id -u)" = "65534" ] || exit 42\n'
+            'case "$1" in --defaults-extra-file=*) option=$(echo "$1" | cut -d= -f2-);; *) exit 43;; esac\n'
+            'printf %s "$option" > ' + shlex.quote(str(observed)) + '\n'
+            '[ "$(stat -c %a "$option")" = "600" ] || exit 44\n'
+            'grep -Fq test-secret "$option" || exit 45\n'
+            'case " $* " in *test-secret*) exit 46;; esac\n'
+            'printf "CREATE TABLE jml_content (id INT);"\n')
+        os.chmod(dump, 0o755)
+        clam = folder / 'clamscan'
+        clam.write_text('#!/bin/sh\n[ "$(id -u)" = "65534" ] || exit 42\ncat >/dev/null\nexit 0\n')
+        os.chmod(clam, 0o755)
+
+        def which(paths):
+            if paths == ('/usr/bin/mysqldump', '/usr/bin/mariadb-dump', '/bin/mysqldump'):
+                return str(dump)
+            if paths == m.h.CLAM_PATHS:
+                return str(clam)
+            return None
+
+        with mock.patch.object(m.h, 'binary', side_effect=which):
+            result = m.cms_database_clamav_audit('example.com', 'joomla')
+        self.assertEqual(result['cms'], 'joomla')
+        self.assertEqual(result['status'], 'no_signatures')
+        self.assertNotIn('test-secret', json.dumps(result))
+        self.assertTrue(observed.exists())
+        self.assertFalse(pathlib.Path(observed.read_text()).exists())
+
     def test_repair_preserves_original_and_rollback_refuses_user_changes(self):
         self.write_site('index.php', b'GOOD')
         os.chmod(self.web / 'index.php', 0o600)

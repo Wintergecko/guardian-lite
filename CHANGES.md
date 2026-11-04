@@ -1,3 +1,12 @@
+## 0.21.0 – Joomla- und Magento-Datenbank-Streamscan
+
+- ClamAV-Datenbankscan erkennt WordPress, Joomla oder Magento im Plesk-Document-Root.
+- Joomla-configuration.php und Magento-app/etc/env.php werden als begrenzte statische Konfiguration gelesen; Guardian fuehrt PHP-Konfiguration nicht aus und lehnt dynamische Werte ab.
+- Joomla/Magento-Exporte laufen ueber ein root-eigenes mysqldump/mariadb-dump als Website-Benutzer. Zugangsdaten stehen nur in einer kurzlebigen 0600-Clientdatei in einem privaten Temp-Verzeichnis und nie in Argumenten oder Berichten.
+- SQL fliesst ohne Dumpdatei direkt in ClamAV. 512-MiB-/5-Minuten-Grenzen, Teilstatus bei Fehlern, begrenzte Signaturausgabe und keine Datenbankaenderungen bleiben erhalten.
+- Lokale ClamAV-Signaturen ersetzen weder Imunify-MDS-Erkennung noch Datenbankbereinigung/CSV-Restore. Dynamische Konfigurationen und andere Datenbanktreiber bleiben nicht unterstuetzt.
+- Regressionstests fuer statische Joomla-/Magento-Konfigurationen, dynamische PHP-Ausdruecke und private Credential-Weitergabe.
+
 ## 0.20.0 – WordPress-Datenbankscan mit ClamAV
 
 - Optionale separate Aktion exportiert die WordPress-Datenbank ueber WP-CLI und leitet den Inhalt ohne temporaere Dumpdatei durch lokale ClamAV-Signaturen.
