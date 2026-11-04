@@ -15,10 +15,12 @@ import pathlib
 import pwd
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.parse
 import urllib.error
@@ -42,6 +44,11 @@ STORAGE_CACHE_TTL = 15
 WP_DB_SCAN_MAX_FINDINGS = 100
 WP_DB_SCAN_MAX_OUTPUT = 2 * 1024 * 1024
 WP_DB_SCAN_TIMEOUT = 300
+WP_DB_SIGNATURE_TIMEOUT = 300
+WP_DB_SIGNATURE_MAX_BYTES = 512 * 1024 * 1024
+WP_DB_SIGNATURE_MAX_OUTPUT = 64 * 1024
+WP_DB_SIGNATURE_MAX_HITS = 100
+WP_DB_SIGNATURE_HIT = re.compile(r'^stdin:\s+([A-Za-z0-9_.:+-]{1,128})\s+FOUND\s*$')
 WP_DB_SCAN_TABLES = {
     'posts': ('ID', ('post_content', 'post_excerpt')),
     'postmeta': ('meta_id', ('meta_value',)),
@@ -1472,6 +1479,191 @@ def wordpress_database_audit(domain):
     return report
 
 
+def wordpress_database_clamav_store(report):
+    path = root() / 'wordpress-db-clamav.json'
+    state = h.read_json(path, {'reports': {}})
+    reports = state.get('reports', {}) if isinstance(state, dict) else {}
+    if not isinstance(reports, dict):
+        reports = {}
+    reports[report['domain']] = report
+    if len(reports) > 20:
+        keep = sorted(reports, key=lambda key: reports[key].get('checked_at', ''), reverse=True)[:20]
+        reports = {key: reports[key] for key in keep}
+    h.write_json(path, {'reports': reports})
+
+
+def wordpress_database_clamav_audit(domain):
+    """Stream a site's SQL export through ClamAV without persisting the database dump."""
+    docroot, uid, gid, wp_cli = wordpress_cli_context(domain)
+    clam = h.binary(h.CLAM_PATHS)
+    if not clam:
+        raise ValueError('ClamAV fehlt. Fuer den Datenbank-Signaturscan clamscan installieren.')
+    scanner = pathlib.Path(clam).resolve(strict=True)
+    scanner_info = scanner.stat()
+    if (not stat.S_ISREG(scanner_info.st_mode) or scanner_info.st_uid != 0 or
+            scanner_info.st_mode & 0o022 or not os.access(scanner, os.X_OK)):
+        raise ValueError('ClamAV muss eine root-eigene, nicht gruppen-/weltbeschreibbare Systemdatei sein.')
+    parent = scanner.parent
+    while parent != parent.parent:
+        parent_info = parent.stat()
+        if not stat.S_ISDIR(parent_info.st_mode) or parent_info.st_uid != 0 or parent_info.st_mode & 0o022:
+            raise ValueError('ClamAV-Verzeichnisse muessen root-eigen und nicht gruppen-/weltbeschreibbar sein.')
+        parent = parent.parent
+
+    state = {'bytes': 0, 'truncated': False, 'pipe_error': False,
+             'output_truncated': False, 'findings': []}
+    producer = None
+    scan = None
+    threads = []
+    error = ''
+    timed_out = False
+    deadline = time.monotonic() + WP_DB_SIGNATURE_TIMEOUT
+
+    def kill_group(process):
+        if process is None or process.poll() is not None:
+            return
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            try:
+                process.kill()
+            except OSError:
+                pass
+
+    def pump_dump(source, target):
+        try:
+            while True:
+                chunk = source.read(64 * 1024)
+                if not chunk:
+                    break
+                room = WP_DB_SIGNATURE_MAX_BYTES - state['bytes']
+                if len(chunk) > room:
+                    if room > 0:
+                        target.write(chunk[:room])
+                        state['bytes'] += room
+                    state['truncated'] = True
+                    kill_group(producer)
+                    break
+                target.write(chunk)
+                state['bytes'] += len(chunk)
+        except (BrokenPipeError, OSError, ValueError):
+            state['pipe_error'] = True
+            kill_group(producer)
+        finally:
+            try:
+                source.close()
+            except OSError:
+                pass
+            try:
+                target.close()
+            except OSError:
+                pass
+
+    def read_scan_output(source):
+        read_total = 0
+        while True:
+            line = source.readline(4096)
+            if not line:
+                break
+            read_total += len(line)
+            if read_total > WP_DB_SIGNATURE_MAX_OUTPUT:
+                state['output_truncated'] = True
+                continue
+            text_line = line.decode('utf-8', 'replace').strip()
+            match = WP_DB_SIGNATURE_HIT.fullmatch(text_line)
+            if match and len(state['findings']) < WP_DB_SIGNATURE_MAX_HITS:
+                state['findings'].append({'signature': match.group(1), 'rule': 'clamav-database-signature'})
+            elif match:
+                state['output_truncated'] = True
+
+    try:
+        with tempfile.TemporaryDirectory(prefix='guardian-wp-db-clamav-') as home:
+            os.chown(home, uid, gid)
+            os.chmod(home, 0o700)
+            env = {'PATH': '/usr/bin:/bin', 'HOME': home, 'LANG': 'C', 'TERM': 'dumb',
+                   'WP_CLI_CONFIG_PATH': str(pathlib.Path(home) / 'config.yml'),
+                   'WP_CLI_PACKAGES_DIR': str(pathlib.Path(home) / 'packages'),
+                   'WP_CLI_CACHE_DIR': str(pathlib.Path(home) / 'cache'),
+                   'WP_CLI_DISABLE_AUTO_CHECK_UPDATE': '1'}
+            wp_args = [str(wp_cli), '--path=' + str(docroot), '--url=https://' + domain,
+                       '--skip-plugins', '--skip-themes', '--skip-packages', '--no-color', '--quiet',
+                       'db', 'export', '-']
+            clam_args = [str(scanner), '--infected', '--no-summary',
+                         '--max-filesize=%d' % WP_DB_SIGNATURE_MAX_BYTES,
+                         '--max-scansize=%d' % WP_DB_SIGNATURE_MAX_BYTES, '-']
+            producer = subprocess.Popen(wp_args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True,
+                                        cwd='/', env=env,
+                                        preexec_fn=lambda: h.drop_privileges(uid, gid, cpu_limit=120))
+            try:
+                scan = subprocess.Popen(clam_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True,
+                                        cwd='/', env={'PATH': '/usr/bin:/bin', 'LANG': 'C'},
+                                        preexec_fn=lambda: h.drop_privileges(uid, gid, cpu_limit=120))
+            except OSError:
+                kill_group(producer)
+                producer.wait()
+                raise
+            pump_thread = threading.Thread(target=pump_dump, args=(producer.stdout, scan.stdin), daemon=True)
+            output_thread = threading.Thread(target=read_scan_output, args=(scan.stdout,), daemon=True)
+            threads = [pump_thread, output_thread]
+            for thread in threads:
+                thread.start()
+            while producer.poll() is None or scan.poll() is None:
+                if time.monotonic() >= deadline:
+                    timed_out = True
+                    kill_group(producer)
+                    kill_group(scan)
+                    break
+                time.sleep(0.05)
+            producer_rc = producer.wait(timeout=5)
+            scan_rc = scan.wait(timeout=5)
+            for thread in threads:
+                thread.join(timeout=5)
+            if any(thread.is_alive() for thread in threads):
+                timed_out = True
+            if producer_rc != 0:
+                error = 'WordPress-Datenbankexport konnte nicht vollstaendig gelesen werden.'
+            elif scan_rc not in (0, 1):
+                error = 'ClamAV konnte den Datenbankexport nicht vollstaendig pruefen.'
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        error = str(exc)[:180]
+        if producer is not None:
+            kill_group(producer)
+        if scan is not None:
+            kill_group(scan)
+        for process in (producer, scan):
+            if process is not None:
+                try:
+                    process.wait(timeout=5)
+                except (OSError, subprocess.SubprocessError):
+                    pass
+
+    if scan is not None and scan.returncode == 1 and not state['findings']:
+        state['findings'].append({'signature': 'unparsed-clamav-match', 'rule': 'clamav-database-signature'})
+    if timed_out or state['truncated'] or state['pipe_error'] or state['output_truncated'] or error:
+        status = 'partial'
+    elif scan.returncode == 1 and state['findings']:
+        status = 'found'
+    elif scan.returncode == 0:
+        status = 'no_signatures'
+    else:
+        status = 'error'
+    report = {'domain': domain, 'checked_at': h.utc_now(), 'status': status,
+              'bytes_scanned': state['bytes'], 'finding_count': len(state['findings']),
+              'findings': state['findings'], 'truncated': bool(timed_out or state['truncated'] or
+              state['pipe_error'] or state['output_truncated']),
+              'note': 'ClamAV-Signaturscan eines direkt gestreamten WordPress-SQL-Exports. Kein Dump wird auf Platte gespeichert. Kein MDS-/Cloud-Signaturnachweis; keine Datenbank wird geaendert.'}
+    if error:
+        report['error'] = error
+    wordpress_database_clamav_store(report)
+    if state['findings']:
+        h.incident_log('cms_database_indicators', 'warning', domain,
+                       '%d ClamAV-Signaturtreffer im WordPress-Datenbankexport; manuelle Pruefung erforderlich.' %
+                       len(state['findings']))
+    return report
+
+
 def wordpress_core_checksum_audit(domain):
     return wordpress_checksum_audit(domain, 'core')
 
@@ -1495,7 +1687,7 @@ def wordpress_theme_fetch(url, max_bytes):
     parts = urllib.parse.urlsplit(url)
     if not allowed_target(url) or parts.fragment:
         raise ValueError('Theme-Pruefung akzeptiert nur HTTPS von WordPress.org.')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.19.0 theme-integrity'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.20.0 theme-integrity'})
     class AllowedRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not allowed_target(newurl):
@@ -1839,6 +2031,10 @@ def public_status():
     db_scan_reports = db_scan_state.get('reports', {}) if isinstance(db_scan_state, dict) else {}
     if not isinstance(db_scan_reports, dict):
         db_scan_reports = {}
+    db_clamav_state = h.read_json(root() / 'wordpress-db-clamav.json', {'reports': {}})
+    db_clamav_reports = db_clamav_state.get('reports', {}) if isinstance(db_clamav_state, dict) else {}
+    if not isinstance(db_clamav_reports, dict):
+        db_clamav_reports = {}
     theme_checksum_state = h.read_json(root() / 'wordpress-theme-checksum.json', {})
     theme_checksum_reports = (theme_checksum_state.get('reports', {})
                               if isinstance(theme_checksum_state, dict) else {})
@@ -1860,6 +2056,7 @@ def public_status():
             'wordpress_plugin_checksum': h.read_json(root() / 'wordpress-plugin-checksum.json', {}),
             'wordpress_theme_checksum': theme_checksum_reports,
             'wordpress_db_scans': db_scan_reports,
+            'wordpress_db_clamav_scans': db_clamav_reports,
             'jobs': [h.read_json(p, {}) for p in sorted((root() / 'jobs').glob('*.json'),
                      key=lambda x: x.stat().st_mtime, reverse=True)[:10]],
             'reputation': list(h.read_json(root() / 'reputation.json', {}).values())[-20:]}
@@ -2027,6 +2224,8 @@ def dispatch(request):
             return wordpress_theme_checksum_audit(request.get('domain', ''))
         if action == 'wp-db-scan':
             return wordpress_database_audit(request.get('domain', ''))
+        if action == 'wp-db-clamav-scan':
+            return wordpress_database_clamav_audit(request.get('domain', ''))
         raise ValueError('Unbekannte Verwaltungsaktion.')
 
 
