@@ -17,6 +17,8 @@ Unter **Verwaltung & Diagnose** werden unterstuetzte Plesk-PHP-Handler 8.0–8.5
 
 Die Policy betrifft `system`, `shell_exec`, `passthru`, `exec`, `proc_open` und `popen`. Blockieren kann legitime CMS-/Backup-Funktionen beeintraechtigen. CLI-Proben und FPM-Syntaxtests beweisen noch keine Wirksamkeit unter echten Webrequests. System-PHP, Apache-PHP und herstellerspezifische TuxCare-Handler werden nicht automatisch verwaltet. Fuer CGI-/FastCGI-Handler ohne passenden FPM-Dienst scheitert die Aktivierung und wird zurueckgenommen.
 
+Fehlende Build-Werkzeuge werden je Handler in der Oberflaeche angezeigt. Beispiel fuer PHP 8.3 auf Debian/Ubuntu, vom Betreiber als root auszufuehren: `apt install plesk-php83-dev git gcc make autoconf`. Fuer andere Handler das passende Entwicklungs-Paket verwenden. [Plesk dokumentiert die handler-spezifischen Entwicklerpakete](https://support.plesk.com/hc/en-us/articles/12377651968023-How-to-install-uninstall-memcached-PHP-extension-for-Plesk-PHP-handlers).
+
 Referenzen: [Snuffleupagus-Installation](https://snuffleupagus.readthedocs.io/installation.html), [Konfiguration und Simulation](https://snuffleupagus.readthedocs.io/config.html).
 
 ## WAF und HTTP-Botlimits
@@ -29,7 +31,7 @@ Guardian verwaltet ausschliesslich `zz-guardian.conf` in einem unterstuetzten Ap
 - **Deaktivieren** entfernt die aktiven Guardian-Regeln aus der eigenen Datei.
 - **WAF-Rollback** stellt ein Guardian-Backup nach Fingerprint-Pruefung wieder her.
 
-Apache muss ModSecurity v2 geladen haben und ein vorhandenes `SecDataDir` verwenden. Guardian prueft Syntax und tatsaechliche Einbindung, bevor Apache neu geladen wird. Die Plesk-WAF muss fuer wirksames Blockieren eingeschaltet sein. Der Domain-WAF-Modus wird ueber die dokumentierte Plesk-CLI gesetzt.
+Apache muss ModSecurity v2 und `mod_unique_id` geladen haben und ein vorhandenes `SecDataDir` verwenden. Guardian prueft Syntax und tatsaechliche Einbindung, bevor Apache neu geladen wird. Die Plesk-WAF muss fuer wirksames Blockieren eingeschaltet sein. Der Domain-WAF-Modus wird ueber die dokumentierte Plesk-CLI gesetzt.
 
 Hinter CDN/Reverse-Proxy muss die vertrauenswuerdige Real-IP-Konfiguration bereits stimmen. Guardian interpretiert keine ungeprueften Forwarded-Header. NAT-Nutzer teilen sich ein Limit. Andere Aliase als der gewaehlte Hostname, statische NGINX-Antworten und volumetrische DDoS-Angriffe koennen ausserhalb dieser Apache-Regeln liegen.
 

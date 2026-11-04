@@ -74,11 +74,13 @@ class ManagementTests(unittest.TestCase):
 
     def test_repair_preserves_original_and_rollback_refuses_user_changes(self):
         self.write_site('index.php', b'GOOD')
+        os.chmod(self.web / 'index.php', 0o600)
         self.clean_report()
         m.baseline('example.com', True)
         report = self.malware_report()
         m.repair_one(report['id'], 0)
         self.assertEqual((self.web / 'index.php').read_bytes(), b'GOOD')
+        self.assertEqual((self.web / 'index.php').stat().st_mode & 0o777, 0o600)
         finding = m.h.load_job(report['id'])['findings'][0]
         self.assertEqual((m.h.ROOT / 'quarantine' / finding['quarantine_id']).read_bytes(), b'BAD')
         self.write_site('index.php', b'USER_UPDATE')

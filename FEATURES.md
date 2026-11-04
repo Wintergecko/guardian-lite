@@ -18,3 +18,5 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Niedrig | Benachrichtigungen/Webhooks | Ereignisse in vorhandene Betriebswerkzeuge integrieren; Geheimnisse und Zielhosts strikt begrenzen |
 
 Fuer die naechste Runde sind Hersteller-Pruefsummen, Allowlist/Notfallzugang und Snapshot-Verwaltung am wertvollsten. Sie verbessern Vertrauen und Bedienbarkeit der nun vorhandenen aktiven Funktionen.
+
+Technische Grundlage fuer Hersteller-Pruefsummen: [WP-CLI core verify-checksums](https://developer.wordpress.org/cli/commands/core/verify-checksums/) vergleicht WordPress-Core-Dateien mit WordPress.org-Pruefsummen, ohne WordPress dafuer zu laden. Premium-Erweiterungen und angepasste Dateien benoetigen eigene Vertrauensquellen.

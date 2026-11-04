@@ -29,7 +29,7 @@ $domainSelect = function () use ($esc) {
   <p>Installation baut Snuffleupagus 0.14.0 aus einem festgelegten Upstream-Commit als unprivilegierter Benutzer. Benoetigt passende Plesk-PHP-Entwicklungswerkzeuge, git, gcc, make und autoconf. Aktivierung sichert php.ini, prueft PHP/FPM und laedt FPM neu. Zuerst Simulation verwenden.</p>
   <div class="guardian-scroll"><table><thead><tr><th>Handler</th><th>Modul</th><th>Aktionen</th></tr></thead><tbody>
   <?php foreach ($management['handlers'] ?? [] as $handler): ?>
-    <tr><td>PHP <?= $esc($handler['version']) ?></td><td><?= !empty($handler['module']) ? 'Installiert' : 'Fehlt' ?> · <?= !empty($handler['managed']) ? 'Guardian konfiguriert' : 'Nicht konfiguriert' ?></td><td>
+    <tr><td>PHP <?= $esc($handler['version']) ?></td><td><?= !empty($handler['module']) ? 'Installiert' : 'Fehlt' ?> · <?= !empty($handler['managed']) ? 'Guardian konfiguriert' : 'Nicht konfiguriert' ?><?php if (!empty($handler['build_missing'])): ?><br>Build-Voraussetzungen fehlen: <?= $esc(implode(', ', $handler['build_missing'])) ?><?php endif; ?></td><td>
       <?php $fields = ['version' => $handler['version'], 'sha256' => $handler['sha256']];
         $form('php-backup', $fields, 'Backup erstellen');
         if (empty($handler['module'])) { $form('runtime-install', $fields, 'Modul installieren', 'Snuffleupagus fuer diesen PHP-Handler herunterladen und bauen? Noch keine Aktivierung.'); }
