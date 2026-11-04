@@ -248,7 +248,14 @@ def runtime_install(version):
     target = base / 'lib/php/modules/snuffleupagus.so'
     if target.exists() or target.is_symlink():
         raise ValueError('Modul ist bereits vorhanden; kein automatisches Ueberschreiben.')
-    user = pwd.getpwnam('nobody')
+    try:
+        user = pwd.getpwnam('guardian-build')
+    except KeyError:
+        run(['/usr/sbin/useradd', '--system', '--no-create-home', '--home-dir', '/nonexistent',
+             '--shell', '/usr/sbin/nologin', 'guardian-build'])
+        user = pwd.getpwnam('guardian-build')
+    if user.pw_uid == 0:
+        raise ValueError('Build-Benutzer darf keine Root-UID besitzen.')
     def unprivileged():
         os.setgroups([])
         os.setgid(user.pw_gid)
@@ -372,8 +379,18 @@ def waf_engine(domain, mode):
     if mode not in ('on', 'off', 'detection-only'):
         raise ValueError('Ungueltiger WAF-Engine-Modus.')
     before = plesk(['subscription', '--show-web-app-firewall', domain])
+    previous = before.strip().lower()
+    match = re.search(r'(?:waf[-_ ]rule[-_ ]engine|rule[-_ ]engine|mode|modus)\s*[:=]\s*(on|off|detection[- ]?only)', previous)
+    if match:
+        previous = match.group(1)
+    previous = {'detectiononly': 'detection-only', 'detection only': 'detection-only'}.get(previous, previous)
+    if previous not in ('on', 'off', 'detection-only'):
+        raise ValueError('Vorheriger Plesk-WAF-Modus konnte nicht eindeutig ermittelt werden; keine Aenderung.')
     token = uuid.uuid4().hex
     atomic(root() / 'backups' / (token + '.bin'), before.encode('utf-8'))
+    settings = config()
+    settings.setdefault('waf_engines', {}).setdefault(domain, previous)
+    save_config(settings)
     plesk(['subscription', '--update-web-app-firewall', domain, '-waf-rule-engine', mode])
     h.incident_log('operator', 'warning', domain, 'Plesk WAF-Engine ' + mode)
     return {'message': 'Plesk WAF-Engine auf %s gesetzt. Vorheriger Status als Diagnosebackup %s gespeichert.' % (mode, token)}
@@ -483,6 +500,10 @@ def baseline(domain, trusted):
     if time.time() - float(report.get('epoch', 0)) > 3600 or report.get('warning'):
         raise ValueError('Sauberer Scan muss weniger als eine Stunde alt sein.')
     token = uuid.uuid4().hex
+    if shutil.disk_usage(root()).free < 128 * 1024 * 1024:
+        raise ValueError('Mindestens 128 MiB freier Speicher fuer eine Baseline erforderlich.')
+    if sum(1 for _ in (root() / 'baselines').iterdir()) >= 20:
+        raise ValueError('Maximal 20 Baselines. Nicht mehr benoetigte Baselines zuerst entfernen.')
     destination = root() / 'baselines' / token
     destination.mkdir(mode=0o700)
     entries = {}
@@ -872,6 +893,45 @@ def public_status():
             'reputation': list(h.read_json(root() / 'reputation.json', {}).values())[-20:]}
 
 
+def uninstall_cleanup():
+    # Removing an extension must undo its own active policies, not leave orphaned guards.
+    settings = config()
+    for domain, item in settings.get('bots', {}).items():
+        if item.get('enabled'):
+            bots_set(domain, 'off')
+    for item in public_status()['handlers']:
+        if item['managed']:
+            runtime_set(item['version'], 'off', item['sha256'])
+    try:
+        path = waf_file()
+    except ValueError:
+        path = None
+    if path is not None and path.exists():
+        data, _ = checked(path)
+        if data.startswith(b'# Guardian managed\n'):
+            ctl = h.binary(('/usr/sbin/apache2ctl', '/usr/sbin/apachectl'))
+            systemctl = h.binary(h.SYSTEMCTL_PATHS)
+            if not ctl or not systemctl:
+                raise ValueError('Guardian-WAF-Regeln vor der Deinstallation manuell deaktivieren.')
+            atomic(path, b'# Guardian managed\n', 0o644)
+            try:
+                run([ctl, '-t'])
+                run([systemctl, 'reload', 'apache2' if 'apache2' in str(ctl) else 'httpd'])
+            except Exception:
+                atomic(path, data, 0o644)
+                raise
+    for domain in list(h.monitor_config()):
+        h.monitor_set(domain, 'off')
+    for domain, mode in config().get('waf_engines', {}).items():
+        if h.valid_domain(domain) and mode in ('on', 'off', 'detection-only'):
+            plesk(['subscription', '--update-web-app-firewall', domain, '-waf-rule-engine', mode])
+    settings = config()
+    settings['autorepair'] = {}
+    settings['waf_engines'] = {}
+    save_config(settings)
+    return {'message': 'Guardian-eigene aktive Policies deaktiviert. Backups, Module und Quarantaene bleiben erhalten.'}
+
+
 def start_job(request):
     for path in (root() / 'jobs').glob('*.json'):
         item = h.read_json(path, {})
@@ -968,6 +1028,9 @@ def main(args):
     try:
         if args == ['status']:
             return h.respond(public_status())
+        if args == ['uninstall']:
+            with locked():
+                return h.respond({'ok': True, 'result': uninstall_cleanup()})
         if len(args) == 2 and args[0] == 'job':
             run_job(args[1])
             return h.respond({'ok': True})

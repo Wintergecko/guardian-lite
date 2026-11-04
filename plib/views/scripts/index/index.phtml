@@ -343,24 +343,24 @@ $action = static function ($name) use ($esc) {
           <li>Manuelle Quarantaene und Wiederherstellung nach Bestaetigung</li>
           <li>Fail2Ban-Status und manuelle IP-Aktionen</li>
           <li>ModSecurity-Loganzeige und periodische Datei-Metadatenpruefung</li>
-          <li>Manuelle GitHub-Release-Pruefung und Update-Vorbereitung</li>
+          <li>Manuelle GitHub-Release-Pruefung und bestaetigte Installation</li>
         </ul>
       </div>
       <div>
         <h3>Nur teilweise / manuell</h3>
         <ul>
-          <li>PHP-Laufzeitabwehr: Snuffleupagus-Regelvorlagen, keine automatische Aktivierung</li>
-          <li>HTTP-Bot-Schutz: ModSecurity-Rate-Limit-Vorlagen, nicht aktiv geschaltet</li>
+          <li>Snuffleupagus: Installation, Simulation, Aktivierung und PHP-Handler-Rollback im Tab Verwaltung</li>
+          <li>HTTP-Botlimits: Guardian-Regeln mit Vorschau, Syntaxpruefung und Rollback; pro Ziel-Domain aktivierbar</li>
           <li>GitHub-Updater: oeffentliche Releases; Installation nur nach Admin-Bestaetigung</li>
-          <li>WAF: Log-Auswertung, keine automatische Regelverwaltung</li>
+          <li>WAF-Modus und Guardian-Regeln verwaltbar; bestehende Drittanbieter-Regeln werden nicht bearbeitet</li>
         </ul>
       </div>
       <div>
-        <h3>Noch nicht umgesetzt</h3>
+        <h3>Grenzen und offene Praxistests</h3>
         <ul>
-          <li>Automatische Malware-Reparatur mit verifizierten Good-File-Backups und sicherem Rollback</li>
-          <li>PHP-Laufzeitschutz: Konfigurationserkennung und Regelvorlage vorhanden; produktive Handler-Aktivierung/Rollback noch nicht getestet</li>
-          <li>Bot-Challenges und Cloud-Reputation: benoetigen getestete Proxy-/WAF-Integration und Drittanbieter-Zustimmung</li>
+          <li>Automatische Reparatur aus admin-freigegebenen Baselines implementiert; Hersteller-signierte CMS-Originaldateien fehlen noch</li>
+          <li>PHP-/WAF-Verwaltung implementiert; echte Plesk-Requests und distributionsspezifische Rollouts noch auf deinem Testserver pruefen</li>
+          <li>Turnstile-PHP-Anmeldeschutz und AbuseIPDB-Abfrage implementiert; benoetigen eigene Schluessel, Zustimmung und Plesk-Praxistest</li>
           <li>Automatisierte Linux-Testmatrix vorhanden; echte Plesk-Integrationstests auf mehreren Distributionen noch offen</li>
         </ul>
       </div>
@@ -369,5 +369,5 @@ $action = static function ($name) use ($esc) {
   </section>
   <?php include __DIR__ . '/management.phtml'; ?>
   <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.7.0" defer></script>
-  <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie oder automatische Bereinigung.</footer>
+  <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

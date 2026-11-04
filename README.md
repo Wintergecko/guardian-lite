@@ -1,8 +1,8 @@
-# Guardian Lite v0.6.4 – Plesk Security (Linux)
+# Guardian Lite v0.7.0 – Plesk Security (Linux)
 
 Ein **experimenteller Open-Source-Baukasten** fuer Plesk Obsidian 18.x auf Linux mit Root-Zugriff. Keine offizielle Plesk-/Imunify360-Software, kein Ersatz fuer professionell getestete Malware-Abwehr. **Installation nur zuerst auf Test-VPS / Snapshot.** Fuer die aktuelle Version sind Python >=3.8 und eine Plesk-Umgebung mit Extension-API erforderlich.
 
-## Aktueller Stand 0.6.4
+## Aktueller Stand 0.7.0
 
 Opt-in-Live-Dateiwache (inotify), Incident-Protokoll, JSON-Export und E-Mail-Warnungen sind implementiert. Die periodische Metadatenpruefung bleibt als separate Funktion erhalten. Plesk-Integration und Mailzustellung werden auf einem separaten Testserver geprueft.
 
@@ -19,13 +19,13 @@ Opt-in-Live-Dateiwache (inotify), Incident-Protokoll, JSON-Export und E-Mail-War
 | WAF-Ereignisse | letzte 512 KiB `/var/log/modsec_audit.log` auf Regeln/IPs reduziert; keine HTTP-Bodies |
 | IP sperren / entsperren | manuell ueber aktives Fail2Ban-Jail; keine automatische Bedrohungsbewertung |
 
-**Nicht integriert/automatisch aktiviert:** proaktive PHP-Laufzeitueberwachung (Snuffleupagus-Policy nur als Opt-in-Vorlage), ClamAV-On-Access, automatisierte Schadcode-Bereinigung, Bad-Bot-JavaScript-Challenges, DDoS-Schutz auf Netzwerkebene, IP-Reputation-/Cloud-Feeds, WAF-Regelbearbeitung, SQL-Datenbank-Scans, Push-Benachrichtigungen. E-Mail-Warnungen und Document-Roots innerhalb des Plesk-Webspaces werden unterstuetzt. ClamAV und ModSecurity muessen separat konfiguriert sein.
+**Nicht enthalten:** ClamAV-On-Access, Hersteller-signierte CMS-Reparaturpakete, Netzwerk-DDoS-Schutz, SQL-Datenbank-Scans, Push-Benachrichtigungen und Bearbeitung fremder WAF-Regeln. Alle neuen aktiven Schutzfunktionen sind standardmaessig aus. Details und Grenzen von 0.7.0 stehen in [MANAGEMENT.md](MANAGEMENT.md).
 
 ## Vorbedingungen
 
 - Vollstaendigen VPS-Snapshot und externe Backups anlegen, SSH-Zugang pruefen.
 - Testdomain mit Document-Root innerhalb ihres Plesk-Webspaces verwenden. Zusatzdomains und eigene Document-Roots werden aus der Plesk-Datenbank ermittelt. Websites mit root-eigenem Document-Root werden nicht gescannt.
-- Plesk 18 (Obsidian) + Linux, Python >=3.8, PHP fuer Plesk.
+- Plesk 18.0.55 oder neuer (Obsidian) + Linux, Python >=3.8, PHP fuer Plesk.
 - ClamAV samt aktueller Datenbank installieren; z.B. unter Debian/Ubuntu:
 
   ```bash
@@ -42,10 +42,10 @@ Paket auf den Server kopieren; vor dem Einspielen Inhalt und Quellcode pruefen. 
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.6.4.zip
+plesk bin extension -i /root/guardian-lite-0.7.0.zip
 
 # Upgrade einer vorhandenen guardian-lite 0.1.0 vom lokalen ZIP
-plesk bin extension -g /root/guardian-lite-0.6.4.zip
+plesk bin extension -g /root/guardian-lite-0.7.0.zip
 
 # Version/Status ansehen
 plesk bin extension -l | grep guardian-lite
@@ -78,7 +78,7 @@ Bei Update von v0.1.0 bleiben Legacy-Scandateien unter `/var/lib/guardian-lite/`
 ## Tests und Diagnose
 
 ```bash
-unzip -l guardian-lite-0.6.4.zip
+unzip -l guardian-lite-0.7.0.zip
 php -l plib/controllers/IndexController.php
 php -l plib/views/scripts/index/index.phtml
 python3 -m unittest discover -s tests -v
@@ -228,3 +228,9 @@ Der privilegierte Scanner liest fuer jede gehostete Domain den konfigurierten `h
 - Die Scanplanung prueft alle aufbewahrten Berichte statt nur der 30 sichtbaren Eintraege. Viele manuelle Scans verkuerzen dadurch nicht mehr den 24-Stunden-Abstand geplanter Scans.
 - Bei verschobenen oder geloeschten Verzeichnissen entfernt die Live-Dateiwache die Watches des gesamten alten Teilbaums. Hineinverschobene Verzeichnisse werden unter ihrem neuen Pfad ueberwacht. Wird der Document-Root selbst verschoben oder geloescht, beendet sich der Monitor; der Scheduler kann ihn nach Wiederherstellung neu starten.
 - Feature-Liste und aktuelle Voraussetzungen wurden berichtigt.
+
+## Neue Schutzverwaltung ab 0.7.0
+
+Der Tab **Verwaltung & Diagnose** bietet PHP-Handler-Backup und Rollback, Snuffleupagus-Build/Simulation/Aktivierung, Guardian-WAF-Regeln und Botlimits, AbuseIPDB-Reputationsabfragen, Turnstile fuer PHP-Anmeldepfade sowie opt-in Good-File-Reparatur. Der privilegierte Manager akzeptiert feste Aktionen als begrenztes JSON ueber stdin. API-Schluessel werden root-privat gespeichert und weder in Prozessargumenten noch in Status/Diagnose ausgegeben.
+
+Die frueheren Versionsabschnitte dokumentieren den historischen Stand. Fuer aktuelle Aktivierung, Grenzen und Praxistests gilt [MANAGEMENT.md](MANAGEMENT.md).

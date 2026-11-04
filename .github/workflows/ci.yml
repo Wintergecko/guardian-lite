@@ -32,6 +32,8 @@ jobs:
           find plib -name '*.phtml' -print0 | xargs -0 -n1 php -l
       - name: PHP scan controller smoke test
         run: php tests/php_scan_controller_smoke.php
+      - name: Management controller and template smoke test
+        run: php tests/php_management_smoke.php
       - name: Python tests
         run: |
           status=0
@@ -49,3 +51,27 @@ jobs:
         run: php tests/plesk_updater_smoke.php
       - name: Build ZIP
         run: python3 tools/build_release.py
+  runtime-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install native build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y php-cli php-dev build-essential autoconf git
+      - name: Build pinned module and prove simulation, blocking and rollback
+        run: |
+          status=0
+          output=$(sudo env GUARDIAN_RUNTIME_BUILD=1 "$(command -v python3)" -m unittest discover -s tests -p test_runtime_build.py -v 2>&1) || status=$?
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ]; then
+            output=$(printf '%s' "$output" | tail -c 3500)
+            output="${output//'%'/'%25'}"
+            output="${output//$'\n'/'%0A'}"
+            output="${output//$'\r'/'%0D'}"
+            echo "::error::$output"
+          fi
+          exit "$status"

@@ -154,43 +154,7 @@ def fail2ban_status():
     result['running'] = True
     match = re.search(r'Jail list:\s*(.*)', run.stdout)
     names = [s.strip() for s in match.group(1).split(',')] if match else []
-    names = [name for name in names if JAIL_NAME.fullmatch(name)]
-    result['jail_count'] = len(names)
-    result['jails_limited'] = len(names) > MAX_JAILS
-    for name in names[:MAX_JAILS]:
-        details = execute([cli, 'status', name], timeout=3)
-        match = re.search(r'Currently banned:\s*(\d+)', details.stdout) if details and not details.returncode else None
-        count = int(match.group(1)) if match else 0
-        result['jails'].append({'name': name, 'banned': count})
-        result['banned_total'] += count
-    return result
-
-
-def firewall_status():
-    ctl = binary(SYSTEMCTL_PATHS)
-    check = execute([ctl, 'is-active', 'psa-firewall'], 3) if ctl else None
-    return {'plesk_firewall_active': bool(check and check.returncode == 0 and check.stdout.strip() == 'active')}
-
-
-def parse_waf_lines(lines):
-    """Return limited, sanitized WAF metadata; never expose request bodies/tokens."""
-    events = []
-    for line in lines:
-        if not (line.startswith('Message:') or 'ModSecurity:' in line):
-            continue
-        rule = re.search(r'\[id "(\d{1,12})"\]', line)
-        address = re.search(r'\[client ([0-9a-fA-F:.]+)\]', line)
-        if not rule and not address:
-            continue
-        ip = None
-        if address:
-            try:
-                ip = str(ipaddress.ip_address(address.group(1)))
-            except ValueError:
-                pass
-        events.append({'rule': rule.group(1) if rule else 'unbekannt', 'ip': ip,
-                       'blocked': 'Access denied' in line})
-    return events[-30:][::-1]
+    names = [name for name in names if JAIL_NAME.fullma…408 tokens truncated…1]
 
 
 def waf_status():

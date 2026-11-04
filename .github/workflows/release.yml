@@ -27,6 +27,8 @@ jobs:
           find plib -name '*.phtml' -print0 | xargs -0 -n1 php -l
       - name: PHP scan controller smoke test
         run: php tests/php_scan_controller_smoke.php
+      - name: Management controller and template smoke test
+        run: php tests/php_management_smoke.php
       - name: Python tests
         run: sudo "$(command -v python3)" -m unittest discover -s tests -v
       - name: Plesk updater controller smoke test

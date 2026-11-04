@@ -1,3 +1,14 @@
+## 0.7.0 – Opt-in-Schutzverwaltung und Diagnose
+
+- Neuer Tab Verwaltung & Diagnose mit CSRF-geschuetzten festen Aktionen; Plesk >=18.0.55 wegen sicherer stdin-Uebergabe erforderlich.
+- Snuffleupagus 0.14.0 aus festem Upstream-Commit als eigener Build-Benutzer installieren; Simulation/Aktivierung mit PHP-Probe, FPM-Konfigurationspruefung, Backup und Rollback.
+- Guardian-ModSecurity-Regeln mit Vorschau, IP-Limit, Erkennungs-/Sperrmodus, Include-/Syntaxpruefung, Apache-Reload und Rollback; Domain-WAF-Modus via Plesk CLI.
+- AbuseIPDB: ausdrueckliche Zustimmung, oeffentliche IPs, feste HTTPS-API, Schema-Pruefung und Stunden-Cache.
+- Turnstile fuer PHP-Anmeldepfade via .user.ini: serverseitige Tokenvalidierung, signierte Clearance-Cookies, Ruecknahme mit Aenderungspruefung.
+- Admin-freigegebene Good-File-Baselines; opt-in automatische Reparatur passender Vollscan-Funde, Originale in Quarantaene und kontrollierter Rollback. Kein Hersteller-Abgleich.
+- Diagnose-JSON und optional kurzlebige HTTPS-PHP-Probe fuer Plesk-Praxistests.
+- Neue isolierte Management-, PHP-HTTP- und echte Apache/ModSecurity-HTTP-Tests. Echte Plesk-Integrationstests fuehrt der Betreiber separat durch.
+
 ## 0.6.4 – Zuverlaessige Scanplanung und Verzeichniswechsel
 
 - Geplante Scans ermitteln den letzten Lauf aus allen aufbewahrten Berichten; die Anzeigegrenze von 30 Berichten beeinflusst den 24-Stunden-Abstand nicht mehr.
