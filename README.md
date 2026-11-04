@@ -1,4 +1,4 @@
-# Guardian Lite 0.10.0 – Plesk Security (Linux)
+# Guardian Lite 0.11.0 – Plesk Security (Linux)
 
 Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf Linux, Python >=3.8. Beta: aktive Schutzfunktionen zuerst auf einem separaten Testserver pruefen. Keine offizielle Plesk-/Imunify360-Software.
 
@@ -24,6 +24,7 @@ Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf L
 | Diagnose | Sanitisiertes JSON und optionale kurzlebige HTTPS-PHP-Probe | Plesk-Praxistests fuehrt der Betreiber durch |
 | Cronjob-Audit | Manuelle read-only Heuristikpruefung ueblicher System-/Benutzer-Cronpfade, Treffer im Incident-Verlauf | Wenige verdächtige Muster; keine vollstaendige Malware-Erkennung und keine Aenderungen an Jobs |
 | WordPress-Core | Manuelle WordPress.org-Pruefsummenverifikation via WP-CLI und HTTPS | Root-eigene WP-CLI-Binary und ausgehendes HTTPS; keine Plugins, Themes oder automatische Reparatur |
+| WordPress.org-Plugins | Manuelle Pruefung mit WP-CLI, nicht abgedeckte Plugins werden als uebersprungen aufgefuehrt | Nur Plugins mit WordPress.org-Pruefsummen; kommerzielle/eigene Plugins bleiben ungeprueft; keine Reparatur |
 | GitHub-Updater | Oeffentliche Releases pruefen und nach Admin-Klick installieren | Passendes ZIP und GitHub-SHA-256 erforderlich; keine stillen Updates |
 
 Alle neuen aktiven Funktionen sind standardmaessig aus. Details zu Aktivierung, Grenzen, Voraussetzungen und Fehlerfaellen stehen in [MANAGEMENT.md](MANAGEMENT.md).
@@ -38,9 +39,9 @@ Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.10.0.zip
+plesk bin extension -i /root/guardian-lite-0.11.0.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.10.0.zip
+plesk bin extension -g /root/guardian-lite-0.11.0.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
@@ -67,7 +68,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.10.0
+python3 tools/build_release.py --tag v0.11.0
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.

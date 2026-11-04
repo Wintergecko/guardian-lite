@@ -1,4 +1,4 @@
-# Guardian Lite 0.10.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.11.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -86,7 +86,9 @@ Das ist eine begrenzte Heuristik, kein Malware-Vollscan. Ein sauberer Bericht be
 
 Im Verwaltungstab kann der Administrator die Core-Dateien einer gehosteten WordPress-Domain pruefen. Guardian verlangt `wp-load.php` und `wp-includes/version.php`, ruft eine root-eigene WP-CLI-Binary mit `core verify-checksums` und `--skip-plugins --skip-themes --skip-packages` auf und startet sie mit der Website-UID. Projekt-/Benutzerkonfigurationen werden durch ein isoliertes Home und Arbeitsverzeichnis umgangen. Die Netzwerkpruefung verwendet WP-CLI-Standardverhalten mit TLS-Pruefung; `--insecure` wird nicht gesetzt.
 
-Das Ergebnis meldet erkannte Dateiabweichungen mit Pfad und Regelkennung, speichert einen Bericht und erzeugt einen Incident bei Abweichungen. Dateien werden nicht geaendert. WordPress.org-Core-Pruefsummen verwenden laut WP-CLI MD5-Pruefwerte ueber HTTPS und sind kein signierter Paketnachweis. Plugins, Themes, Must-Use-Plugins, eigene Dateien und automatische Reparatur sind nicht Teil dieser Core-Pruefung. Eine saubere Pruefung beweist daher nicht, dass die gesamte Website frei von Malware ist.
+Das Core-Ergebnis meldet erkannte Dateiabweichungen mit Pfad und Regelkennung, speichert einen Bericht und erzeugt einen Incident bei Abweichungen. Dateien werden nicht geaendert. WordPress.org-Core-Pruefsummen verwenden laut WP-CLI MD5-Pruefwerte ueber HTTPS und sind kein signierter Paketnachweis.
+
+Eine zweite Aktion prueft Plugins mit `wp plugin verify-checksums --all`. WordPress.org-Plugins mit vorhandenen Checksums werden verglichen. Plugins ohne oeffentliche Checksums (typischerweise kommerzielle/eigene Plugins) werden separat aufgefuehrt und ergeben den Status **partial**, nicht **verified**. Themes, Must-Use-Plugins, eigene Dateien und automatische Reparatur bleiben unberuecksichtigt. Die Pruefung beweist daher nicht, dass die gesamte Website frei von Malware ist. [WP-CLI-Pluginpruefung](https://developer.wordpress.org/cli/commands/plugin/verify-checksums/)
 
 ## Malware-Ignore-Liste
 

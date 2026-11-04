@@ -35,6 +35,8 @@ VERSION = re.compile(r'^8\.[0-5]$')
 HEX = re.compile(r'^[a-f0-9]{64}$')
 WP_CLI_PATHS = ('/usr/local/bin/wp', '/usr/bin/wp', '/bin/wp')
 WP_HASH_WARNING = re.compile(r"^Warning: File doesn't verify against checksum:\s*(.+?)\s*$")
+WP_PLUGIN_SKIP_WARNING = re.compile(
+    r'^Warning: Could not retrieve the checksums for version .{1,100} of plugin ([A-Za-z0-9_.-]{1,100}), skipping\.$')
 BEGIN = '; BEGIN GUARDIAN MANAGED\n'
 END = '; END GUARDIAN MANAGED\n'
 CRON_FILES = (pathlib.Path('/etc/crontab'),)
@@ -980,9 +982,9 @@ def cron_audit():
     return result
 
 
-def wordpress_core_checksum_audit(domain):
-    """Compare a WordPress core against WordPress.org checksums using WP-CLI as its site UID."""
-    if os.geteuid() != 0 or not h.valid_domain(domain):
+def wordpress_checksum_audit(domain, kind):
+    """Compare WordPress core or WordPress.org plugins using WP-CLI as the site's UID."""
+    if os.geteuid() != 0 or not h.valid_domain(domain) or kind not in ('core', 'plugins'):
         raise ValueError('Gueltige Domain und Root-Verwaltung erforderlich.')
     docroot, uid, gid = h.site_docroot(domain)
     for relative in ('wp-load.php', 'wp-includes/version.php'):
@@ -1002,7 +1004,7 @@ def wordpress_core_checksum_audit(domain):
                 raise ValueError('WordPress-Core-Pruefung lehnt Symlinks und Sonderdateien ab.')
     cli = h.binary(WP_CLI_PATHS)
     if not cli:
-        raise ValueError('WP-CLI fehlt. Fuer die Core-Pruefung WP-CLI als root-eigene Systemdatei bereitstellen.')
+        raise ValueError('WP-CLI fehlt. Fuer die Pruefsummen WP-CLI als root-eigene Systemdatei bereitstellen.')
     executable = pathlib.Path(cli).resolve(strict=True)
     cli_stat = executable.stat()
     if (not stat.S_ISREG(cli_stat.st_mode) or cli_stat.st_uid != 0 or
@@ -1027,7 +1029,9 @@ def wordpress_core_checksum_audit(domain):
                    'WP_CLI_CACHE_DIR': str(pathlib.Path(home) / 'cache'),
                    'WP_CLI_DISABLE_AUTO_CHECK_UPDATE': '1'}
             args = [str(executable), '--path=' + str(docroot), '--skip-plugins', '--skip-themes',
-                    '--skip-packages', '--no-color', 'core', 'verify-checksums']
+                    '--skip-packages', '--no-color']
+            args.extend(['core', 'verify-checksums'] if kind == 'core' else
+                        ['plugin', 'verify-checksums', '--all'])
             with tempfile.TemporaryFile() as log:
                 result = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                         timeout=300, cwd='/', check=False, preexec_fn=lambda: h.drop_privileges(uid, gid),
@@ -1037,34 +1041,57 @@ def wordpress_core_checksum_audit(domain):
                 truncated = len(raw) > 5 * 1024 * 1024
                 output = raw[:5 * 1024 * 1024].decode('utf-8', 'replace')
     except subprocess.TimeoutExpired:
-        raise ValueError('WordPress-Core-Pruefung nach fuenf Minuten abgebrochen.')
+        raise ValueError('WordPress-Pruefung nach fuenf Minuten abgebrochen.')
     findings = []
+    unverified_plugins = []
     for line in output.splitlines():
         match = WP_HASH_WARNING.match(line)
-        if not match:
+        if match:
+            relative = match.group(1).replace('\\', '/')
+            if h.safe_relative(relative) and len(findings) < 100:
+                findings.append({'path': relative,
+                                 'rule': 'wordpress-core-checksum-mismatch' if kind == 'core' else
+                                 'wordpress-plugin-checksum-mismatch'})
             continue
-        relative = match.group(1).replace('\\', '/')
-        if h.safe_relative(relative) and len(findings) < 100:
-            findings.append({'path': relative, 'rule': 'wordpress-core-checksum-mismatch'})
+        if kind == 'plugins':
+            skipped = WP_PLUGIN_SKIP_WARNING.match(line)
+            if skipped and len(unverified_plugins) < 100:
+                unverified_plugins.append(skipped.group(1))
     if truncated:
         status = 'incomplete'
-    elif result.returncode == 0:
-        status = 'verified'
     elif findings:
         status = 'mismatch'
+    elif result.returncode == 0 and unverified_plugins:
+        status = 'partial'
+    elif result.returncode == 0:
+        status = 'verified'
     else:
         status = 'error'
-    report = {'domain': domain, 'checked_at': h.utc_now(), 'status': status,
+    subject = 'Core-Dateien' if kind == 'core' else 'Plugins'
+    note = ('WP-CLI vergleicht WordPress-Core-Dateien mit WordPress.org-MD5-Pruefsummen ueber HTTPS.'
+            if kind == 'core' else
+            'WP-CLI prueft Plugins mit verfuegbaren WordPress.org-Pruefsummen; kommerzielle/eigene Plugins koennen nicht abgedeckt sein.')
+    report = {'domain': domain, 'kind': kind, 'checked_at': h.utc_now(), 'status': status,
               'finding_count': len(findings), 'findings': findings,
-              'note': 'WP-CLI vergleicht WordPress-Core-Dateien mit WordPress.org-MD5-Pruefsummen ueber HTTPS. Kein signierter Paketnachweis; keine Datei wird geaendert.'}
-    h.write_json(root() / 'wordpress-checksum.json', report)
+              'unverified_plugins': sorted(set(unverified_plugins)),
+              'note': note + ' Kein signierter Paketnachweis; keine Datei wird geaendert.'}
+    h.write_json(root() / ('wordpress-checksum.json' if kind == 'core' else 'wordpress-plugin-checksum.json'), report)
     if status == 'mismatch':
         h.incident_log('cms_checksum_mismatch', 'warning', domain,
-                       '%d WordPress-Core-Dateien stimmen nicht mit WordPress.org-Pruefsummen ueberein.' % len(findings),
+                       '%d WordPress-%s stimmen nicht mit WordPress.org-Pruefsummen ueberein.' %
+                       (len(findings), subject),
                        findings[0]['path'] if findings else '')
     elif status == 'verified':
-        h.incident_log('operator', 'info', domain, 'WordPress-Core-Pruefsummen erfolgreich verifiziert.')
+        h.incident_log('operator', 'info', domain, 'WordPress-%s erfolgreich verifiziert.' % subject)
     return report
+
+
+def wordpress_core_checksum_audit(domain):
+    return wordpress_checksum_audit(domain, 'core')
+
+
+def wordpress_plugin_checksum_audit(domain):
+    return wordpress_checksum_audit(domain, 'plugins')
 
 
 def diagnostics(domain='', http_probe=False):
@@ -1151,6 +1178,7 @@ def public_status():
             'diagnostics': h.read_json(root() / 'diagnostics.json', {}),
             'cron_audit': h.read_json(root() / 'cron-audit.json', {}),
             'wordpress_checksum': h.read_json(root() / 'wordpress-checksum.json', {}),
+            'wordpress_plugin_checksum': h.read_json(root() / 'wordpress-plugin-checksum.json', {}),
             'jobs': [h.read_json(p, {}) for p in sorted((root() / 'jobs').glob('*.json'),
                      key=lambda x: x.stat().st_mtime, reverse=True)[:10]],
             'reputation': list(h.read_json(root() / 'reputation.json', {}).values())[-20:]}
@@ -1293,6 +1321,8 @@ def dispatch(request):
             return cron_audit()
         if action == 'wp-checksum-audit':
             return wordpress_core_checksum_audit(request.get('domain', ''))
+        if action == 'wp-plugin-checksum-audit':
+            return wordpress_plugin_checksum_audit(request.get('domain', ''))
         raise ValueError('Unbekannte Verwaltungsaktion.')
 
 
