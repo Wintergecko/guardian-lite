@@ -1,3 +1,11 @@
+## 0.25.0 – Guardian-IP-Ausnahmen
+
+- Fuehrt eine kommentierte, serverweite IP-/CIDR-Ausnahmeliste fuer Guardian-eigene Firewall-IP- und Port-Sperren ein.
+- Neue Guardian-Sperren, die ein Ausnahme-Netz schneiden, werden abgelehnt; ueberlappende Netze koennen nicht doppelt eingetragen werden.
+- Die Ausnahmeliste aendert keine Plesk- oder Provider-Firewallregel und entfernt keine bestehenden Sperren. Vor dem Eintragen werden aktive Guardian-Sperren abgefragt.
+- Aenderungen werden im Incident-Protokoll dokumentiert. Limit 200 Eintraege; IP-Netze unterliegen derselben /24-/64-Grenze wie Guardian-Sperren.
+- Tests fuer Hinzufuegen, Entfernen, Kommentare, Ueberlappungen, Sperrkonflikte, CLI-Routing und Plesk-Controller.
+
 ## 0.21.0 – Joomla- und Magento-Datenbank-Streamscan
 
 - ClamAV-Datenbankscan erkennt WordPress, Joomla oder Magento im Plesk-Document-Root.

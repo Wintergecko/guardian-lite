@@ -94,6 +94,17 @@ try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
 checkManagement(pm_ApiCli::$calls[5][1] === ['firewall-action', 'port-remove', '77'],
     'Port rule removal did not pass only a numeric Guardian-owned rule identifier');
 
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'allowlist-add',
+    'network' => '203.0.113.50', 'comment' => 'Admin VPN'];
+try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
+checkManagement(pm_ApiCli::$calls[6][1] === ['firewall-action', 'allowlist-add', '203.0.113.50', 'Admin VPN'],
+    'Guardian IP exception did not pass through the fixed helper interface');
+
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'allowlist-remove', 'network' => '203.0.113.50'];
+try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
+checkManagement(pm_ApiCli::$calls[7][1] === ['firewall-action', 'allowlist-remove', '203.0.113.50'],
+    'Guardian IP exception removal did not pass through the fixed helper interface');
+
 $before = count(pm_ApiCli::$calls);
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'port-deny',
     'network' => '203.0.113.25', 'port' => '70000', 'protocol' => 'tcp'];
@@ -115,7 +126,7 @@ checkManagement(count(pm_ApiCli::$calls) === $before, 'Firewall confirmation wit
 
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'confirm', 'tested' => '1'];
 try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
-checkManagement(pm_ApiCli::$calls[6][1] === ['firewall-action', 'confirm'], 'Firewall confirmation action not routed correctly');
+checkManagement(pm_ApiCli::$calls[8][1] === ['firewall-action', 'confirm'], 'Firewall confirmation action not routed correctly');
 
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'baseline-delete',
     'baseline_id' => str_repeat('a', 32), 'domain' => 'example.com'];

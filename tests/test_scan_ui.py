@@ -57,8 +57,13 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn('Global ignoriert (SHA-256)', view)
         self.assertIn("['found', 'quarantined'], true) && !$findingIgnored", view)
 
+    def test_firewall_exception_is_scoped_to_guardian(self):
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        self.assertIn('Guardian-IP-Ausnahmen', view)
+        self.assertIn('hebt keine bereits bestehenden Regeln auf', view)
+
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.24.0')
+        self.assertEqual(version, '0.25.0')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())

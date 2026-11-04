@@ -1,4 +1,4 @@
-# Guardian Lite 0.24.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.25.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -16,6 +16,8 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | Dateiwache | Linux `inotify` (Kernel-Schnittstelle); kein zusaetzliches PHP-Modul. |
 | Plesk-Firewall-Status | Optionale Plesk-Erweiterung **Firewall**. Die Installation allein aktiviert keine Regeln. Die Erweiterung ist keine Voraussetzung fuer andere Guardian-Funktionen. |
 | Plesk-Firewall-Regeln | Plesk Firewall muss installiert und aktiv sein; Plesk-CLI `plesk ext firewall` und der dazugehoerige Dienst muessen funktionieren. `firewalld` darf laut Plesk nicht parallel betrieben werden. |
+
+Die kommentierte Guardian-IP-Ausnahmeliste verhindert nur kuenftige Guardian-eigene Sperren fuer eingetragene Netze. Sie ist keine Freischaltung in der Plesk-, Betriebssystem- oder Provider-Firewall.
 | Guardian-WAF/HTTP-Limits | Apache-ModSecurity **v2**, geladenes `mod_unique_id`, `SecDataDir` und Plesk-WAF fuer wirksames Blockieren. In Plesk ueber Installer/Komponentenverwaltung einrichten und danach Guardian-Vorschau pruefen. |
 | Snuffleupagus | Pro verwaltetem Plesk-PHP-FPM-Handler das passende Entwicklerpaket, z. B. `plesk-php83-dev`, ausserdem `git`, `gcc`, `make`, `autoconf`; Handler-Version 8.0–8.5. Beispiel Debian/Ubuntu: `apt install plesk-php83-dev git gcc make autoconf`. |
 | Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |

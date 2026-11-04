@@ -186,6 +186,64 @@ class GuardianTests(unittest.TestCase):
                 helper.firewall_action('confirm')
                 self.assertNotIn('203.0.113.25/32', helper.read_json(root / 'firewall-expiries.json', {}))
 
+    def test_guardian_firewall_exceptions_are_audited_and_block_future_guardian_denies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            allowlist = root / 'firewall-allowlist.json'
+            with mock.patch.object(helper, 'ROOT', root), \
+                 mock.patch.object(helper, 'FIREWALL_ALLOWLIST', allowlist), \
+                 mock.patch.object(helper, 'firewall_rules', return_value={
+                     'available': True, 'limited': False, 'rules': []}), \
+                 mock.patch.object(helper, 'firewall_status', return_value={'plesk_firewall_active': True}), \
+                 mock.patch.object(helper, 'incident_log') as log, \
+                 mock.patch.object(helper.os, 'geteuid', return_value=0):
+                added = helper.firewall_action('allowlist-add', '203.0.113.25', 'Admin VPN')
+                self.assertEqual(added['network'], '203.0.113.25/32')
+                self.assertEqual(helper.firewall_allowlist_entries()[0]['comment'], 'Admin VPN')
+                self.assertEqual(log.call_count, 1)
+                with self.assertRaisesRegex(ValueError, 'ueberschneidet sich'):
+                    helper.firewall_action('allowlist-add', '203.0.113.0/24', 'Overlapping VPN')
+                with self.assertRaisesRegex(ValueError, 'druckbare Zeichen'):
+                    helper.firewall_action('allowlist-add', '198.51.100.5', 'bad\ncomment')
+                removed = helper.firewall_action('allowlist-remove', '203.0.113.25')
+                self.assertEqual(removed['network'], '203.0.113.25/32')
+                self.assertEqual(helper.firewall_allowlist_entries(), [])
+
+    def test_guardian_firewall_exception_blocks_overlapping_ban(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            settings = root / 'settings'
+            settings.touch()
+            with mock.patch.object(helper, 'ROOT', root), \
+                 mock.patch.object(helper, 'FIREWALL_ALLOWLIST', root / 'firewall-allowlist.json'), \
+                 mock.patch.object(helper, 'FIREWALL_PENDING', root / 'firewall-pending.json'), \
+                 mock.patch.object(helper, 'FIREWALL_SETTINGS', settings), \
+                 mock.patch.object(helper, 'PLESK_BINARIES', ('/usr/bin/plesk',)), \
+                 mock.patch.object(helper, 'SYSTEMCTL_PATHS', ()), \
+                 mock.patch.object(helper, 'firewall_status', return_value={'plesk_firewall_active': True}), \
+                 mock.patch.object(helper, 'firewall_rules', return_value={
+                     'available': True, 'limited': False, 'rules': [], 'pending': {}}), \
+                 mock.patch.object(helper, 'binary', side_effect=lambda paths: paths[0] if paths else None), \
+                 mock.patch.object(helper, 'execute') as execute, \
+                 mock.patch.object(helper.os, 'geteuid', return_value=0):
+                helper.write_json(root / 'firewall-allowlist.json', {'entries': [{
+                    'network': '203.0.113.0/24', 'comment': 'Admin VPN', 'created_at': helper.utc_now()}]})
+                with self.assertRaisesRegex(ValueError, 'Guardian-IP-Ausnahme'):
+                    helper._firewall_action('ban', '203.0.113.25', '198.51.100.8', 0)
+                with self.assertRaisesRegex(ValueError, 'Guardian-IP-Ausnahme'):
+                    helper._firewall_action('port-deny', '203.0.113.25', '198.51.100.8', 0, '22', 'tcp')
+                execute.assert_not_called()
+
+    def test_corrupt_guardian_firewall_exception_file_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            exception_file = root / 'firewall-allowlist.json'
+            helper.write_json(exception_file, {'entries': [{'network': '203.0.113.25/32'}]})
+            with mock.patch.object(helper, 'FIREWALL_ALLOWLIST', exception_file):
+                result = helper.firewall_rules()
+            self.assertFalse(result['available'])
+            self.assertIn('allowlist_error', result)
+
     def test_guardian_port_firewall_rules_stage_and_remove_only_owned_rule(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = pathlib.Path(tmp)
@@ -319,6 +377,14 @@ class GuardianTests(unittest.TestCase):
             action.assert_called_with('port-allow', '203.0.113.25', '198.51.100.8', 0, '2222', 'tcp')
             self.assertEqual(helper.main(['firewall-action', 'port-remove', '77']), 0)
             action.assert_called_with('port-remove', '77', '', 0, '', '')
+
+    def test_firewall_allowlist_cli_routes_fixed_arguments(self):
+        with mock.patch.object(helper, 'firewall_action', return_value={'ok': True}) as action, \
+                mock.patch.object(helper, 'respond', return_value=0):
+            self.assertEqual(helper.main(['firewall-action', 'allowlist-add', '203.0.113.5', 'Admin VPN']), 0)
+            action.assert_called_with('allowlist-add', '203.0.113.5', 'Admin VPN', 0, '', '')
+            self.assertEqual(helper.main(['firewall-action', 'allowlist-remove', '203.0.113.5']), 0)
+            action.assert_called_with('allowlist-remove', '203.0.113.5', '', 0, '', '')
 
 
 if __name__ == '__main__':

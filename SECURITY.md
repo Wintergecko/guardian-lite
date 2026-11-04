@@ -1,4 +1,10 @@
-# Guardian Lite v0.24.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.25.0 – Sicherheitsmodell und Grenzen
+
+## 0.25.0 – Guardian-IP-Ausnahmen
+
+- Kommentare und Netze werden validiert; ueberschneidende Eintraege und neue Guardian-IP-/Port-Sperren innerhalb eines Ausnahme-Netzes werden abgelehnt.
+- Die Ausnahme ist Guardian-intern. Sie ist keine Firewall-Allow-Regel und hebt keine bestehenden Plesk-, Betriebssystem- oder Provider-Sperren auf.
+- Bestehende Guardian-Sperren muessen vor dem Eintragen manuell ueber die Guardian-Regelverwaltung entfernt werden. Eintraege sind dauerhaft bis zur manuellen Entfernung.
 
 ## 0.24.0 – Globale Malware-Ignore-Hashes
 
