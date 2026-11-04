@@ -1,4 +1,4 @@
-# Guardian Lite v0.20.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.21.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -12,6 +12,13 @@
 - `watch_changes` ist ein begrenzter periodischer Metadatenvergleich. Separat existiert eine opt-in inotify-Dateiwache mit gezielten ClamAV-Pruefungen, ohne automatische Quarantaene oder Ausfuehrungsblockade. Verschobene Teilbaeume werden vom alten Pfad getrennt; ein verschobener Document-Root beendet den Monitor.
 - Neue aktive Policies werden nur per expliziter Admin-Aktion aktiviert. Automatische Good-File-Reparatur erfordert zusaetzlich eine freigegebene Baseline und Opt-in pro Domain. Originale bleiben in Quarantaene; unbekannte Dateien werden nicht automatisch geloescht.
 - Kein externer Sicherheitsaudit; fuer Produktion Code Review und Test-VPS erforderlich.
+
+## 0.21.0 – Gestreamter CMS-Datenbankscan
+
+- Joomla- und Magento-PHP-Konfigurationen werden ueber no-follow-Dateideskriptoren begrenzt gelesen; PHP wird nicht interpretiert.
+- `mysqldump`/`mariadb-dump` werden nur als root-eigene Systembinaries akzeptiert und mit fester Argumentliste ohne Shell als Website-Benutzer ausgefuehrt.
+- Passwoerter bleiben aus Argumenten, Logausgabe und Berichten; die temporaere Client-Optionsdatei wird in einem geschuetzten Verzeichnis erstellt, danach auf 0600 gesetzt und unter der Website-UID genutzt.
+- Der Dump wird nie persistiert. Teilergebnis/Fehler, Timeout und Groessenlimits gelten nie als sauber; kein automatisches Datenbank-Cleanup.
 
 ## 0.20.0 – Gestreamter WordPress-Datenbankscan
 

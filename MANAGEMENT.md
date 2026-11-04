@@ -1,4 +1,4 @@
-# Guardian Lite 0.20.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.21.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -21,7 +21,7 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |
 | WordPress-Core-Pruefsummen | WP-CLI als root-eigene Datei unter `/usr/local/bin/wp`, `/usr/bin/wp` oder `/bin/wp`; systemweite PHP-CLI und ausgehender HTTPS-Zugriff auf WordPress.org. Guardian installiert WP-CLI nicht. |
 | WordPress.org-Themes | Root-Verwaltung, lesbarer WordPress-Docroot und HTTPS-Zugriff auf `api.wordpress.org` und `downloads.wordpress.org`; WP-CLI wird hier nicht benoetigt. Pro Domain maximal 40 Theme-Verzeichnisse, 128 MiB Theme-Archive und 512 MiB entpackte Daten je Pruefung. |
-| WordPress-Datenbank-Signaturscan | Root-eigene WP-CLI- und ClamAV-Binaries, aktuelle ClamAV-Signaturen und funktionierender `mysqldump` aus WP-CLI; der volle SQL-Export wird bis 512 MiB durch eine Pipe geleitet, nicht auf Platte geschrieben. |
+| CMS-Datenbank-Signaturscan | WordPress: root-eigene WP-CLI; Joomla/Magento: root-eigenes `mysqldump` oder `mariadb-dump`; jeweils aktuelle ClamAV-Signaturen. Joomla/Magento benoetigen statische Datenbankwerte in den CMS-PHP-Konfigurationen. Der Export wird bis 512 MiB durch eine Pipe geleitet, nicht auf Platte geschrieben. |
 | AbuseIPDB | HTTPS-Ausgangsverbindung und eigener API-Key; kein Serverpaket. |
 
 ## Speicher, Quotas und Aufbewahrung
@@ -127,7 +127,7 @@ Eine zweite Aktion prueft Plugins mit `wp plugin verify-checksums --all`. WordPr
 
 Die manuelle Aktion `WordPress-Datenbank pruefen` scannt `posts`, `postmeta`, `options` sowie vorhandene Kommentar-Tabellen. Sie verwendet WP-CLI `db prefix`, `db tables` und ausschliesslich begrenzte `SELECT`-Abfragen mit SQL-Identifiern aus einer festen Allowlist. Ausgefuehrt wird WP-CLI mit der Website-UID/GID, isoliertem HOME und ohne Plugins/Themes. Guardian erfasst nur Tabellenname, numerische Zeilen-ID, Spalte und feste Regelkennung; SQL-Inhalte, Zugangsdaten und Datenbankwerte werden nicht in Berichte geschrieben. Abfragen sind auf 101 Zeilen je Tabelle, 2 MiB Ausgabe und insgesamt 5 Minuten begrenzt.
 
-Die separate Aktion `WordPress-Datenbank mit ClamAV pruefen` exportiert alle Datenbanktabellen mit `wp db export -` unter der Website-UID/GID und leitet den Stream direkt in einen verifizierten ClamAV-Prozess. Es entsteht keine SQL-Dumpdatei. Export und Scanner sind auf 512 MiB, 5 Minuten und begrenzte Prozess-CPU beschraenkt. Fehlgeschlagener Export, Scannerfehler, Ausgabe-/Datenlimit und Timeout werden nie als sauber gewertet. Berichte enthalten nur die byte-Anzahl und bis zu 100 erlaubte ClamAV-Signaturnamen, keine SQL-Werte. Es wird nichts bereinigt oder veraendert. Der Scan nutzt lokale ClamAV-Signaturen und ersetzt nicht Imunifys MDS-Signaturen; grosse Datenbanken muessen separat geprueft werden, wenn das Limit erreicht wird.
+Die separate Aktion `CMS-Datenbank mit ClamAV pruefen` erkennt WordPress, Joomla oder Magento im Plesk-Document-Root. WordPress nutzt `wp db export -`; Joomla/Magento lesen nur statische Werte aus `configuration.php` beziehungsweise `app/etc/env.php` und starten `mysqldump`/`mariadb-dump` als Website-UID/GID. PHP-Konfigurationen werden nie ausgefuehrt; dynamische Werte, mehrdeutige CMS-Roots und andere Datenbanktreiber werden abgelehnt. Joomla/Magento-Zugangsdaten stehen waehrend des Exports in einer kurzlebigen 0600-Clientdatei in einem privaten Temp-Verzeichnis, nie in Prozessargumenten oder Berichten. In allen Faellen fliesst der Export direkt in einen verifizierten ClamAV-Prozess. Es entsteht keine SQL-Dumpdatei. Export und Scanner sind auf 512 MiB, 5 Minuten und begrenzte Prozess-CPU beschraenkt. Fehlgeschlagener Export, Scannerfehler, Ausgabe-/Datenlimit und Timeout werden nie als sauber gewertet. Berichte enthalten nur CMS, byte-Anzahl und bis zu 100 erlaubte ClamAV-Signaturnamen, keine SQL-Werte. Es wird nichts bereinigt oder veraendert. Der Scan nutzt lokale ClamAV-Signaturen und ersetzt nicht Imunifys MDS-Signaturen; grosse Datenbanken muessen separat geprueft werden, wenn das Limit erreicht wird.
 
 Referenzen: [WP-CLI `db export -` schreibt den Dump auf stdout](https://developer.wordpress.org/cli/commands/db/export/); [ClamAV akzeptiert `-` als Scan-Eingabe und begrenzt Dateigroesse/Scanumfang](https://docs.clamav.net/manual/Usage/Scanning.html).
 

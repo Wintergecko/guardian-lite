@@ -49,6 +49,12 @@ WP_DB_SIGNATURE_MAX_BYTES = 512 * 1024 * 1024
 WP_DB_SIGNATURE_MAX_OUTPUT = 64 * 1024
 WP_DB_SIGNATURE_MAX_HITS = 100
 WP_DB_SIGNATURE_HIT = re.compile(r'^stdin:\s+([A-Za-z0-9_.:+-]{1,128})\s+FOUND\s*$')
+CMS_DB_MAX_CONFIG = 1024 * 1024
+PHP_CONFIG_TOKEN = re.compile(
+    r"\s+|//[^\n]*|\#[^\n]*|/\*.*?\*/|<\?php|\?>|=>|"
+    r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|"
+    r"[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[][(),;]",
+    re.S)
 WP_DB_SCAN_TABLES = {
     'posts': ('ID', ('post_content', 'post_excerpt')),
     'postmeta': ('meta_id', ('meta_value',)),
@@ -1492,23 +1498,395 @@ def wordpress_database_clamav_store(report):
     h.write_json(path, {'reports': reports})
 
 
-def wordpress_database_clamav_audit(domain):
-    """Stream a site's SQL export through ClamAV without persisting the database dump."""
-    docroot, uid, gid, wp_cli = wordpress_cli_context(domain)
-    clam = h.binary(h.CLAM_PATHS)
-    if not clam:
-        raise ValueError('ClamAV fehlt. Fuer den Datenbank-Signaturscan clamscan installieren.')
-    scanner = pathlib.Path(clam).resolve(strict=True)
-    scanner_info = scanner.stat()
-    if (not stat.S_ISREG(scanner_info.st_mode) or scanner_info.st_uid != 0 or
-            scanner_info.st_mode & 0o022 or not os.access(scanner, os.X_OK)):
-        raise ValueError('ClamAV muss eine root-eigene, nicht gruppen-/weltbeschreibbare Systemdatei sein.')
-    parent = scanner.parent
+def php_config_tokens(source):
+    tokens = []
+    position = 0
+    while position < len(source):
+        match = PHP_CONFIG_TOKEN.match(source, position)
+        if not match:
+            raise ValueError('PHP-Konfiguration enthaelt nicht-statische Syntax.')
+        token = match.group(0)
+        position = match.end()
+        if token.isspace() or token.startswith('//') or token.startswith('#') or token.startswith('/*'):
+            continue
+        tokens.append(token)
+    return tokens
+
+
+def php_config_string(token):
+    if len(token) < 2 or token[0] not in "'\"" or token[-1] != token[0]:
+        raise ValueError('PHP-Konfiguration enthaelt keinen statischen String.')
+    quote = token[0]
+    body = token[1:-1]
+    if quote == "'":
+        return re.sub(r"\\([\\'])", r'\1', body)
+    if '$' in body or '`' in body:
+        raise ValueError('PHP-Interpolation in Konfiguration wird nicht ausgefuehrt.')
+    escapes = {'n': '\n', 'r': '\r', 't': '\t', 'v': '\v', 'e': '\x1b',
+               'f': '\f', '\\': '\\', '"': '"', '$': '$'}
+    result = []
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if char != '\\':
+            result.append(char)
+            index += 1
+            continue
+        index += 1
+        if index >= len(body):
+            raise ValueError('Ungueltige String-Escape-Sequenz in PHP-Konfiguration.')
+        escaped = body[index]
+        if escaped == 'x' and index + 2 < len(body) and re.fullmatch(r'[0-9A-Fa-f]{2}', body[index + 1:index + 3]):
+            result.append(chr(int(body[index + 1:index + 3], 16)))
+            index += 3
+        elif escaped in escapes:
+            result.append(escapes[escaped])
+            index += 1
+        else:
+            # PHP preserves a backslash for unrecognized escapes in double-quoted strings.
+            result.extend(('\\', escaped))
+            index += 1
+    return ''.join(result)
+
+
+class PHPStaticArrayParser:
+    """Parse PHP literal arrays without evaluating an application config file."""
+
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.index = 0
+
+    def take(self, expected=None):
+        if self.index >= len(self.tokens):
+            raise ValueError('Unvollstaendige PHP-Konfiguration.')
+        token = self.tokens[self.index]
+        if expected is not None and token != expected:
+            raise ValueError('PHP-Konfiguration ist keine statische Literal-Arraystruktur.')
+        self.index += 1
+        return token
+
+    def peek(self):
+        return self.tokens[self.index] if self.index < len(self.tokens) else None
+
+    def value(self):
+        token = self.peek()
+        if token in ('[', 'array'):
+            if token == 'array':
+                self.take('array')
+                self.take('(')
+                closing = ')'
+            else:
+                self.take('[')
+                closing = ']'
+            result = {}
+            next_index = 0
+            while self.peek() != closing:
+                if self.peek() is None:
+                    raise ValueError('Unvollstaendiges PHP-Array.')
+                first = self.value()
+                if self.peek() == '=>':
+                    self.take('=>')
+                    key = first
+                    value = self.value()
+                else:
+                    key = next_index
+                    next_index += 1
+                    value = first
+                if not isinstance(key, (str, int)) or key in result:
+                    raise ValueError('Doppelte oder dynamische PHP-Array-Schluessel.')
+                result[key] = value
+                if self.peek() == ',':
+                    self.take(',')
+                    if self.peek() == closing:
+                        break
+                elif self.peek() != closing:
+                    raise ValueError('Unerwartete PHP-Array-Syntax.')
+            self.take(closing)
+            return result
+        if token is None:
+            raise ValueError('Leerer PHP-Konfigurationswert.')
+        if token.startswith(("'", '"')):
+            return php_config_string(self.take())
+        if token.isdigit():
+            return int(self.take())
+        if token == 'true':
+            self.take()
+            return True
+        if token == 'false':
+            self.take()
+            return False
+        if token == 'null':
+            self.take()
+            return None
+        raise ValueError('Dynamischer PHP-Konfigurationswert wird nicht ausgewertet.')
+
+
+def read_bounded_site_config(path, allowed_root):
+    """Read a small config via no-follow directory descriptors to close symlink races."""
+    path = pathlib.Path(path)
+    allowed_root = pathlib.Path(allowed_root).resolve(strict=True)
+    try:
+        relative = path.relative_to(allowed_root)
+    except ValueError:
+        raise ValueError('CMS-Konfiguration liegt ausserhalb des Plesk-Webspaces.')
+    if not relative.parts or any(component in ('', '.', '..') for component in relative.parts):
+        raise ValueError('Ungueltiger CMS-Konfigurationspfad.')
+    flags_dir = os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+    flags_file = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
+    directory = os.open(str(allowed_root), flags_dir)
+    try:
+        for component in relative.parts[:-1]:
+            child = os.open(component, flags_dir, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        descriptor = os.open(relative.parts[-1], flags_file, dir_fd=directory)
+        try:
+            info = os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > CMS_DB_MAX_CONFIG:
+                raise ValueError('CMS-Konfiguration ist keine begrenzte regulaere Datei.')
+            chunks = []
+            remaining = CMS_DB_MAX_CONFIG + 1
+            while remaining:
+                chunk = os.read(descriptor, min(65536, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            raw = b''.join(chunks)
+            if len(raw) > CMS_DB_MAX_CONFIG:
+                raise ValueError('CMS-Konfiguration ist zu gross.')
+        finally:
+            os.close(descriptor)
+    finally:
+        os.close(directory)
+    try:
+        source = raw.decode('utf-8')
+    except UnicodeDecodeError:
+        raise ValueError('CMS-Konfiguration ist keine UTF-8-Datei.')
+    return source
+
+
+def read_static_php_return_array(path, allowed_root):
+    """Read a bounded, symlink-free PHP file containing only a literal return array."""
+    source = read_bounded_site_config(path, allowed_root)
+    tokens = php_config_tokens(source)
+    if not tokens or tokens[0] != '<?php':
+        raise ValueError('PHP-Konfiguration hat kein erwartetes PHP-Format.')
+    parser = PHPStaticArrayParser(tokens[1:])
+    parser.take('return')
+    result = parser.value()
+    parser.take(';')
+    if parser.peek() == '?>':
+        parser.take('?>')
+    if parser.peek() is not None or not isinstance(result, dict):
+        raise ValueError('PHP-Konfiguration enthaelt weitere oder dynamische Anweisungen.')
+    return result
+
+
+def php_source_tokens(source):
+    """Tokenize enough PHP syntax to identify real property assignments outside strings/comments."""
+    tokens = []
+    index = 0
+    while index < len(source):
+        if source[index].isspace():
+            index += 1
+            continue
+        if source.startswith('//', index) or source[index] == '#' and not source.startswith('#[', index):
+            end = source.find('\n', index)
+            index = len(source) if end < 0 else end + 1
+            continue
+        if source.startswith('/*', index):
+            end = source.find('*/', index + 2)
+            if end < 0:
+                raise ValueError('Unvollstaendiger PHP-Kommentar.')
+            index = end + 2
+            continue
+        char = source[index]
+        if source.startswith('<<<', index) or char == '`':
+            raise ValueError('Heredoc- oder Shell-Syntax in Joomla-Konfiguration wird nicht ausgewertet.')
+        if char in ("'", '"'):
+            start = index
+            quote = char
+            index += 1
+            while index < len(source):
+                if source[index] == '\\':
+                    index += 2
+                    continue
+                if source[index] == quote:
+                    index += 1
+                    break
+                index += 1
+            else:
+                raise ValueError('Ungueltiger String in Joomla-Konfiguration.')
+            tokens.append(('string', source[start:index]))
+            continue
+        variable = re.match(r'\$[A-Za-z_][A-Za-z0-9_]*', source[index:])
+        if variable:
+            tokens.append(('variable', variable.group(0)[1:]))
+            index += len(variable.group(0))
+            continue
+        identifier = re.match(r'[A-Za-z_][A-Za-z0-9_]*', source[index:])
+        if identifier:
+            tokens.append(('identifier', identifier.group(0)))
+            index += len(identifier.group(0))
+            continue
+        if char == '#' and source.startswith('#[', index):
+            tokens.extend((('symbol', '#'), ('symbol', '[')))
+            index += 2
+            continue
+        tokens.append(('symbol', char))
+        index += 1
+    return tokens
+
+
+def static_joomla_database_config(path, allowed_root):
+    """Extract only literal Joomla database properties; never include configuration.php."""
+    path = pathlib.Path(path)
+    root_path = pathlib.Path(allowed_root).resolve(strict=True)
+    source = read_bounded_site_config(path, root_path)
+    properties = {}
+    tokens = php_source_tokens(source)
+    expected = {'dbtype', 'host', 'user', 'password', 'db', 'dbprefix'}
+    for index in range(len(tokens) - 4):
+        visibility, variable, equals, value, semicolon = tokens[index:index + 5]
+        if (visibility[0] != 'identifier' or visibility[1] not in ('public', 'protected', 'private') or
+                variable[0] != 'variable' or variable[1] not in expected or
+                equals != ('symbol', '=') or semicolon != ('symbol', ';')):
+            continue
+        key = variable[1]
+        if key in properties:
+            raise ValueError('Doppelte Joomla-Datenbankkonfiguration.')
+        properties[key] = php_config_string(value[1]) if value[0] == 'string' else None
+    required = ('host', 'user', 'password', 'db')
+    if any(key not in properties or properties[key] is None for key in required):
+        raise ValueError('Joomla-Datenbankwerte sind nicht als statische Literale konfiguriert.')
+    if properties.get('dbtype', 'mysqli').lower() not in ('mysqli', 'mysql'):
+        raise ValueError('Joomla verwendet keinen unterstuetzten MySQL/MariaDB-Treiber.')
+    config = {'host': properties['host'], 'user': properties['user'],
+              'password': properties['password'], 'db': properties['db']}
+    if properties.get('dbprefix'):
+        config['prefix'] = properties['dbprefix']
+    return validate_cms_database_config(config)
+
+
+def validate_cms_database_config(config):
+    """Bound and sanitize connection values before they reach option files or argv."""
+    result = {}
+    limits = {'host': 255, 'user': 128, 'password': 1024, 'db': 64, 'prefix': 64}
+    for key, limit in limits.items():
+        value = config.get(key, '')
+        if not isinstance(value, str) or len(value) > limit or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+            raise ValueError('Ungueltige oder zu grosse CMS-Datenbankkonfiguration.')
+        if key in ('host', 'user', 'db') and not value:
+            raise ValueError('CMS-Datenbankkonfiguration ist unvollstaendig.')
+        result[key] = value
+    port = config.get('port')
+    if port not in (None, ''):
+        if isinstance(port, bool) or not str(port).isdigit() or not 1 <= int(port) <= 65535:
+            raise ValueError('Ungueltiger Datenbank-Port in CMS-Konfiguration.')
+        result['port'] = int(port)
+    if not re.fullmatch(r'[A-Za-z0-9_.-]{1,64}', result['db']):
+        raise ValueError('Ungueltiger Datenbankname in CMS-Konfiguration.')
+    if result['host'] != 'localhost' and not re.fullmatch(r'[A-Za-z0-9_.:-]{1,255}', result['host']):
+        raise ValueError('Ungueltiger Datenbankhost in CMS-Konfiguration.')
+    if not re.fullmatch(r'[A-Za-z0-9_.@-]{1,128}', result['user']):
+        raise ValueError('Ungueltiger Datenbankbenutzer in CMS-Konfiguration.')
+    return result
+
+
+def magento_database_config(path, allowed_root):
+    settings = read_static_php_return_array(path, allowed_root)
+    try:
+        connection = settings['db']['connection']['default']
+    except (KeyError, TypeError):
+        raise ValueError('Magento-Datenbankverbindung wurde nicht statisch gefunden.')
+    if not isinstance(connection, dict):
+        raise ValueError('Magento-Datenbankverbindung ist keine Literal-Konfiguration.')
+    config = {'host': connection.get('host'), 'user': connection.get('username'),
+              'password': connection.get('password'), 'db': connection.get('dbname'),
+              'port': connection.get('port'), 'prefix': settings['db'].get('table_prefix', '')}
+    return validate_cms_database_config(config)
+
+
+def trusted_system_binary(path, name):
+    executable = pathlib.Path(path).resolve(strict=True)
+    info = executable.stat()
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or
+            info.st_mode & 0o022 or not os.access(executable, os.X_OK)):
+        raise ValueError(name + ' muss eine root-eigene, nicht gruppen-/weltbeschreibbare Systemdatei sein.')
+    parent = executable.parent
     while parent != parent.parent:
         parent_info = parent.stat()
         if not stat.S_ISDIR(parent_info.st_mode) or parent_info.st_uid != 0 or parent_info.st_mode & 0o022:
-            raise ValueError('ClamAV-Verzeichnisse muessen root-eigen und nicht gruppen-/weltbeschreibbar sein.')
+            raise ValueError(name + '-Verzeichnisse muessen root-eigen und nicht gruppen-/weltbeschreibbar sein.')
         parent = parent.parent
+    return executable
+
+
+def find_cms_database(domain):
+    docroot, uid, gid = h.site_docroot(domain)
+    detected = []
+    if (docroot / 'wp-load.php').is_file() and (docroot / 'wp-includes' / 'version.php').is_file():
+        detected.append('wordpress')
+    joomla_config = docroot / 'configuration.php'
+    if joomla_config.is_file():
+        detected.append('joomla')
+    candidates = [docroot / 'app' / 'etc' / 'env.php']
+    if docroot.name.lower() == 'pub':
+        candidates.append(docroot.parent / 'app' / 'etc' / 'env.php')
+    if any(path.is_file() for path in candidates):
+        detected.append('magento')
+    if len(detected) != 1:
+        raise ValueError('CMS-Datenbankkonfiguration fehlt oder ist im Document-Root nicht eindeutig.')
+    return detected[0]
+
+
+def cms_database_dump_context(domain, cms):
+    docroot, uid, gid = h.site_docroot(domain)
+    if cms == 'joomla':
+        config_path = docroot / 'configuration.php'
+        database = static_joomla_database_config(config_path, docroot)
+        root_path = docroot
+    elif cms == 'magento':
+        candidates = [(docroot, docroot / 'app' / 'etc' / 'env.php')]
+        if docroot.name.lower() == 'pub':
+            candidates.append((docroot.parent, docroot.parent / 'app' / 'etc' / 'env.php'))
+        found = [(base, config) for base, config in candidates if config.is_file()]
+        if len(found) != 1:
+            raise ValueError('Magento-Konfiguration ist im Document-Root nicht eindeutig.')
+        root_path, config_path = found[0]
+        if root_path != docroot and (root_path.stat().st_uid != uid or root_path.stat().st_gid != gid):
+            raise ValueError('Magento-Projektverzeichnis gehoert nicht zum Website-Benutzer.')
+        database = magento_database_config(config_path, root_path)
+    else:
+        raise ValueError('CMS-Datenbankexport fuer diesen CMS-Typ nicht verfuegbar.')
+    dump_path = h.binary(('/usr/bin/mysqldump', '/usr/bin/mariadb-dump', '/bin/mysqldump'))
+    if not dump_path:
+        raise ValueError('mysqldump oder mariadb-dump fehlt.')
+    return docroot, uid, gid, trusted_system_binary(dump_path, 'Datenbankexportprogramm'), database
+
+
+def mysql_option_value(value):
+    if not isinstance(value, str) or any(ch in value for ch in ('\x00', '\n', '\r')):
+        raise ValueError('Datenbankverbindungswert kann nicht sicher in einer Optiondatei abgelegt werden.')
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def wordpress_database_clamav_audit(domain):
+    return cms_database_clamav_audit(domain, 'wordpress')
+
+
+def cms_database_clamav_audit(domain, cms):
+    """Stream a CMS SQL export through ClamAV without persisting a database dump."""
+    if cms == 'wordpress':
+        docroot, uid, gid, producer_executable = wordpress_cli_context(domain)
+        database = None
+    else:
+        docroot, uid, gid, producer_executable, database = cms_database_dump_context(domain, cms)
+    clam = h.binary(h.CLAM_PATHS)
+    if not clam:
+        raise ValueError('ClamAV fehlt. Fuer den Datenbank-Signaturscan clamscan installieren.')
+    scanner = trusted_system_binary(clam, 'ClamAV')
 
     state = {'bytes': 0, 'truncated': False, 'pipe_error': False,
              'output_truncated': False, 'findings': []}
@@ -1561,37 +1939,57 @@ def wordpress_database_clamav_audit(domain):
 
     def read_scan_output(source):
         read_total = 0
-        while True:
-            line = source.readline(4096)
-            if not line:
-                break
-            read_total += len(line)
-            if read_total > WP_DB_SIGNATURE_MAX_OUTPUT:
-                state['output_truncated'] = True
-                continue
-            text_line = line.decode('utf-8', 'replace').strip()
-            match = WP_DB_SIGNATURE_HIT.fullmatch(text_line)
-            if match and len(state['findings']) < WP_DB_SIGNATURE_MAX_HITS:
-                state['findings'].append({'signature': match.group(1), 'rule': 'clamav-database-signature'})
-            elif match:
-                state['output_truncated'] = True
+        try:
+            while True:
+                line = source.readline(4096)
+                if not line:
+                    break
+                read_total += len(line)
+                if read_total > WP_DB_SIGNATURE_MAX_OUTPUT:
+                    state['output_truncated'] = True
+                    continue
+                text_line = line.decode('utf-8', 'replace').strip()
+                match = WP_DB_SIGNATURE_HIT.fullmatch(text_line)
+                if match and len(state['findings']) < WP_DB_SIGNATURE_MAX_HITS:
+                    state['findings'].append({'signature': match.group(1), 'rule': 'clamav-database-signature'})
+                elif match:
+                    state['output_truncated'] = True
+        finally:
+            try:
+                source.close()
+            except OSError:
+                pass
 
     try:
-        with tempfile.TemporaryDirectory(prefix='guardian-wp-db-clamav-') as home:
+        with tempfile.TemporaryDirectory(prefix='guardian-cms-db-clamav-') as home:
+            env = {'PATH': '/usr/bin:/bin', 'HOME': home, 'LANG': 'C', 'TERM': 'dumb'}
+            if cms == 'wordpress':
+                env.update({'WP_CLI_CONFIG_PATH': str(pathlib.Path(home) / 'config.yml'),
+                            'WP_CLI_PACKAGES_DIR': str(pathlib.Path(home) / 'packages'),
+                            'WP_CLI_CACHE_DIR': str(pathlib.Path(home) / 'cache'),
+                            'WP_CLI_DISABLE_AUTO_CHECK_UPDATE': '1'})
+                producer_args = [str(producer_executable), '--path=' + str(docroot), '--url=https://' + domain,
+                                 '--skip-plugins', '--skip-themes', '--skip-packages', '--no-color', '--quiet',
+                                 'db', 'export', '-']
+            else:
+                option_file = pathlib.Path(home) / 'mysql-client.cnf'
+                option_lines = ['[client]', 'host=' + mysql_option_value(database['host']),
+                                'user=' + mysql_option_value(database['user']),
+                                'password=' + mysql_option_value(database['password'])]
+                if database.get('port'):
+                    option_lines.append('port=%d' % database['port'])
+                option_file.write_text('\n'.join(option_lines) + '\n', encoding='utf-8')
+                os.chown(option_file, uid, gid)
+                os.chmod(option_file, 0o600)
+                producer_args = [str(producer_executable), '--defaults-extra-file=' + str(option_file),
+                                 '--single-transaction', '--quick', '--skip-comments', '--no-tablespaces',
+                                 '--hex-blob', '--', database['db']]
             os.chown(home, uid, gid)
             os.chmod(home, 0o700)
-            env = {'PATH': '/usr/bin:/bin', 'HOME': home, 'LANG': 'C', 'TERM': 'dumb',
-                   'WP_CLI_CONFIG_PATH': str(pathlib.Path(home) / 'config.yml'),
-                   'WP_CLI_PACKAGES_DIR': str(pathlib.Path(home) / 'packages'),
-                   'WP_CLI_CACHE_DIR': str(pathlib.Path(home) / 'cache'),
-                   'WP_CLI_DISABLE_AUTO_CHECK_UPDATE': '1'}
-            wp_args = [str(wp_cli), '--path=' + str(docroot), '--url=https://' + domain,
-                       '--skip-plugins', '--skip-themes', '--skip-packages', '--no-color', '--quiet',
-                       'db', 'export', '-']
             clam_args = [str(scanner), '--infected', '--no-summary',
                          '--max-filesize=%d' % WP_DB_SIGNATURE_MAX_BYTES,
                          '--max-scansize=%d' % WP_DB_SIGNATURE_MAX_BYTES, '-']
-            producer = subprocess.Popen(wp_args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            producer = subprocess.Popen(producer_args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                         stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True,
                                         cwd='/', env=env,
                                         preexec_fn=lambda: h.drop_privileges(uid, gid, cpu_limit=120))
@@ -1623,7 +2021,7 @@ def wordpress_database_clamav_audit(domain):
             if any(thread.is_alive() for thread in threads):
                 timed_out = True
             if producer_rc != 0:
-                error = 'WordPress-Datenbankexport konnte nicht vollstaendig gelesen werden.'
+                error = 'CMS-Datenbankexport konnte nicht vollstaendig gelesen werden.'
             elif scan_rc not in (0, 1):
                 error = 'ClamAV konnte den Datenbankexport nicht vollstaendig pruefen.'
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
@@ -1649,18 +2047,18 @@ def wordpress_database_clamav_audit(domain):
         status = 'no_signatures'
     else:
         status = 'error'
-    report = {'domain': domain, 'checked_at': h.utc_now(), 'status': status,
+    report = {'domain': domain, 'cms': cms, 'checked_at': h.utc_now(), 'status': status,
               'bytes_scanned': state['bytes'], 'finding_count': len(state['findings']),
               'findings': state['findings'], 'truncated': bool(timed_out or state['truncated'] or
               state['pipe_error'] or state['output_truncated']),
-              'note': 'ClamAV-Signaturscan eines direkt gestreamten WordPress-SQL-Exports. Kein Dump wird auf Platte gespeichert. Kein MDS-/Cloud-Signaturnachweis; keine Datenbank wird geaendert.'}
+              'note': 'ClamAV-Signaturscan eines direkt gestreamten %s-SQL-Exports. Kein Datenbank-Dump wird auf Platte gespeichert. Kein MDS-/Cloud-Signaturnachweis; keine Datenbank wird geaendert.' % cms}
     if error:
         report['error'] = error
     wordpress_database_clamav_store(report)
     if state['findings']:
         h.incident_log('cms_database_indicators', 'warning', domain,
-                       '%d ClamAV-Signaturtreffer im WordPress-Datenbankexport; manuelle Pruefung erforderlich.' %
-                       len(state['findings']))
+                       '%d ClamAV-Signaturtreffer im %s-Datenbankexport; manuelle Pruefung erforderlich.' %
+                       (len(state['findings']), cms.capitalize()))
     return report
 
 
@@ -1687,7 +2085,7 @@ def wordpress_theme_fetch(url, max_bytes):
     parts = urllib.parse.urlsplit(url)
     if not allowed_target(url) or parts.fragment:
         raise ValueError('Theme-Pruefung akzeptiert nur HTTPS von WordPress.org.')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.20.0 theme-integrity'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.21.0 theme-integrity'})
     class AllowedRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not allowed_target(newurl):
@@ -2057,6 +2455,7 @@ def public_status():
             'wordpress_theme_checksum': theme_checksum_reports,
             'wordpress_db_scans': db_scan_reports,
             'wordpress_db_clamav_scans': db_clamav_reports,
+            'cms_db_clamav_scans': db_clamav_reports,
             'jobs': [h.read_json(p, {}) for p in sorted((root() / 'jobs').glob('*.json'),
                      key=lambda x: x.stat().st_mtime, reverse=True)[:10]],
             'reputation': list(h.read_json(root() / 'reputation.json', {}).values())[-20:]}
@@ -2226,6 +2625,9 @@ def dispatch(request):
             return wordpress_database_audit(request.get('domain', ''))
         if action == 'wp-db-clamav-scan':
             return wordpress_database_clamav_audit(request.get('domain', ''))
+        if action == 'cms-db-clamav-scan':
+            cms = find_cms_database(request.get('domain', ''))
+            return cms_database_clamav_audit(request.get('domain', ''), cms)
         raise ValueError('Unbekannte Verwaltungsaktion.')
 
 

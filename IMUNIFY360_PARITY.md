@@ -1,6 +1,6 @@
 # Imunify360-Funktionsabgleich fuer Guardian Lite
 
-Stand: 2026-11-04. Grundlage ist die oeffentliche Imunify360-Produktdokumentation. Dieses Dokument trennt vorhandene Guardian-Funktionen von echter Funktionsgleichheit und externen Abhaengigkeiten.
+Stand: 2026-11-05. Grundlage ist die oeffentliche Imunify360-Produktdokumentation. Dieses Dokument trennt vorhandene Guardian-Funktionen von echter Funktionsgleichheit und externen Abhaengigkeiten.
 
 ## Kurzfassung
 
@@ -18,7 +18,7 @@ Imunify360 kombiniert einen serverweiten Netzwerk-Firewall-Agenten, dynamische I
 | Live-Datei- und Upload-Scanning | Opt-in inotify-Wache mit gezielter ClamAV-Pruefung | fanotify-Abdeckung, FTP-/HTTP-Upload-Hooks, Dateiarchiv-Workflows, Overflow-/Wiederanlauf-Abdeckung und nachvollziehbare Vollstaendigkeit |
 | Bereinigung und Wiederherstellung | Manuelle Quarantaene; opt-in Reparatur nur aus bestaetigter Baseline nach sauberem Vollscan; Storage-Ansicht, 512-MiB-Baseline- und 256-MiB-/200-Eintraege-Backup-Quota sowie bestaetigte manuelle Loeschung | Sichere Vorschlaege fuer unbekannte Funde, granularere Aufbewahrungsregeln, Backup-Import und Bulk-Aktionen |
 | Ignore List | SHA-256-Ignore-Liste je Domain; ignorierte Dateien bleiben sichtbar und werden weiter gescannt, aber nicht automatisch gemeldet/repariert | Globale serverweite Hash-Liste und kontrollierte Pfad-Ausnahmen mit Erklaerung/Audit |
-| Malware Database Scanner | Teilabdeckung: read-only WordPress-SQL-Heuristik plus optionaler kompletter Datenbankexport direkt durch ClamAV (512-MiB-/5-Minuten-Limit; kein Dump auf Platte) | Keine Imunify-MDS-Signaturen, Joomla/Magento-Abdeckung, Datenbankbereinigung, Backup oder Rollback; grosse Datenbanken koennen das Scanlimit ueberschreiten |
+| Malware Database Scanner | Teilabdeckung: WordPress-SQL-Heuristik plus optionale direkte ClamAV-Streams fuer WordPress, Joomla und Magento (512-MiB-/5-Minuten-Limit; kein Dump auf Platte); Joomla/Magento-Konfigurationswerte werden statisch geparst und Passwoerter nur temporaer in einer privaten Clientdatei genutzt | Keine Imunify-MDS-Signaturen, Datenbankbereinigung, Backup oder Rollback; dynamische PHP-Konfigurationen und andere Datenbanktreiber werden abgelehnt; grosse Datenbanken koennen das Scanlimit ueberschreiten |
 | Hersteller-Pruefsummen fuer CMS-Dateien | WordPress-Core und Plugins via WP-CLI; WordPress.org-Themes werden read-only mit dem HTTPS-Archiv der exakt installierten Version verglichen | Eigene/kommerzielle Theme-Versionen koennen ungeprueft bleiben; Theme-Archiv ist kein signierter Pruefwert; Joomla/Magento, vollstaendige Good-File-Backups und Reparatur fehlen |
 | PHP Proactive Defense | Snuffleupagus-Installation, feste Regeln zum Blockieren bestimmter Shell-Funktionen; kein Aufruf-/Verhaltensmonitor | Instrumentierung/Telemetrie je Handler, Log-only-Policy, reproduzierbare Test-Signaturen, Ereigniszuordnung und dann vorsichtige Blockierregeln. Das ist kein gleichwertiges ML-/Cloud-Modell. |
 | WAF / Managed ModSecurity | Loganzeige und eine Guardian-Regeldatei fuer begrenzte Host-/IP-Ratenlimits | Verwaltete, signierte Regelpakete mit sicherem Update/Rollback, Regel-Ausnahmen, Regeln pro Domain und strukturierte Incidents |
@@ -38,9 +38,26 @@ Imunify360 kombiniert einen serverweiten Netzwerk-Firewall-Agenten, dynamische I
 
 Die Dokumentation enthaelt auch cPanel-, WHMCS- und DirectAdmin-Funktionen. Sie gehoeren nicht zur Plesk-Erweiterung. Insbesondere cPanel-only Exim/Dovecot-/Panel-Challenges werden nicht als Guardian-Plesk-Funktionen behandelt. Ein Plesk-Feature muss die Plesk-API, Abonnementgrenzen, Domain-/Handlerzuordnung und Deinstallations-Ruecknahme verwenden.
 
+## Zusaetzliche Doku-Funktionen und genaue Abgrenzung
+
+Die Imunify360-Dokumentation beschreibt auch die folgenden Oberflaechen- und Betriebsfunktionen. Sie sind Teil des Paritaetsziels, sofern sie auf Plesk sinnvoll und ohne Imunify-Lizenz oder proprietaere Cloud-Daten umsetzbar sind:
+
+| Dokumentierter Bereich | Guardian-Abdeckung | Konsequenz fuer die Roadmap |
+|---|---|---|
+| Firewall-Listen: Blacklist, Whitelist, Greylist und gesperrte Ports | Manuelle, zeitbegrenzte Deny-Regeln ueber Plesks Firewall; kein Greylist-Modell, keine Portregeln, keine vollstaendige Listenverwaltung | Als naechstes Firewall-Fundament sichere Allow-/Notfalllisten und Portstatus ueber die Plesk-API pruefen. Keine parallelen iptables/nftables-Regeln einfuehren. |
+| Externe IP-Listen und globale Malware-Hash-Ausnahmen | Domainbezogene SHA-256-Ausnahmen und manuelle IP-Sperren; keine serverweiten Textlisten fuer IP/CIDR oder Hashes | Serverweite Listen benoetigen atomare Validierung, Herkunft/Kommentar, Konfliktregeln und einen Audit-Eintrag vor dem Aktivieren. |
+| WebShield: Under Attack Mode, Greylist-Challenge, L7-Rate-Limits und CDN-Real-IP | Turnstile nur fuer bestimmte PHP-Loginpfade; Apache-ModSecurity-Vorlage fuer einen Host | Generische Challenge und Grenzwerte koennen nur als sichere Plesk-/Proxy-Integration umgesetzt werden. Vor Aktivierung muessen echte Client-IP, CDN-Vertrauen, API-Ausnahmen und Caching getestet sein. |
+| Malware-Dateiverwaltung: Trefferstatus, Cleanup, Delete, Restore, Ignore und Verlauf | Guardian hat Scanberichte, manuelle Quarantaene und baselinegestuetzte Reparatur mit Rollback; keine Bulk-Aktionen oder automatische Bereinigung | Funktionen erweitern, ohne unbekannte Funde automatisch zu veraendern. Jede Reparatur braucht gepruefte Quelle, Vorher-Backup, Konflikterkennung und Ruecknahme. |
+| Dashboard, Vorfallsfilter, Zeitreihen, Heatmaps und Advisor | Statuskarten, Diagnose, JSON-Export und Incident-Protokoll; keine zeitbasierte Korrelation/Heatmaps oder Empfehlungspruefung | Vereinheitlichte, filterbare Incident-Daten vor Visualisierungen; Empfehlungen zunaechst nur read-only und mit Erklaerung. |
+| Benachrichtigungen und Ereignis-Hooks | Gedrosselte E-Mail-Warnungen und JSON-Export; keine konfigurierbaren lokalen Hooks/Webhooks mit Retry-Status | Ereignistypen, sichere feste Zieltypen und Zustellwarteschlange ergaenzen; keine beliebigen Shell-Kommandos aus der UI. |
+| Einstellungen: Low-Resource-Modus, WAF-Regelversionen und signierte Regelupdates | Einzelne Aufgaben sind begrenzt; keine globale Ressourcensteuerung und keine verwalteten signierten ModSecurity-Pakete | Sichtbare Ressourcenbudgets und ein unabhaengiger, signierter WAF-Regelkanal mit Test, Reload-Healthcheck und Rollback waeren noetig. |
+| Reputation, KernelCare und Multi-Server-Dashboard | Einzelne manuelle AbuseIPDB-Abfrage; KernelCare-/Mehrserverstatus nicht vorhanden | Reputation kann nur nach expliziter Anbieterzustimmung abgefragt werden. KernelCare bleibt eine optionale TuxCare-Integration; Mehrserverfunktionen benoetigen ein eigenes authentifiziertes Transport- und Rollenmodell. |
+
+Die Doku-Hauptseite fuehrt Imunify AV/AV+, Imunify Email und Imunify Patch als separate Produktdokumentationen auf. Diese sind nicht automatisch Bestandteil der Guardian-Lite-Plesk-Erweiterung; eine spaetere Integration waere ein eigener, optionaler Connector. Ebenso ist ein lokaler ClamAV-Scan keine Gleichheit mit Imunify-eigenen Cloud-Signaturen, RapidScan-Hashdiensten oder der Malware Database Scanner-Bereinigung samt CSV-Restore.
+
 ## Umsetzung in sicheren Abschnitten
 
-1. **Malware-Arbeitsablauf:** SHA-256-Ausnahmen je Domain, WordPress-Core-/Plugin-Pruefsummen, WordPress.org-Theme-Archivvergleich, WordPress-Datenbankindikatoren und optionaler lokaler ClamAV-Streamscan (implementiert); danach Joomla/Magento-Herstellerquellen sowie ein CMS-spezifischer Datenbankscanner mit Datenbankbackup/Rollback. Lokale ClamAV-Treffer und Datenbankheuristiktreffer bleiben Hinweise; unbekannte Dateifunde bleiben bis zur Freigabe unveraendert.
+1. **Malware-Arbeitsablauf:** SHA-256-Ausnahmen je Domain, WordPress-Core-/Plugin-Pruefsummen, WordPress.org-Theme-Archivvergleich, WordPress-Datenbankindikatoren und optionale lokale ClamAV-Streamscans fuer WordPress/Joomla/Magento; danach CMS-Herstellerquellen sowie ein Datenbank-Backup/Rollback vor jeglicher Bereinigung. Lokale ClamAV-Treffer und Datenbankheuristiktreffer bleiben Hinweise; unbekannte Dateifunde bleiben bis zur Freigabe unveraendert.
 2. **Ereignisse und Abwehr:** Vereinheitlichte Incidents aus ClamAV, ModSecurity, Fail2Ban und PHP-Proben; filterbarer Verlauf; E-Mail-Warteschlange und sichere, feste Webhook/Hooks.
 3. **HTTP/WAF:** Signierte Regelquellen, klare Versions-/Regel-Ausnahmen, Testmodus, spezifische Pfad-/IP-Ratenlimits und Wiederherstellung bei fehlgeschlagenem Reload.
 4. **Netzwerk-IP-Schutz:** Guardian-Deny-Regeln verwenden Plesks native Firewall mit Rollback und begrenzten Ablaufzeiten; danach priorisierte Allow-/Notfalllisten, AbuseIPDB-Freigabeworkflow und CIDR-Tests auf dem separaten Plesk-VPS. Kein paralleler nftables-/iptables-Backendmix.
@@ -55,6 +72,9 @@ Alle systemweiten Aktionen bleiben standardmaessig aus und werden ausschliesslic
 
 - [Imunify360 overview](https://docs.imunify360.com/introduction/)
 - [Imunify360 feature configuration](https://docs.imunify360.com/features/)
+- [Imunify360 admin dashboard, firewall, incidents, reputation and KernelCare](https://docs.imunify360.com/dashboard/)
+- [Imunify360 end-user files, history, ignore list and WebShield](https://docs.imunify360.com/user_interface/)
+- [Imunify360 installation, Plesk compatibility and conflicting firewall tooling](https://docs.imunify360.com/installation/)
 - [WP-CLI core checksum verification](https://developer.wordpress.org/cli/commands/core/verify-checksums/)
 - [WP-CLI database export to stdout](https://developer.wordpress.org/cli/commands/db/export/)
 - [ClamAV scan input modes and size limits](https://docs.clamav.net/manual/Usage/Scanning.html)
