@@ -1,4 +1,4 @@
-# Guardian Lite 0.12.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.13.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -32,7 +32,9 @@ Im Angriffe-&-Schutz-Bereich zeigt Guardian eigene Deny-Regeln, die es in der Pl
 
 Unterstuetzt sind einzelne IPv4-/IPv6-Adressen und CIDR-Netze bis maximal IPv4 `/24` bzw. IPv6 `/64`. Loopback-, unspecified-, link-local- und Multicast-Netze sowie die aktuelle `REMOTE_ADDR` der Plesk-Admin-Verbindung werden abgelehnt. Weitergeleitete Proxy-Header werden nicht als Admin-IP verwendet. Ein Admin hinter Proxy/CDN muss nach dem ersten Plesk-Test die tatsaechlich ankommende Verbindung beruecksichtigen.
 
-Nach jeder Aenderung fuehrt Plesk `--apply` aus und startet sein 60-Sekunden-Rollback. Teste zuerst in einer unabhaengigen SSH- oder Plesk-Admin-Verbindung, dass Panel und erforderliche Dienste erreichbar bleiben; bestaetige erst danach im Guardian-Panel. Ohne Bestaetigung stellt Plesk die vorherige aktive Konfiguration wieder her. Die Guardian-Regel bleibt nach erfolgreicher Bestaetigung bestehen, bis sie manuell entfernt wird. Automatische IP-Reputation, Ablaufzeiten, Allowlisten und Provider-Firewalls sind noch nicht enthalten.
+Beim Anlegen kann eine Sperre dauerhaft oder fuer 1 Stunde, 24 Stunden beziehungsweise 7 Tage angelegt werden. Die Ablaufzeit wird erst nach manueller Bestaetigung gespeichert. Der vorhandene stuendliche Plesk-Scheduler entfernt abgelaufene Guardian-Regeln; die tatsaechliche Entsperrung kann bis zu einer Stunde nach der angezeigten Zeit erfolgen. Entsperrungen nutzen Plesks `--apply`/`--confirm` Ablauf. Bei offener Admin-Aenderung oder nicht lesbarer Firewall-Regelliste aendert Guardian nichts und protokolliert den Fehler; fremde Regeln werden nie entfernt.
+
+Nach jeder Aenderung fuehrt Plesk `--apply` aus und startet sein 60-Sekunden-Rollback. Teste zuerst in einer unabhaengigen SSH- oder Plesk-Admin-Verbindung, dass Panel und erforderliche Dienste erreichbar bleiben; bestaetige erst danach im Guardian-Panel. Ohne Bestaetigung stellt Plesk die vorherige aktive Konfiguration wieder her. Automatische IP-Reputation, Allowlisten und Provider-Firewalls sind noch nicht enthalten.
 
 Plesk warnt vor gleichzeitig aktivem `firewalld`, weil beide Dienste dieselben Firewallregeln verwalten koennen. Guardian blockiert deshalb Aenderungen, wenn `firewalld` als aktiv erkannt wird. [Plesk Firewall: Regeln und Rollback](https://docs.plesk.com/en-US/obsidian/administrator-guide/plesk-administration/plesk-for-linux-the-plesk-firewall.72046/) · [Plesk CLI](https://support.plesk.com/hc/en-us/articles/12377519983511-How-to-manage-local-firewall-rules-using-Plesk-Firewall-in-Plesk-for-Linux)
 

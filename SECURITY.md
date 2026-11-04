@@ -1,4 +1,4 @@
-# Guardian Lite v0.12.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.13.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -50,6 +50,12 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - Eine IP- oder begrenzte CIDR-Sperre wird nur als Guardian-eigene Plesk-Custom-Regel erstellt oder entfernt.
 - Plesk muss installiert und aktiv sein. Guardian aktiviert keine Firewall und fasst keine fremden Regeln an.
 - Plesks Aktivierungs-Timeout wird genutzt: nicht bestaetigte Aenderungen rollen nach 60 Sekunden zurueck.
+
+## 0.13.0 – Zeitbegrenzte Plesk-Firewall-Sperren
+
+- Nur feste TTL-Werte von 1h, 24h oder 7d sind zulaessig; dauerhaft bleibt explizit waehlbar.
+- Ablaufdaten werden privat gespeichert und erst nach manueller Plesk-Bestaetigung aktiviert. Ein stuendlicher Scheduler entfernt nur passende Guardian-Regeln und bestaetigt deren Entsperrung.
+- Bei nicht lesbarer Regelliste oder offener Aenderung erfolgt keine automatische Firewall-Aenderung. Der Scheduler kann den Ablauf bis zu einer Stunde verzoegern.
 
 ## 0.11.0 – WordPress-Plugin-Pruefsummen
 

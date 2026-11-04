@@ -5,6 +5,7 @@ import json
 import pathlib
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -111,6 +112,22 @@ class GuardianTests(unittest.TestCase):
         self.assertEqual([item['id'] for item in result['rules']], ['41'])
         self.assertEqual(result['rules'][0]['network'], '203.0.113.25/32')
 
+    def test_guardian_firewall_rules_displays_confirmed_expiry(self):
+        row = {'id': 41, 'class': 'custom', 'name': 'Guardian Lite managed deny 203.0.113.25/32',
+               'direction': 'input', 'action': 'deny', 'from': ['203.0.113.25'], 'ports': ''}
+        with tempfile.TemporaryDirectory() as tmp:
+            expiry_path = pathlib.Path(tmp) / 'firewall-expiries.json'
+            expires = int(time.time()) + 3600
+            helper.write_json(expiry_path, {'203.0.113.25/32': expires})
+            with mock.patch.object(helper, 'FIREWALL_EXPIRIES', expiry_path), \
+                 mock.patch.object(helper, 'binary', return_value='/usr/bin/plesk'), \
+                 mock.patch.object(helper, 'execute', return_value=subprocess.CompletedProcess(
+                     ['plesk'], 0, json.dumps([row]), '')):
+                result = helper.firewall_rules()
+        self.assertEqual(result['rules'][0]['expires_epoch'], expires)
+        self.assertEqual(result['rules'][0]['expires_at'], helper.datetime.datetime.fromtimestamp(
+            expires, helper.datetime.timezone.utc).isoformat())
+
     def test_guardian_firewall_ban_stages_native_rule_and_requires_confirmation(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = pathlib.Path(tmp)
@@ -127,6 +144,7 @@ class GuardianTests(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0, '', '')
             with mock.patch.object(helper, 'ROOT', root), \
                  mock.patch.object(helper, 'FIREWALL_PENDING', root / 'firewall-pending.json'), \
+                 mock.patch.object(helper, 'FIREWALL_EXPIRIES', root / 'firewall-expiries.json'), \
                  mock.patch.object(helper, 'FIREWALL_SETTINGS', settings), \
                  mock.patch.object(helper, 'PLESK_BINARIES', ('/usr/bin/plesk',)), \
                  mock.patch.object(helper, 'SYSTEMCTL_PATHS', ()), \
@@ -134,13 +152,16 @@ class GuardianTests(unittest.TestCase):
                  mock.patch.object(helper, 'binary', side_effect=lambda paths: paths[0] if paths else None), \
                  mock.patch.object(helper, 'execute', side_effect=fake_execute), \
                  mock.patch.object(helper, 'incident_log'):
-                result = helper.firewall_action('ban', '203.0.113.25', '198.51.100.8')
+                result = helper.firewall_action('ban', '203.0.113.25', '198.51.100.8', 3600)
                 self.assertEqual(result['state'], 'awaiting_confirmation')
                 self.assertEqual(result['network'], '203.0.113.25/32')
+                self.assertEqual(result['ttl_seconds'], 3600)
                 self.assertTrue((root / 'firewall-pending.json').is_file())
                 self.assertTrue(any('--apply' in call for call in calls))
                 confirmed = helper.firewall_action('confirm')
                 self.assertEqual(confirmed['state'], 'confirmed')
+                expires = helper.read_json(root / 'firewall-expiries.json', {})['203.0.113.25/32']
+                self.assertGreater(expires, time.time())
                 self.assertFalse((root / 'firewall-pending.json').exists())
                 rows[0] = json.dumps([{
                     'id': 41, 'class': 'custom', 'name': 'Guardian Lite managed deny 203.0.113.25/32',
@@ -152,6 +173,32 @@ class GuardianTests(unittest.TestCase):
                 cancelled = helper.firewall_action('cancel')
                 self.assertEqual(cancelled['state'], 'cancelled')
                 self.assertFalse((root / 'firewall-pending.json').exists())
+                self.assertIn('203.0.113.25/32', helper.read_json(root / 'firewall-expiries.json', {}))
+                helper.firewall_action('unban', '203.0.113.25')
+                helper.firewall_action('confirm')
+                self.assertNotIn('203.0.113.25/32', helper.read_json(root / 'firewall-expiries.json', {}))
+
+    def test_guardian_firewall_expiry_scheduler_unbans_only_due_guardian_rules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            expired = '203.0.113.25/32'
+            future = '203.0.113.26/32'
+            helper.write_json(root / 'firewall-expiries.json', {expired: 100, future: int(time.time()) + 86400})
+            calls = []
+            def action(operation, target='', remote_address='', ttl_seconds=0):
+                calls.append((operation, target))
+                return {'state': 'awaiting_confirmation' if operation == 'unban' else 'confirmed'}
+            with mock.patch.object(helper, 'ROOT', root), \
+                 mock.patch.object(helper, 'FIREWALL_PENDING', root / 'firewall-pending.json'), \
+                 mock.patch.object(helper, 'FIREWALL_EXPIRIES', root / 'firewall-expiries.json'), \
+                 mock.patch.object(helper, 'firewall_rules', return_value={
+                     'available': True, 'limited': False, 'rules': [{'network': expired}]}), \
+                 mock.patch.object(helper, 'firewall_action', side_effect=action), \
+                 mock.patch.object(helper.os, 'geteuid', return_value=0), \
+                 mock.patch.object(helper, 'incident_log'):
+                result = helper.firewall_expiry_tick()
+            self.assertEqual(result['removed'], 1)
+            self.assertEqual(calls, [('unban', expired), ('confirm', '')])
 
     def test_guardian_firewall_rejects_admin_lockout_and_broad_cidr(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -164,6 +211,8 @@ class GuardianTests(unittest.TestCase):
                  mock.patch.object(helper, 'firewall_status', return_value={'plesk_firewall_active': True}):
                 with self.assertRaisesRegex(ValueError, 'Admin-Verbindungs-IP'):
                     helper.firewall_action('ban', '198.51.100.8', '198.51.100.8')
+                with self.assertRaisesRegex(ValueError, 'Ungueltige Sperrdauer'):
+                    helper._firewall_action('ban', '203.0.113.25', '198.51.100.8', 7200)
         with self.assertRaisesRegex(ValueError, 'Zu grosses Netz'):
             helper._firewall_target('203.0.0.0/16')
 

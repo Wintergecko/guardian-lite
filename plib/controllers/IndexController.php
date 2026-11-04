@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.12.0';
+    private const GUARDIAN_VERSION = '0.13.0';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -533,7 +533,15 @@ class IndexController extends pm_Controller_Action
             // REMOTE_ADDR is the actual panel connection peer. Do not trust forwarded headers here.
             $remote = isset($_SERVER['REMOTE_ADDR']) && is_string($_SERVER['REMOTE_ADDR'])
                 ? $_SERVER['REMOTE_ADDR'] : '';
-            $this->finishAction(['firewall-action', $operation, $network, $remote],
+            $arguments = ['firewall-action', $operation, $network, $remote];
+            if ($operation === 'ban') {
+                $ttl = (string)$request->getPost('ttl', '0');
+                if (!in_array($ttl, ['0', '3600', '86400', '604800'], true)) {
+                    throw new pm_Exception('Ungueltige Sperrdauer ausgewaehlt.');
+                }
+                $arguments[] = $ttl;
+            }
+            $this->finishAction($arguments,
                 'Plesk-Firewall-Aenderung wurde gestartet.');
             return;
         }
