@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.13.0';
+    private const GUARDIAN_VERSION = '0.14.0';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -311,6 +311,7 @@ class IndexController extends pm_Controller_Action
             $status = $this->helper(['status']);
             $this->view->overview = isset($status['services']) ? $status['services'] : [];
             $this->view->scan = isset($status['scan']) ? $status['scan'] : null;
+            $this->view->scanQueue = isset($status['scan_queue']) ? $status['scan_queue'] : ['count' => 0, 'jobs' => []];
             $this->view->history = isset($status['history']) ? $status['history'] : [];
             $this->view->schedules = isset($status['schedules']) ? $status['schedules'] : [];
             $this->view->watch = isset($status['watch']) ? $status['watch'] : [];
@@ -382,6 +383,15 @@ class IndexController extends pm_Controller_Action
     {
         try {
             $result = $this->helper($args);
+            if ($operation === 'scan') {
+                if (!preg_match('/^[a-f0-9]{32}$/', (string)($result['id'] ?? ''))
+                    || !in_array($result['status'] ?? '', ['queued', 'running'], true)) {
+                    throw new RuntimeException('Scan-Auftrag konnte nicht bestaetigt werden.');
+                }
+                $message = ($result['status'] === 'queued')
+                    ? 'Malware-Scan fuer ' . $domain . ' wurde in die FIFO-Warteschlange eingereiht.'
+                    : 'Malware-Scan fuer ' . $domain . ' wurde gestartet.';
+            }
             if ($operation === 'schedule') {
                 // Do not claim success if the helper acknowledged a different domain/state.
                 $expected = $args[2] === 'on';

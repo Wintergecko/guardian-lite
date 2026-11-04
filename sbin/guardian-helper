@@ -43,6 +43,7 @@ JOB_ID = re.compile(r'^[a-f0-9]{32}$')
 MAX_JAILS = 24
 MAX_HISTORY = 30
 MAX_FINDINGS = 50
+MAX_SCAN_QUEUE = 100
 LOG_LIMIT = 128 * 1024
 MAX_SNAPSHOT_FILE = 25 * 1024 * 1024
 INCIDENT_LOG = ROOT / 'incidents.jsonl'
@@ -920,6 +921,117 @@ def read_scan(jobid=None, include_output=True):
     return scan
 
 
+def queue_lock(blocking=True):
+    """Serialize scan queue updates independently from the single-scan lock."""
+    prepare_dir()
+    fd = os.open(str(ROOT / 'scan-queue.lock'), os.O_RDWR | os.O_CREAT |
+                 getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+    except (OSError, BlockingIOError):
+        os.close(fd)
+        raise
+    return fd
+
+
+def queued_jobs():
+    data = read_json(ROOT / 'scan-queue.json', {'jobs': []})
+    values = data.get('jobs', []) if isinstance(data, dict) else []
+    return [item for item in values if isinstance(item, str) and JOB_ID.fullmatch(item)] \
+        if isinstance(values, list) else []
+
+
+def scan_queue_status():
+    pending = []
+    for jobid in queued_jobs():
+        item = read_scan(jobid, include_output=False)
+        if item and item.get('status') == 'queued':
+            pending.append({'id': jobid, 'domain': item.get('domain', ''),
+                            'queued_at': item.get('queued_at', item.get('started_at', '')),
+                            'trigger': item.get('trigger', 'manual')})
+    return {'count': len(pending), 'jobs': pending[:MAX_HISTORY], 'limit': MAX_SCAN_QUEUE}
+
+
+def enqueue_scan(domain, trigger):
+    """Persist a bounded serial scan job; never run two directory scans at once."""
+    prepare_dir()
+    lockfd = queue_lock()
+    try:
+        for item in history(limit=None):
+            if item.get('domain') == domain and item.get('status') in ('starting', 'running'):
+                return {'ok': True, 'id': item['id'], 'status': 'running', 'duplicate': True}
+        ids = queued_jobs()
+        for jobid in ids:
+            item = load_job(jobid)
+            if item and item.get('status') == 'queued' and item.get('domain') == domain:
+                return {'ok': True, 'id': jobid, 'status': 'queued', 'duplicate': True}
+        ids = [jobid for jobid in ids
+               if (load_job(jobid) or {}).get('status') == 'queued']
+        if len(ids) >= MAX_SCAN_QUEUE:
+            raise ValueError('Scan-Warteschlange voll (%d Auftraege). Bitte spaeter erneut versuchen.' % MAX_SCAN_QUEUE)
+        jobid = uuid.uuid4().hex
+        queued_at = utc_now()
+        job = {'id': jobid, 'domain': domain, 'trigger': trigger, 'status': 'queued',
+               'queued_at': queued_at, 'started_at': queued_at,
+               'epoch': time.time(), 'pid': None, 'findings': []}
+        save_job(job)
+        logfd = os.open(str(ROOT / 'jobs' / (jobid + '.log')),
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        os.close(logfd)
+        ids.append(jobid)
+        write_json(ROOT / 'scan-queue.json', {'jobs': ids})
+        return {'ok': True, 'id': jobid, 'status': 'queued', 'duplicate': False}
+    finally:
+        os.close(lockfd)
+
+
+def dispatch_next_scan():
+    """Start one oldest queued scan while retaining the global scan lock in its worker."""
+    try:
+        scanfd = lock_scan()
+    except (OSError, BlockingIOError):
+        return {'started': False, 'reason': 'busy'}
+    keep_fd = False
+    try:
+        qfd = queue_lock()
+        try:
+            ids = queued_jobs()
+            selected = None
+            remaining = []
+            for jobid in ids:
+                item = load_job(jobid)
+                if not item or item.get('status') != 'queued':
+                    continue
+                if selected is None:
+                    selected = item
+                else:
+                    remaining.append(jobid)
+            if selected:
+                selected.update(status='starting', started_at=utc_now(), epoch=time.time(), pid=None)
+                save_job(selected)
+            write_json(ROOT / 'scan-queue.json', {'jobs': remaining})
+        finally:
+            os.close(qfd)
+        if not selected:
+            return {'started': False, 'reason': 'empty'}
+        jobid = selected['id']
+        argv = [sys.executable, os.path.realpath(__file__), 'worker', selected['domain'], jobid, str(scanfd)]
+        try:
+            child = subprocess.Popen(argv, close_fds=True, pass_fds=(scanfd,), stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     start_new_session=True, cwd='/')
+        except OSError as exc:
+            selected.update(status='error', finished_at=utc_now(),
+                             error='Scan-Worker konnte nicht gestartet werden: ' + str(exc)[:180])
+            save_job(selected)
+            return {'started': False, 'reason': 'spawn-error'}
+        keep_fd = True
+        return {'started': True, 'id': jobid, 'domain': selected['domain'], 'pid': child.pid}
+    finally:
+        if not keep_fd:
+            os.close(scanfd)
+
+
 def history(limit=MAX_HISTORY):
     try:
         items = []
@@ -974,7 +1086,7 @@ def lock_scan(blocking=False):
         fcntl.flock(fd, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
     except (OSError, BlockingIOError):
         os.close(fd)
-        raise ValueError('Ein Scan oder eine Quarantaene-Aktion laeuft bereits.')
+        raise BlockingIOError('Ein Scan oder eine Quarantaene-Aktion laeuft bereits.')
     return fd
 
 
@@ -986,22 +1098,13 @@ def scan_start(domain, trigger='manual'):
     if not binary(CLAM_PATHS):
         raise ValueError('ClamAV fehlt. Bitte clamscan installieren.')
     site_docroot(domain)
-    lockfd = lock_scan()
-    try:
-        jobid = uuid.uuid4().hex
-        job = {'id': jobid, 'domain': domain, 'trigger': trigger, 'status': 'starting',
-               'started_at': utc_now(), 'epoch': time.time(), 'pid': None, 'findings': []}
-        save_job(job)
-        outfd = os.open(str(ROOT / 'jobs' / (jobid + '.log')),
-                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
-        os.close(outfd)
-        argv = [sys.executable, os.path.realpath(__file__), 'worker', domain, jobid, str(lockfd)]
-        child = subprocess.Popen(argv, close_fds=True, pass_fds=(lockfd,), stdin=subprocess.DEVNULL,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                 start_new_session=True, cwd='/')
-        return {'ok': True, 'id': jobid, 'pid': child.pid}
-    finally:
-        os.close(lockfd)
+    queued = enqueue_scan(domain, trigger)
+    started = dispatch_next_scan()
+    result = {'ok': True, 'id': queued['id'],
+              'status': 'running' if queued.get('status') == 'running' or started.get('id') == queued['id'] else 'queued'}
+    if queued.get('duplicate'):
+        result['duplicate'] = True
+    return result
 
 
 def safe_relative(relative):
@@ -1150,6 +1253,7 @@ def scan_worker(domain, jobid, inherited_fd):
     finally:
         save_job(scan)
         os.close(inherited_fd)
+    dispatch_next_scan()
     if scan.get('status') == 'finished' and any(
             item.get('state') == 'found' and not item.get('ignored') for item in scan.get('findings', [])):
         manager = pathlib.Path(__file__).resolve().parent / 'guardian-manager'
@@ -1258,7 +1362,7 @@ def prune_reports():
         if index < 200 and now - mtime <= 90 * 86400:
             continue
         report = read_json(file, {})
-        if report.get('status') in ('running', 'starting') or any(
+        if report.get('status') in ('queued', 'running', 'starting') or any(
                 x.get('state') in ('pending', 'quarantined', 'error_review', 'repaired', 'rolled_back')
                 for x in report.get('findings', []) if isinstance(x, dict)):
             continue
@@ -1321,7 +1425,7 @@ def firewall_expiry_tick():
 
 
 def scheduled_tick():
-    """Hourly Plesk scheduler call; runs at most one due scan per invocation."""
+    """Hourly Plesk scheduler call; enqueue due domains and run scans serially."""
     if os.geteuid() != 0:
         raise ValueError('Scheduler braucht Root-Rechte.')
     prepare_dir()
@@ -1333,6 +1437,7 @@ def scheduled_tick():
                          expiry_result['remaining_due'])
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         incident_log('operator', 'warning', '', 'Automatische Guardian-Firewall-Entsperrung fehlgeschlagen: ' + str(exc)[:180])
+    dispatch_next_scan()
     config = schedules()
     # Watch metadata, limited to three domains per tick to control VPS load.
     selected = sorted(config)
@@ -1361,19 +1466,33 @@ def scheduled_tick():
             latest_per_domain[domain] = max(started, latest_per_domain.get(domain, started))
         except (ValueError, TypeError, KeyError):
             continue
-    # One domain per hour, to avoid a simultaneous scan storm on hosting servers.
+    # Queue every due domain, but keep all ClamAV scans serial and bounded.
+    accepted = 0
+    deferred = 0
     for domain in sorted(config):
         last = latest_per_domain.get(domain)
         if last is not None and time.time() - last < 24 * 3600:
             continue
         try:
             site_docroot(domain)
-            return scan_start(domain, 'schedule')
+            scan_start(domain, 'schedule')
+            accepted += 1
+            if len(queued_jobs()) >= MAX_SCAN_QUEUE:
+                break
         except ValueError as exc:
-            if 'bereits' in str(exc):
-                return {'ok': True, 'message': 'Scan bereits aktiv; naechster Scheduler-Lauf.'}
+            if 'Warteschlange voll' in str(exc):
+                deferred += 1
+                incident_log('operator', 'warning', domain,
+                             'Malware-Scan-Warteschlange voll; faellige Domain wird beim naechsten Scheduler-Lauf erneut geprueft.')
+                break
             continue
-    return {'ok': True, 'message': 'Keine faelligen Domains.'}
+    pending = scan_queue_status()['count']
+    message = ('%d faellige Scan(s) angenommen; %d warten.' % (accepted, pending)) if accepted \
+        else ('%d Scan(s) warten.' % pending) if pending else 'Keine faelligen Domains.'
+    if deferred:
+        message += ' Warteschlange voll; mindestens eine Domain wird beim naechsten Lauf erneut geprueft.'
+    return {'ok': True, 'accepted': accepted, 'pending': pending, 'deferred': deferred,
+            'message': message}
 
 
 def quarantine_file(jobid, index):
@@ -1541,6 +1660,7 @@ def status():
                          'firewall': firewall, 'waflog': waf_status(),
                          'php_runtime': php_runtime_status(), 'http_flood': http_flood_status()},
             'scan': read_scan(), 'history': history(), 'schedules': schedules(),
+            'scan_queue': scan_queue_status(),
             'watch': watch_status(), 'realtime': monitor_status(),
             'alerts': alert_settings(), 'incidents': incident_list(25)}
 
