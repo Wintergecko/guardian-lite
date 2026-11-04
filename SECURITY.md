@@ -1,4 +1,4 @@
-# Guardian Lite v0.8.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.9.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -31,3 +31,9 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - Turnstile prueft Tokens serverseitig samt Hostname und Action. Ein Cookie ohne gueltige HMAC-Signatur reicht nicht aus. Ein kompromittierter Website-Benutzer kann seinen eigenen PHP-Guard umgehen; das ist keine Isolation gegen bereits erfolgreiche Codeausfuehrung.
 - Baselines sind root-private, mit Digests gepruefte und vom Administrator freigegebene Kopien. Sie sind weder Hersteller-signiert noch externer WORM-Speicher. Pfad-, UID-, Fingerprint- und Nicht-Ueberschreiben-Pruefungen begrenzen Reparaturen; gleichzeitig schreibende Websites bleiben ein Race-Risiko.
 - Bei Deinstallation werden Guardian-Policies rueckgenommen. Fremde zwischenzeitliche Konfigurationsaenderungen koennen die automatische Ruecknahme verhindern; dann wird abgebrochen, statt Konfigurationen ungeprueft zu ueberschreiben. Daten/Quarantaene und Module bleiben erhalten.
+
+## 0.9.0 – Cronjob-Sicherheitspruefung
+
+- Die Admin-Pruefung liest nur Dateien aus festen, ueblichen Cron-Pfaden. Symlinks und unregulaere Dateien werden nicht verfolgt; Dateianzahl, Dateigroesse und Gesamtvolumen sind begrenzt.
+- Die heuristischen Treffer nennen Quelldatei, Zeilennummer und Regelkennung, aber keinen Cron-Befehlsinhalt. Kein Cronjob wird automatisch deaktiviert oder geloescht.
+- Die Erkennungsregeln sind bewusst eng und unvollstaendig. Ein sauberer Bericht beweist nicht, dass Cronjobs frei von Malware sind.

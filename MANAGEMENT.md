@@ -1,4 +1,4 @@
-# Guardian Lite 0.8.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.9.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -74,6 +74,12 @@ Requests ohne gueltige Freigabe erreichen den geschuetzten PHP-Endpunkt nicht. A
 Der PHP-INI-Cache kann eine Aenderung bis zu fuenf Minuten verzoegern. Nach Deaktivierung bleibt die Guard-Datei fuer ausstehende INI-Caches erhalten. Eine geaenderte `.user.ini` wird nicht automatisch zurueckgesetzt; zuerst die lokale Aenderung pruefen. Aktive Bot-Pruefungen muessen deaktiviert werden, bevor Turnstile-Schluessel/Zustimmung geaendert werden koennen. Die Turnstile-Integration ersetzt keine serverweite WAF oder statischen Bot-/DDoS-Schutz.
 
 Referenzen: [AbuseIPDB CHECK](https://docs.abuseipdb.com/#check-endpoint), [Turnstile Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/).
+
+## Cronjob-Sicherheitspruefung
+
+Unter **Verwaltung & Diagnose** kann ein Administrator die gaengigen System- und Benutzer-Cronpfade manuell pruefen lassen. Der Check ist read-only und sucht nach wenigen deutlichen Mustern wie Remote-Shell-Pipes, dekodierten Shell-Payloads, PHP-Inline-Eval und Ausfuehrung aus temporaeren Verzeichnissen. Treffer erscheinen im Ergebnis und im Incident-Verlauf. Angezeigt werden nur Datei, Zeilennummer und Regelkennung; der Befehlstext wird nicht kopiert. Guardian deaktiviert oder loescht keine Cronjobs.
+
+Das ist eine begrenzte Heuristik, kein Malware-Vollscan. Ein sauberer Bericht beweist nicht, dass alle Cronjobs harmlos sind. Ungewoehnlich grosse Dateien, Symlinks und nicht lesbare Quellen werden ausgelassen; das Ergebnis markiert eine unvollstaendige Pruefung.
 
 ## Malware-Ignore-Liste
 
