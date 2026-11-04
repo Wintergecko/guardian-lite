@@ -33,17 +33,7 @@ jobs:
       - name: PHP scan controller smoke test
         run: php tests/php_scan_controller_smoke.php
       - name: Python tests
-        run: |
-          status=0
-          output=$(sudo "$(command -v python3)" -m unittest discover -s tests -v 2>&1) || status=$?
-          printf '%s\n' "$output"
-          if [ "$status" -ne 0 ]; then
-            output="${output//'%'/'%25'}"
-            output="${output//$'\n'/'%0A'}"
-            output="${output//$'\r'/'%0D'}"
-            echo "::error::$output"
-          fi
-          exit "$status"
+        run: sudo "$(command -v python3)" -m unittest discover -s tests -v
       - name: Plesk updater controller smoke test
         run: php tests/plesk_updater_smoke.php
       - name: Build ZIP
