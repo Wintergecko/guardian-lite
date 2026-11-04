@@ -1,4 +1,4 @@
-# Weitere Features nach 0.17.0
+# Weitere Features nach 0.18.0
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
@@ -7,7 +7,7 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Prioritaet | Feature | Nutzen / konkrete Luecke |
 |---|---|---|
 | Hoch | Hersteller-Pruefsummen weiterer CMS | WordPress-Core und WordPress.org-Plugins geprueft; Joomla/Magento-Herstellerquellen und sichere, signierte Good-File-Pakete fehlen. Keine automatische Reparatur aus Pruefergebnissen |
-| Hoch | Read-only Datenbankindikatoren | WordPress-Kerntexttabellen haben jetzt einen begrenzten SQL-Heuristikscan; Hersteller-/Malware-Signaturen und Joomla/Magento-Scanner fehlen |
+| Hoch | Signaturbasierter Datenbankscanner | WordPress hat einen begrenzten read-only SQL-Heuristikscan; Hersteller-/Malware-Signaturen sowie Joomla/Magento fehlen, Bereinigung/Backup/Rollback ist offen |
 | Hoch | Firewall-Allowlist und Notfall-Freischaltung | Plesk-Firewall-Deny-Regeln und begrenzte TTLs sind vorhanden; explizite priorisierte Admin-/Monitoring-Ausnahmen fehlen |
 | Hoch | Baseline-/Backup-Aufbewahrung und Speicheranzeige | Globale Speicheranzeige und manuelle Loeschung vorhanden; Quota pro Domain, Aufbewahrungsregeln, Backups ausserhalb der verwalteten PHP-/WAF-Metadaten und Reparaturquellenanzeige fehlen |
 | Hoch | Cronjob-Regelausbau und Verifikation | Aktueller read-only Heuristikcheck deckt nur gaengige Muster und feste Cron-Pfade ab; Malware-Signaturen und Distributionen-Faelle fehlen |
@@ -22,6 +22,6 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Niedrig | Benachrichtigungen/Webhooks | Ereignisse in vorhandene Betriebswerkzeuge integrieren; Geheimnisse und Zielhosts strikt begrenzen |
 | Niedrig | Admin-Tool-Erkennung ausbauen | Aktuell begrenzte Namens-/Markerpruefung fuer Adminer und TinyFileManager; kuratierte, gepruefte Markerlisten und weitere Admin-Werkzeuge fehlen |
 
-Als naechstes sind lokaler, signaturgebundener RapidScan-Hash-Cache und weitere CMS-Datenbank-/Herstellerpruefungen am wertvollsten. Cloud-Hash-Reputation benoetigt eine eigene Datenschutz-/Anbieterfreigabe. Eine Firewall-Allowlist benoetigt zuerst Plesk-Regelprioritaetstests, damit Freigaben Deny-Regeln sicher uebersteuern.
+Lokaler signaturgebundener RapidScan-Cache ist umgesetzt. Naechster grosser Malware-Paritaetsschritt ist ein signaturbasierter CMS-Datenbankscanner mit sicheren, getesteten Backups und Rollback; ein proprietaerer AI-Bolit-Nachbau ist nicht vorgesehen. Cloud-Hash-Reputation benoetigt eine eigene Datenschutz-/Anbieterfreigabe. Eine Firewall-Allowlist benoetigt zuerst Plesk-Regelprioritaetstests, damit Freigaben Deny-Regeln sicher uebersteuern.
 
 Technische Grundlage fuer Hersteller-Pruefsummen: [WP-CLI core verify-checksums](https://developer.wordpress.org/cli/commands/core/verify-checksums/) vergleicht WordPress-Core-Dateien mit WordPress.org-Pruefsummen, ohne WordPress dafuer zu laden. Premium-Erweiterungen und angepasste Dateien benoetigen eigene Vertrauensquellen.

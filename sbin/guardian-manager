@@ -643,6 +643,7 @@ def invalidate_storage_cache():
 def storage_status():
     areas = {name: directory_usage(root() / name)
              for name in ('backups', 'baselines', 'repair-journals', 'jobs')}
+    areas['scan-cache'] = directory_usage(h.ROOT / 'scan-cache')
     managed = sum(item['bytes'] for item in areas.values())
     try:
         disk = shutil.disk_usage(h.ROOT)

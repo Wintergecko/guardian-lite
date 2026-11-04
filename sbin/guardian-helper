@@ -20,6 +20,7 @@ import resource
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -49,6 +50,13 @@ MAX_ADMIN_TOOL_ENTRIES = 10000
 MAX_ADMIN_TOOL_RESULTS = 25
 MAX_ADMIN_TOOL_FILE_BYTES = 2 * 1024 * 1024
 MAX_ADMIN_TOOL_SCAN_SECONDS = 10
+MAX_SCAN_CACHE_FILES = 10000
+MAX_SCAN_CACHE_PATH_BYTES = 240
+MAX_SCAN_CACHE_FILE_BYTES = 4 * 1024 * 1024
+MAX_SCAN_CACHE_DOMAINS = 16
+MAX_SCAN_FILE_BYTES = 25 * 1024 * 1024
+MAX_SCAN_WALK_ENTRIES = 50000
+MAX_SCAN_WALK_SECONDS = 45
 LOG_LIMIT = 128 * 1024
 MAX_SNAPSHOT_FILE = 25 * 1024 * 1024
 INCIDENT_LOG = ROOT / 'incidents.jsonl'
@@ -463,6 +471,7 @@ def prepare_dir():
     ensure_private_dir(ROOT / 'jobs')
     ensure_private_dir(ROOT / 'quarantine')
     ensure_private_dir(ROOT / 'watch')
+    ensure_private_dir(ROOT / 'scan-cache')
 
 
 def read_json(path, default=None, max_bytes=500000):
@@ -478,10 +487,10 @@ def read_json(path, default=None, max_bytes=500000):
         return default
 
 
-def write_json(path, info):
+def write_json(path, info, max_bytes=500000):
     temp = path.parent / ('tmp-' + uuid.uuid4().hex)
     data = json.dumps(info, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
-    if len(data) > 500000:
+    if len(data) > max_bytes:
         raise ValueError('Bericht zu gross.')
     fd = os.open(str(temp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
     try:
@@ -1322,6 +1331,200 @@ def drop_privileges(uid, gid, cpu_limit=1800):
     resource.setrlimit(resource.RLIMIT_FSIZE, (5 * 1024 * 1024, 5 * 1024 * 1024))
 
 
+def scan_cache_path(domain):
+    if not valid_domain(domain):
+        raise ValueError('Ungueltige Cache-Domain.')
+    name = hashlib.sha256(domain.encode('ascii')).hexdigest() + '.json'
+    return ROOT / 'scan-cache' / name
+
+
+def clam_scan_identity(program):
+    """Bind cached clean results to the exact scanner binary and local signature files."""
+    try:
+        executable = pathlib.Path(program).resolve(strict=True)
+        binary_stat = executable.stat()
+        if (not stat.S_ISREG(binary_stat.st_mode) or binary_stat.st_uid != 0 or
+                binary_stat.st_mode & 0o022):
+            return None
+        parent = executable.parent
+        while parent != parent.parent:
+            parent_stat = parent.stat()
+            if not stat.S_ISDIR(parent_stat.st_mode) or parent_stat.st_uid != 0 or parent_stat.st_mode & 0o022:
+                return None
+            parent = parent.parent
+        digest = hashlib.sha256()
+        with executable.open('rb') as source:
+            for block in iter(lambda: source.read(256 * 1024), b''):
+                digest.update(block)
+        version = subprocess.run([str(executable), '--version'], stdout=subprocess.PIPE,
+                                 stderr=subprocess.DEVNULL, timeout=10, cwd='/', check=False,
+                                 env={'PATH': '/usr/bin:/bin', 'LANG': 'C'} )
+        if version.returncode or not version.stdout or len(version.stdout) > 4096:
+            return None
+        sigdir = pathlib.Path('/var/lib/clamav')
+        if sigdir.is_symlink() or not sigdir.is_dir():
+            return None
+        directory_stat = sigdir.stat()
+        if directory_stat.st_uid != 0 or directory_stat.st_mode & 0o022:
+            return None
+        signatures = []
+        suffixes = {'.cvd', '.cld', '.ndb', '.hdb', '.hsb', '.ldb', '.mdb', '.ftm'}
+        for item in sigdir.iterdir():
+            if item.suffix.lower() not in suffixes:
+                continue
+            info = item.lstat()
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022):
+                return None
+            signatures.append([item.name, info.st_dev, info.st_ino, info.st_size,
+                               info.st_mtime_ns, info.st_ctime_ns])
+        if not signatures:
+            return None
+        identity = hashlib.sha256()
+        identity.update(version.stdout)
+        identity.update(digest.digest())
+        identity.update(json.dumps(sorted(signatures), separators=(',', ':')).encode('utf-8'))
+        return identity.hexdigest()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def scan_file_fingerprint(info):
+    return {'dev': int(info.st_dev), 'ino': int(info.st_ino), 'size': int(info.st_size),
+            'mtime_ns': int(info.st_mtime_ns), 'ctime_ns': int(info.st_ctime_ns),
+            'mode': int(stat.S_IMODE(info.st_mode)), 'uid': int(info.st_uid),
+            'gid': int(info.st_gid), 'nlink': int(info.st_nlink)}
+
+
+def scan_file_inventory(docroot):
+    """Bounded no-follow inventory; refuse incremental mode if coverage is uncertain."""
+    started = time.monotonic()
+    try:
+        root_fd = os.open(str(docroot), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        root_info = os.fstat(root_fd)
+    except OSError:
+        return {}, False, 'Document-Root konnte nicht sicher inventarisiert werden.'
+    files = {}
+    stack = [('', 0)]
+    entries_seen = 0
+    reason = ''
+    try:
+        while stack:
+            if time.monotonic() - started > MAX_SCAN_WALK_SECONDS:
+                reason = 'Datei-Inventar ueberschreitet das Zeitlimit.'
+                break
+            relative_dir, depth = stack.pop()
+            dir_fd = os.dup(root_fd)
+            try:
+                if relative_dir:
+                    for component in relative_dir.split('/'):
+                        next_fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                          dir_fd=dir_fd)
+                        os.close(dir_fd)
+                        dir_fd = next_fd
+                with os.scandir(dir_fd) as iterator:
+                    for entry in iterator:
+                        entries_seen += 1
+                        if entries_seen > MAX_SCAN_WALK_ENTRIES or len(files) >= MAX_SCAN_CACHE_FILES:
+                            reason = 'Datei-Inventar ueberschreitet das sichere Limit.'
+                            break
+                        if time.monotonic() - started > MAX_SCAN_WALK_SECONDS:
+                            reason = 'Datei-Inventar ueberschreitet das Zeitlimit.'
+                            break
+                        relative = (relative_dir + '/' if relative_dir else '') + entry.name
+                        try:
+                            info = entry.stat(follow_symlinks=False)
+                        except OSError:
+                            reason = 'Datei-Inventar ist unvollstaendig.'
+                            break
+                        if stat.S_ISDIR(info.st_mode):
+                            if info.st_dev == root_info.st_dev and depth < 16 and safe_relative(relative):
+                                stack.append((relative, depth + 1))
+                            continue
+                        if not stat.S_ISREG(info.st_mode) or info.st_dev != root_info.st_dev:
+                            continue
+                        if not safe_relative(relative) or '\n' in relative or '\r' in relative:
+                            reason = 'Dateipfade lassen sich nicht sicher als ClamAV-Liste abbilden.'
+                            break
+                        files[relative] = scan_file_fingerprint(info)
+                    if reason:
+                        break
+            except OSError:
+                reason = 'Datei-Inventar ist unvollstaendig.'
+                break
+            finally:
+                os.close(dir_fd)
+    finally:
+        os.close(root_fd)
+    return files, not reason, reason
+
+
+def scan_cache_read(domain, signature):
+    data = read_json(scan_cache_path(domain), max_bytes=MAX_SCAN_CACHE_FILE_BYTES)
+    if (not isinstance(data, dict) or data.get('schema') != 1 or data.get('domain') != domain or
+            data.get('signature') != signature or not isinstance(data.get('files'), dict) or
+            len(data['files']) > MAX_SCAN_CACHE_FILES):
+        return {}
+    valid = {}
+    fields = {'dev', 'ino', 'size', 'mtime_ns', 'ctime_ns', 'mode', 'uid', 'gid', 'nlink'}
+    for relative, fingerprint in data['files'].items():
+        if (isinstance(relative, str) and len(relative.encode('utf-8', 'replace')) <= MAX_SCAN_CACHE_PATH_BYTES and
+                safe_relative(relative) and isinstance(fingerprint, dict) and set(fingerprint) == fields and
+                all(isinstance(value, int) and value >= 0 for value in fingerprint.values())):
+            valid[relative] = fingerprint
+    return valid
+
+
+def scan_cache_write(domain, signature, files):
+    if len(files) > MAX_SCAN_CACHE_FILES:
+        return False
+    path = scan_cache_path(domain)
+    try:
+        prepare_dir()
+        payload = {'schema': 1, 'domain': domain, 'signature': signature,
+                   'updated_at': utc_now(), 'files': files}
+        write_json(path, payload, max_bytes=MAX_SCAN_CACHE_FILE_BYTES)
+        inventory = []
+        for item in (ROOT / 'scan-cache').glob('*.json'):
+            if item == path or not re.fullmatch(r'[a-f0-9]{64}\.json', item.name):
+                continue
+            try:
+                inventory.append((item.stat().st_mtime, item))
+            except OSError:
+                continue
+        inventory.sort()
+        while len(inventory) >= MAX_SCAN_CACHE_DOMAINS:
+            _, oldest = inventory.pop(0)
+            try:
+                oldest.unlink()
+            except OSError:
+                pass
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def scan_cache_list_file(docroot, paths):
+    """Create an immutable-to-site-user ClamAV file list in the sticky /tmp directory."""
+    fd, name = tempfile.mkstemp(prefix='.guardian-scan-', dir='/tmp')
+    try:
+        os.fchmod(fd, 0o644)
+        with os.fdopen(fd, 'wb') as output:
+            for relative in paths:
+                encoded = os.fsencode(str(docroot / relative))
+                if b'\n' in encoded or b'\r' in encoded:
+                    raise ValueError('Dateipfade lassen sich nicht sicher als ClamAV-Liste abbilden.')
+                output.write(encoded + b'\n')
+            output.flush()
+            os.fsync(output.fileno())
+        return name
+    except BaseException:
+        try:
+            os.unlink(name)
+        except OSError:
+            pass
+        raise
+
+
 def scan_worker(domain, jobid, inherited_fd):
     if os.geteuid() != 0 or not JOB_ID.fullmatch(jobid) or inherited_fd < 3:
         return 2
@@ -1339,18 +1542,88 @@ def scan_worker(domain, jobid, inherited_fd):
         if not program:
             raise RuntimeError('clamscan nicht gefunden.')
         save_job(scan)
-        args = [program, '--recursive=yes', '--infected', '--no-summary',
-                '--follow-dir-symlinks=0', '--follow-file-symlinks=0', '--cross-fs=no',
-                '--max-filesize=25M', '--max-scansize=150M', '--max-files=10000',
-                '--max-recursion=16', str(path)]
-        with (ROOT / 'jobs' / (jobid + '.log')).open('ab') as log:
-            done = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                                  timeout=3600, cwd='/', check=False,
-                                  preexec_fn=lambda: drop_privileges(uid, gid),
-                                  env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
-        with (ROOT / 'jobs' / (jobid + '.log')).open('rb') as log:
-            text = log.read(5 * 1024 * 1024).decode('utf-8', 'replace')
+        signature = clam_scan_identity(program)
+        inventory, inventory_complete, inventory_reason = scan_file_inventory(path)
+        cache_enabled = bool(signature and inventory_complete)
+        old_cache = scan_cache_read(domain, signature) if cache_enabled else {}
+        cache_candidates = []
+        cache_hits = 0
+        for relative, fingerprint in inventory.items():
+            cacheable = (len(relative.encode('utf-8', 'replace')) <= MAX_SCAN_CACHE_PATH_BYTES and
+                         fingerprint['size'] <= MAX_SCAN_FILE_BYTES and fingerprint['nlink'] == 1)
+            if cache_enabled and cacheable and old_cache.get(relative) == fingerprint:
+                cache_hits += 1
+            else:
+                cache_candidates.append(relative)
+        rapid_scan = {'enabled': cache_enabled, 'files_seen': len(inventory),
+                      'cached_clean': cache_hits, 'files_scanned': len(cache_candidates),
+                      'cache_updated': False,
+                      'note': 'Cache nur fuer unveraenderte regulaere Dateien mit identischem ClamAV-Programm und Signaturbestand.'}
+        if not cache_enabled:
+            rapid_scan['note'] = inventory_reason or 'ClamAV-Signaturstand nicht sicher bestimmbar; Vollscan ausgefuehrt.'
+        scan['rapid_scan'] = rapid_scan
+        args = [program, '--infected', '--no-summary', '--follow-dir-symlinks=0',
+                '--follow-file-symlinks=0', '--cross-fs=no', '--max-filesize=25M',
+                '--max-scansize=150M', '--max-files=10000', '--max-recursion=16']
+        list_path = None
+        if cache_enabled:
+            if cache_candidates:
+                try:
+                    list_path = scan_cache_list_file(path, cache_candidates)
+                    args.append('--file-list=' + list_path)
+                except (OSError, ValueError):
+                    cache_enabled = False
+                    scan['rapid_scan'].update(enabled=False, cached_clean=0, files_scanned=len(inventory),
+                                              note='Dateiliste konnte nicht sicher erstellt werden; regulaerer Vollscan verwendet.')
+                    cache_hits = 0
+            # An empty changed-file list is a verified no-op for this exact local scanner/signature state.
+        if not cache_enabled:
+            args.extend(['--recursive=yes', str(path)])
+        log_path = ROOT / 'jobs' / (jobid + '.log')
+        try:
+            if cache_enabled and not cache_candidates:
+                with log_path.open('ab') as log:
+                    log.write(('Guardian RapidScan: %d unveraenderte Dateien mit identischem Signaturstand uebersprungen.\n' % cache_hits).encode('utf-8'))
+                done = subprocess.CompletedProcess(args, 0)
+            else:
+                with log_path.open('ab') as log:
+                    done = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                          timeout=3600, cwd='/', check=False,
+                                          preexec_fn=lambda: drop_privileges(uid, gid),
+                                          env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
+        finally:
+            if list_path:
+                try:
+                    os.unlink(list_path)
+                except OSError:
+                    pass
+        log_size = log_path.stat().st_size
+        with log_path.open('rb') as log:
+            raw_log = log.read(5 * 1024 * 1024 + 1)
+        log_truncated = log_size > 5 * 1024 * 1024 or len(raw_log) > 5 * 1024 * 1024
+        text = raw_log[:5 * 1024 * 1024].decode('utf-8', 'replace')
         findings = findings_from_log(path, text)
+        logged_findings = sum(1 for line in text.splitlines() if line.endswith(' FOUND'))
+        if cache_enabled and done.returncode in (0, 1) and logged_findings == len(findings) and not log_truncated and not re.search(
+                r'(?im)^(?:WARNING:|ERROR:|LibClamAV Error:)', text):
+            after_inventory, after_complete, _ = scan_file_inventory(path)
+            if after_complete:
+                infected_paths = {item['path'] for item in findings if item.get('state') == 'found'}
+                new_cache = {}
+                for relative, fingerprint in after_inventory.items():
+                    if (len(relative.encode('utf-8', 'replace')) > MAX_SCAN_CACHE_PATH_BYTES or
+                            fingerprint['size'] > MAX_SCAN_FILE_BYTES or fingerprint['nlink'] != 1):
+                        continue
+                    before = inventory.get(relative)
+                    if before != fingerprint or relative in infected_paths:
+                        continue
+                    if relative in cache_candidates or old_cache.get(relative) == fingerprint:
+                        new_cache[relative] = fingerprint
+                rapid_scan['cache_updated'] = scan_cache_write(domain, signature, new_cache)
+                if not rapid_scan['cache_updated']:
+                    rapid_scan['note'] = 'ClamAV-Pruefung abgeschlossen; Cache konnte wegen Speicher-/Datengrenze nicht aktualisiert werden.'
+        if log_truncated:
+            scan['warning'] = 'Scanner-Protokoll ueberschreitet 5 MiB; Cache wurde nicht aktualisiert.'
         admin_tools = admin_tool_candidates(path)
         ignored_count = annotate_ignored_findings(domain, findings)
         active_findings = [item for item in findings if item.get('state') == 'found' and not item.get('ignored')]

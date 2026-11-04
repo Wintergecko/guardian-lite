@@ -1,4 +1,4 @@
-# Guardian Lite 0.17.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.18.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -33,6 +33,12 @@ Baselines sind auf 20 Verzeichnisse, 512 MiB Gesamtspeicher, 64 MiB und 5000 Dat
 Manuelle und geplante Vollscans werden FIFO aus einer root-privaten Warteschlange gestartet. Der Plesk-Stundentask kann alle faelligen Domains einreihen; pro Domain bleiben mindestens 24 Stunden zwischen tatsaechlichen Scanstarts. Gleichzeitig laeuft immer nur ein ClamAV-Vollscan. Maximal 100 Auftraege koennen warten; bei voller Queue wird der Auftrag abgelehnt und die Oberflaeche zeigt die wartenden Domains an. Der Worker startet den naechsten Auftrag nach Abschluss oder Fehler des vorherigen. Fuer jeden Scan gelten weiterhin die vorhandenen Dateigroessen-, Dateianzahl-, Laufzeit- und CPU-Prioritaetsgrenzen.
 
 Nach einem ClamAV-Vollscan prueft Guardian ausserdem begrenzt auf Adminer- und TinyFileManager-Kandidaten. Die read-only Pruefung nutzt bekannte PHP-Dateinamen plus Textmarker, maximal 5000 Dateien, 10000 Dateisystemeintraege, 2 MiB je Kandidatendatei, 16 Verzeichnisebenen, zehn Sekunden und 25 Meldungen. Symlinks und andere Dateisysteme werden nicht verfolgt; erkannte Begrenzungen erscheinen als unvollstaendig/begrenzt. Treffer sind Admin-Tool-Hinweise, keine Malware-Befunde; sie zeigen Pfad und SHA-256, aber keinen Quelltext. Guardian deaktiviert, quarantiniert oder loescht diese Dateien nie automatisch.
+
+### Lokaler RapidScan-Cache
+
+ClamAV-Vollscans erfassen bei vollstaendigem, begrenztem No-follow-Inventar einen root-privaten Cache fuer bis zu 16 Domains. Saubere reguläre Dateien werden bei Folgescans nur uebersprungen, wenn Geraet, Inode, Groesse, mtime, ctime, Modus, Besitzer und Linkzahl identisch sind. Der Cache ist an SHA-256 des root-eigenen ClamAV-Programms, dessen Versionsausgabe und den Metadatenstand lokaler Signaturdateien gebunden. Bei fehlenden/unsicheren Signaturen, unvollstaendigem Inventar, Pfaden, die sich nicht eindeutig als Liste darstellen lassen, oder Scannerwarnungen wird kein Cachetreffer vertraut und der Vollscan verwendet.
+
+Geaenderte/neue Dateien werden explizit per ClamAV-Dateiliste geprueft; Dateien mit Malwarefund werden nie als sauber gecacht. Nach dem Scan inventarisiert Guardian erneut und speichert nur unveraenderte, fehlerfrei gepruefte Dateien. Der Cache wird bei Signatur-/Binary-Wechsel verworfen, auf maximal 16 Domain-Dateien und 4 MiB pro Domain begrenzt und erscheint in der Speicheranzeige. Das ist lokales inkrementelles Scannen, keine Cloud-Reputation und kein Ersatz fuer einen gelegentlichen Vollscan. Bei Datenbank-/Dateisystem-Restore Cache loeschen oder Vollscan ausfuehren.
 
 Plesk-Pakete/Handler-Komponenten koennen je nach Betriebssystem und PHP-Version abweichen. System-PHP-Entwicklungspakete ersetzen nicht die zum Plesk-Handler gehoerigen Pakete.
 

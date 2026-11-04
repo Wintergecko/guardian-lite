@@ -341,6 +341,65 @@ class NewFeatureTests(unittest.TestCase):
                 state = h.watch_changes('example.com')
                 self.assertEqual(state['last_changes'][0]['type'], 'neu')
 
+    def test_rapid_scan_caches_clean_files_and_invalidates_on_signature_change(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp) / 'guardian'
+            (root / 'jobs').mkdir(parents=True)
+            os.chmod(root, 0o700)
+            os.chmod(root / 'jobs', 0o700)
+            site = pathlib.Path(temp) / 'site'
+            site.mkdir()
+            file = site / 'index.php'
+            file.write_text('<?php echo "clean";')
+            calls = []
+
+            def scan_command(args, **kwargs):
+                calls.append(args)
+                file_list = next((arg.split('=', 1)[1] for arg in args if arg.startswith('--file-list=')), None)
+                self.assertIsNotNone(file_list)
+                listed = pathlib.Path(file_list).read_bytes().splitlines()
+                self.assertEqual(listed, [os.fsencode(str(file))])
+                kwargs['stdout'].write(b'')
+                return h.subprocess.CompletedProcess(args, 0)
+
+            signatures = iter(['signature-v1', 'signature-v1', 'signature-v2'])
+            reports = []
+            for jobid in ('a' * 32, 'b' * 32, 'c' * 32):
+                h.write_json(root / 'jobs' / (jobid + '.json'), {
+                    'id': jobid, 'domain': 'example.com', 'status': 'starting',
+                    'started_at': h.utc_now(), 'findings': []})
+                inherited = os.open(os.devnull, os.O_RDONLY)
+                with mock.patch.object(h, 'ROOT', root), \
+                     mock.patch.object(h.os, 'geteuid', return_value=0), \
+                     mock.patch.object(h, 'site_docroot', return_value=(site, os.getuid(), os.getgid())), \
+                     mock.patch.object(h, 'binary', return_value='/usr/bin/clamscan'), \
+                     mock.patch.object(h, 'clam_scan_identity', return_value=next(signatures)), \
+                     mock.patch.object(h.subprocess, 'run', side_effect=scan_command), \
+                     mock.patch.object(h, 'dispatch_next_scan', return_value={'started': False}):
+                    h.scan_worker('example.com', jobid, inherited)
+                    reports.append(h.load_job(jobid))
+
+            self.assertEqual([report.get('status') for report in reports], ['finished', 'finished', 'finished'],
+                             repr(reports))
+            self.assertEqual(len(calls), 2, repr(reports))
+            self.assertEqual(reports[0]['rapid_scan']['files_scanned'], 1)
+            self.assertTrue(reports[0]['rapid_scan']['cache_updated'])
+            self.assertEqual(reports[1]['rapid_scan']['cached_clean'], 1)
+            self.assertEqual(reports[1]['rapid_scan']['files_scanned'], 0)
+            self.assertEqual(reports[2]['rapid_scan']['files_scanned'], 1)
+            self.assertEqual(reports[2]['rapid_scan']['cached_clean'], 0)
+
+    def test_scan_inventory_skips_symlinks_and_rejects_uncertain_coverage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / 'safe.php').write_text('safe')
+            outside = root.parent / (root.name + '-outside')
+            outside.write_text('outside')
+            (root / 'link.php').symlink_to(outside)
+            inventory, complete, reason = h.scan_file_inventory(root)
+            self.assertTrue(complete, reason)
+            self.assertEqual(set(inventory), {'safe.php'})
+
     def test_rejects_unrecognized_worker_command(self):
         with mock.patch.object(h, 'respond', return_value=1) as reply:
             self.assertEqual(h.main(['run', '--all']), 1)
