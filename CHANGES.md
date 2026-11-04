@@ -1,3 +1,11 @@
+## 0.6.4 – Zuverlaessige Scanplanung und Verzeichniswechsel
+
+- Geplante Scans ermitteln den letzten Lauf aus allen aufbewahrten Berichten; die Anzeigegrenze von 30 Berichten beeinflusst den 24-Stunden-Abstand nicht mehr.
+- Live-Dateiwache entfernt Watches verschobener/geloeschter Teilbaeume und erfasst hineingeschobene Verzeichnisse unter ihrem neuen Pfad. Bei verschobenem/geloeschtem Document-Root wird der Monitor beendet.
+- Regressionstests fuer viele neuere manuelle Scans sowie heraus- und hineinverschobene verschachtelte Verzeichnisse.
+- Funktionsliste und Dokumentation auf den aktuellen Implementierungsstand gebracht.
+- Plesk-End-to-End-Pruefung erfolgt separat auf dem Testserver; keine automatische Aktivierung zusaetzlicher Schutzregeln.
+
 ## 0.6.3 – Plesk-Document-Root-Resolver und automatische Release-Veröffentlichung
 
 - Scanner, geplante Scans, Dateiwache und Quarantaene verwenden den zu jeder Domain in der Plesk-Hosting-Datenbank gespeicherten Document-Root statt `/var/www/vhosts/<domain>/httpdocs`.

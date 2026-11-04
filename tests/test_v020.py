@@ -1,6 +1,7 @@
 """Security and workflow tests, run without Plesk or live firewall changes."""
 import importlib.machinery
 import importlib.util
+import json
 import os
 import pathlib
 import tempfile
@@ -16,6 +17,41 @@ loader.exec_module(h)
 
 
 class NewFeatureTests(unittest.TestCase):
+    def test_scheduler_keeps_24h_interval_beyond_visible_history(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            (root / 'jobs').mkdir()
+            now = time.time()
+            for index in range(32):
+                jobid = '%032x' % index
+                report = {'id': jobid, 'domain': 'example.com', 'status': 'finished',
+                          'trigger': 'schedule' if index == 0 else 'manual',
+                          'started_at': h.utc_now(), 'findings': []}
+                path = root / 'jobs' / (jobid + '.json')
+                path.write_text(json.dumps(report))
+                os.utime(path, (now + index, now + index))
+            with mock.patch.object(h, 'ROOT', root), \
+                 mock.patch.object(h.os, 'geteuid', return_value=0), \
+                 mock.patch.object(h, 'prepare_dir'), \
+                 mock.patch.object(h, 'prune_reports'), \
+                 mock.patch.object(h, 'watch_changes'), \
+                 mock.patch.object(h, 'monitor_config', return_value={}), \
+                 mock.patch.object(h, 'schedules', return_value={'example.com': {'enabled': True}}), \
+                 mock.patch.object(h, 'scan_start') as start:
+                self.assertEqual(len(h.history()), 30)
+                self.assertEqual(len(h.history(limit=None)), 32)
+                h.scheduled_tick()
+                start.assert_not_called()
+                # An older scheduled report must still allow a due scan.
+                path = root / 'jobs' / ('%032x.json' % 0)
+                report = json.loads(path.read_text())
+                report['started_at'] = (h.datetime.datetime.now(h.datetime.timezone.utc)
+                                        - h.datetime.timedelta(days=2)).isoformat()
+                path.write_text(json.dumps(report))
+                with mock.patch.object(h, 'site_docroot'):
+                    h.scheduled_tick()
+                start.assert_called_once_with('example.com', 'schedule')
+
     def test_safe_relative_rejects_escapes(self):
         for candidate in ('../data', '/etc/passwd', 'folder/../passwd', 'folder//file',
                           'foo\\bar', './data', 'trick\nname', 'file\x00bad', ''):
