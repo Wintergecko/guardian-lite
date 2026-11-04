@@ -3,7 +3,8 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.5.1';
+    private const GUARDIAN_VERSION = '0.5.2';
+    private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
 
     public function init()
     {
@@ -67,6 +68,12 @@ class IndexController extends pm_Controller_Action
         return $data;
     }
 
+    private function updateRepository()
+    {
+        $saved = trim((string)pm_Settings::get('guardian_update_repo'));
+        return $saved !== '' ? $saved : self::DEFAULT_UPDATE_REPO;
+    }
+
     public function updateRepoAction()
     {
         $this->verifyPost();
@@ -101,7 +108,7 @@ class IndexController extends pm_Controller_Action
     public function updateCheckAction()
     {
         $this->verifyPost();
-        $repo = (string)pm_Settings::get('guardian_update_repo');
+        $repo = $this->updateRepository();
         if ($repo === '') {
             throw new pm_Exception('Zuerst ein GitHub-Repository festlegen.');
         }
@@ -118,7 +125,7 @@ class IndexController extends pm_Controller_Action
     public function updateApplyAction()
     {
         $this->verifyPost();
-        $repo = (string)pm_Settings::get('guardian_update_repo');
+        $repo = $this->updateRepository();
         $result = isset($_SESSION['guardian_update_result']) ? $_SESSION['guardian_update_result'] : null;
         if (!is_array($result) || empty($result['newer']) || $repo !== ($result['repo'] ?? '')
             || !preg_match('/^\d+\.\d+\.\d+$/D', (string)($result['latest'] ?? ''))
@@ -149,7 +156,7 @@ class IndexController extends pm_Controller_Action
         $this->view->waf = [];
         $this->view->wafError = null;
         $this->view->domains = [];
-        $this->view->updateRepo = (string)pm_Settings::get('guardian_update_repo');
+        $this->view->updateRepo = $this->updateRepository();
         $this->view->updateResult = isset($_SESSION['guardian_update_result'])
             ? $_SESSION['guardian_update_result'] : null;
         $this->view->updateState = [];

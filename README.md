@@ -117,3 +117,8 @@ Uebersicht, Malware & Dateien, Angriffe & Schutz, Updates und Feature-Liste.
 Der aktuelle Tab bleibt nach Formularaktionen in derselben Browser-Sitzung erhalten; Links mit
 `#guardian-tab-updates` oeffnen den Updater direkt. Ohne JavaScript bleiben alle Bereiche sichtbar.
 Das Feature-Backlog ist bewusst keine Zusage eines vollstaendigen Imunify360-Ersatzes.
+
+
+### Updater-Repository (ab v0.5.2)
+
+Ohne gespeicherte Einstellung wird `Wintergecko/guardian-lite` als Voreinstellung verwendet. Unter Updates ist „Auf neue Version pruefen“ immer sichtbar. Die Extension liest nur GitHub-Releases und installiert Updates erst nach einem ausdruecklichen Admin-Klick. Ein geeignetes veroeffentlichtes Release muss das ZIP-Asset samt GitHub SHA-256-Digest enthalten.

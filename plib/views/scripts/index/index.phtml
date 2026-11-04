@@ -23,7 +23,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.5.1</span></h1>
+      <h1>Guardian Lite <span>v0.5.2</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -188,7 +188,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.5.1</h2>
+    <h2>GitHub-Updater · v0.5.2</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -201,12 +201,11 @@ $action = static function ($name) use ($esc) {
         <button type="submit">Speichern</button>
       </div>
     </form>
-    <?php if ($this->updateRepo !== ''): ?>
-      <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'update-check'])) ?>">
-        <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
-        <button type="submit">Auf neue Version pruefen</button>
-      </form>
-    <?php endif; ?>
+    <p class="guardian-small">Voreingestellt ist das offizielle Guardian-Lite-Repository. Du kannst direkt nach Updates suchen, ohne vorher auf Speichern zu klicken.</p>
+    <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'update-check'])) ?>">
+      <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+      <button type="submit">Auf neue Version pruefen</button>
+    </form>
     <?php $release = is_array($this->updateResult) ? $this->updateResult : null; ?>
     <?php if ($release && ($release['repo'] ?? '') === $this->updateRepo): ?>
       <div class="guardian-state <?= !empty($release['newer']) ? 'is-warn' : 'is-good' ?>">

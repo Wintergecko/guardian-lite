@@ -1,3 +1,10 @@
+## 0.5.2 – Updater-Button immer sichtbar
+
+- Das Guardian-Repository Wintergecko/guardian-lite wird automatisch als Default verwendet, wenn noch keine Repository-Einstellung gespeichert ist.
+- Die Schaltflaeche zum Pruefen auf neue Versionen ist im Updates-Tab immer sichtbar und kann ohne vorheriges Speichern benutzt werden.
+- Manuell gespeicherte vertrauenswuerdige Repositories bleiben erhalten.
+- Versionsnummern und Tests aktualisiert. Keine automatische Installation oder Aenderung aktiver Schutzregeln.
+
 ## 0.5.1 – GitHub-Updater Release-Pipeline repariert
 
 - GitHub Actions testet die root-gebundenen Helper-Funktionen mit Root-Rechten auf isolierten Runnern.
