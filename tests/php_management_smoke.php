@@ -60,6 +60,12 @@ $request = json_decode($stdin, true);
 checkManagement($request['abuseipdb_key'] === 'PRIVATE_API_SECRET' && $request['consent'] === true, 'Secret or checkbox lost');
 checkManagement(strpos(json_encode(pm_Settings::$data), 'PRIVATE_') === false, 'Request secret leaked into settings feedback');
 
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'ignore-add',
+    'domain' => 'example.com', 'sha256' => str_repeat('a', 64)];
+try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
+$request = json_decode(pm_ApiCli::$calls[1][3], true);
+checkManagement(($request['action'] ?? '') === 'ignore-add' && $request['sha256'] === str_repeat('a', 64), 'Ignore action did not reach fixed manager API');
+
 foreach ([['csrf' => 'wrong', 'operation' => 'cloud-save'],
           ['csrf' => 'test-token', 'operation' => 'shell'],
           ['csrf' => 'test-token', 'operation' => 'diagnostics', 'domain' => 'unknown.com'],
@@ -80,6 +86,7 @@ class ManagementView extends stdClass {}
 $view = new ManagementView();
 $view->management = ['handlers' => [['version' => '8.3', 'sha256' => str_repeat('a', 64),
     'module' => true, 'managed' => false, 'build_missing' => ['phpize']]], 'cloud' => [],
+    'ignore_hashes' => ['example.com' => [str_repeat('c', 64)]],
     'backups' => [['kind' => 'php', 'identity' => '8.3', 'id' => str_repeat('b', 32), 'created_at' => 'test'],
                   ['kind' => 'waf', 'id' => str_repeat('c', 32), 'created_at' => 'test']],
     'waf_sha256' => str_repeat('d', 64)];
@@ -87,8 +94,8 @@ $view->managementError = '';
 $view->managementResult = [];
 $view->domains = ['example.com'];
 $view->csrf = 'test-token';
-$view->scan = ['id' => str_repeat('e', 32), 'findings' => [
-    ['path' => '<script>test</script>.php', 'state' => 'found'],
+$view->scan = ['id' => str_repeat('e', 32), 'domain' => 'example.com', 'findings' => [
+    ['path' => '<script>test</script>.php', 'state' => 'found', 'fingerprint' => ['sha256' => str_repeat('f', 64)]],
     ['path' => 'index.php', 'state' => 'repaired']]];
 $render = function () {
     $esc = static function ($value) { return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
@@ -100,4 +107,6 @@ $html = $render->call($view);
 checkManagement(strpos($html, 'guardian-management') !== false, 'Management partial did not render');
 checkManagement(strpos($html, 'name="csrf"') !== false, 'Management forms lack CSRF');
 checkManagement(strpos($html, '<script>test</script>') === false, 'Finding path was not escaped');
+checkManagement(strpos($html, 'ignore-add') !== false, 'Malware ignore action not rendered');
+checkManagement(strpos($html, 'ignore-remove') !== false, 'Malware ignore removal not rendered');
 echo "Management controller and template smoke: OK\n";

@@ -1,3 +1,10 @@
+## 0.8.0 – Malware-Ignore-Liste und Imunify360-Abgleich
+
+- Plesk-Admin kann exakte Datei-SHA-256-Funde je Domain administrativ ignorieren und wieder freigeben. Treffer bleiben sichtbar/gescannt; Warnung und automatische Baseline-Reparatur werden fuer diesen Inhalt unterdrueckt.
+- Ignore-Liste hat Domain-/Gesamtlimits, Audit-Vorfaelle und Schutz fuer manuelle/automatische Reparatur gegen veraltete Berichte.
+- Vollscan, Live-Wache, Scanbericht und Historie zeigen die Ausnahmen getrennt an.
+- Imunify360-Paritaetsabgleich mit Produktgrenzen und priorisiertem Plesk-Implementierungsplan ergaenzt.
+
 ## 0.7.1 – Abhaengigkeiten und Firewall-Status
 
 - Plesk-Firewall-Erkennung prueft die aktuellen sowie bisherigen systemd-Service-Namen und unterscheidet installierte Erweiterung von aktivierten Regeln.

@@ -1,4 +1,4 @@
-# Guardian Lite 0.7.1 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.8.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -74,6 +74,12 @@ Requests ohne gueltige Freigabe erreichen den geschuetzten PHP-Endpunkt nicht. A
 Der PHP-INI-Cache kann eine Aenderung bis zu fuenf Minuten verzoegern. Nach Deaktivierung bleibt die Guard-Datei fuer ausstehende INI-Caches erhalten. Eine geaenderte `.user.ini` wird nicht automatisch zurueckgesetzt; zuerst die lokale Aenderung pruefen. Aktive Bot-Pruefungen muessen deaktiviert werden, bevor Turnstile-Schluessel/Zustimmung geaendert werden koennen. Die Turnstile-Integration ersetzt keine serverweite WAF oder statischen Bot-/DDoS-Schutz.
 
 Referenzen: [AbuseIPDB CHECK](https://docs.abuseipdb.com/#check-endpoint), [Turnstile Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/).
+
+## Malware-Ignore-Liste
+
+Im Verwaltungstab kann ein Administrator den exakten SHA-256-Inhalt eines ClamAV-Funds fuer die ausgewaehlte Domain markieren. Die Datei wird bei spaeteren Vollscans und Live-Wachen weiterhin geprueft und bleibt im Bericht sichtbar; Guardian unterdrueckt nur Malwarewarnungen und automatische Baseline-Reparatur fuer genau diesen Inhalt. Ein Hash auf einer Domain wirkt nicht fuer andere Domains. Maximal 500 Eintraege je Domain und 2000 insgesamt. Nach manueller Pruefung kann der Eintrag entfernt werden. Alte Berichte werden nicht nachtraeglich umgeschrieben.
+
+Die Ignore-Liste kann eine echte Infektion verbergen, wenn ein Administrator den Fund falsch bewertet. Sie ist keine Bereinigung und kein sauberer Baseline-Nachweis.
 
 ## Good-File-Reparatur
 

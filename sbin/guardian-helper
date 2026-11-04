@@ -635,8 +635,12 @@ def watch_worker(domain):
                                             preexec_fn=lambda: drop_privileges(uid, gid),
                                             env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
                     if result.returncode == 1 and b' FOUND' in result.stdout:
-                        incident_log('malware_detected', 'critical', domain,
-                                     'ClamAV meldet Malware. Datei nicht automatisch veraendert.', rel)
+                        if metadata['sha256'] in ignored_hash_set(domain):
+                            incident_log('file_change', 'info', domain,
+                                         'ClamAV-Treffer mit administrativ ignoriertem SHA-256-Inhalt.', rel)
+                        else:
+                            incident_log('malware_detected', 'critical', domain,
+                                         'ClamAV meldet Malware. Datei nicht automatisch veraendert.', rel)
                 except (ValueError, OSError, subprocess.TimeoutExpired):
                     continue
         incident_log('monitor_stopped', 'info', domain, 'Live-Monitor beendet')
@@ -710,7 +714,7 @@ def history(limit=MAX_HISTORY):
             entry = read_scan(jobid, include_output=False)
             if entry:
                 records.append({k: entry.get(k) for k in
-                                ('id', 'domain', 'status', 'started_at', 'finished_at', 'infected', 'trigger')})
+                                ('id', 'domain', 'status', 'started_at', 'finished_at', 'infected', 'ignored', 'trigger')})
         return records
     except OSError:
         return []
@@ -851,6 +855,26 @@ def findings_from_log(docroot, logtext):
     return findings
 
 
+def ignored_hash_set(domain):
+    settings = read_json(ROOT / 'management' / 'config.json', {})
+    ignored = settings.get('ignore_hashes', {}) if isinstance(settings, dict) else {}
+    values = ignored.get(domain, []) if isinstance(ignored, dict) else []
+    return {value for value in values if isinstance(value, str) and re.fullmatch(r'[a-f0-9]{64}', value)} \
+        if isinstance(values, list) else set()
+
+
+def annotate_ignored_findings(domain, findings):
+    """Keep ignored detections visible, but prevent automated repair/alerts for exact content hashes."""
+    hashes = ignored_hash_set(domain)
+    count = 0
+    for finding in findings:
+        fingerprint = finding.get('fingerprint')
+        sha = fingerprint.get('sha256') if isinstance(fingerprint, dict) else None
+        finding['ignored'] = isinstance(sha, str) and sha in hashes
+        count += int(finding['ignored'])
+    return count
+
+
 def drop_privileges(uid, gid):
     os.setgroups([])
     os.setgid(gid)
@@ -889,11 +913,13 @@ def scan_worker(domain, jobid, inherited_fd):
         with (ROOT / 'jobs' / (jobid + '.log')).open('rb') as log:
             text = log.read(5 * 1024 * 1024).decode('utf-8', 'replace')
         findings = findings_from_log(path, text)
+        ignored_count = annotate_ignored_findings(domain, findings)
+        active_findings = [item for item in findings if item.get('state') == 'found' and not item.get('ignored')]
         scan.update(status='finished' if done.returncode in (0, 1) else 'error',
-                    finished_at=utc_now(), infected=len(findings), findings=findings)
-        if done.returncode == 1 and findings:
+                    finished_at=utc_now(), infected=len(findings), ignored=ignored_count, findings=findings)
+        if done.returncode == 1 and active_findings:
             incident_log('malware_detected', 'critical', domain,
-                         'ClamAV meldet %d verifizierte Funde (manuelle Pruefung erforderlich).' % len(findings))
+                         'ClamAV meldet %d nicht ignorierte Funde (manuelle Pruefung erforderlich).' % len(active_findings))
         if done.returncode not in (0, 1):
             scan['error'] = 'ClamAV Scan-Fehler (Exit-Code %d).' % done.returncode
         elif done.returncode == 1 and not findings:
@@ -905,7 +931,8 @@ def scan_worker(domain, jobid, inherited_fd):
     finally:
         save_job(scan)
         os.close(inherited_fd)
-    if scan.get('status') == 'finished' and scan.get('infected'):
+    if scan.get('status') == 'finished' and any(
+            item.get('state') == 'found' and not item.get('ignored') for item in scan.get('findings', [])):
         manager = pathlib.Path(__file__).resolve().parent / 'guardian-manager'
         if manager.is_file():
             subprocess.Popen([sys.executable, str(manager), 'auto-repair', jobid],

@@ -141,6 +141,26 @@ class ManagementTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 m.reputation('1.1.1.1')
 
+    def test_ignore_hash_is_domain_scoped_visible_and_reversible(self):
+        sha = m.digest(b'known false positive')
+        report = self.malware_report(b'known false positive')
+        m.ignore_hash_set('example.com', sha, 'add')
+        self.assertEqual(m.config()['ignore_hashes']['example.com'], [sha])
+        finding = {'path': 'cache.php', 'state': 'found', 'fingerprint': {'sha256': sha}}
+        self.assertEqual(m.h.annotate_ignored_findings('example.com', [finding]), 1)
+        self.assertTrue(finding['ignored'])
+        other = {'fingerprint': {'sha256': sha}}
+        self.assertEqual(m.h.annotate_ignored_findings('other.example', [other]), 0)
+        self.assertFalse(other['ignored'])
+        self.assertIn(sha, m.public_status()['ignore_hashes']['example.com'])
+        with self.assertRaises(ValueError):
+            m.ignore_hash_set('example.com', 'invalid', 'add')
+        with self.assertRaises(ValueError):
+            m.repair_one(report['id'], 0)
+        m.ignore_hash_set('example.com', sha, 'remove')
+        restored = {'fingerprint': {'sha256': sha}}
+        self.assertEqual(m.h.annotate_ignored_findings('example.com', [restored]), 0)
+        self.assertFalse(restored['ignored'])
     def test_status_never_contains_provider_secrets(self):
         m.cloud_save({'abuseipdb_key': 'ABUSE_SECRET_12345', 'turnstile_sitekey': 'SITE_KEY_12345',
                       'turnstile_secret': 'TURNSTILE_SECRET_12345', 'consent': True})

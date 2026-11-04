@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.7.1';
+    private const GUARDIAN_VERSION = '0.8.0';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -92,7 +92,7 @@ class IndexController extends pm_Controller_Action
         $post = $this->getRequest();
         $operation = (string)$post->getPost('operation', '');
         $allowed = ['php-backup', 'php-restore', 'runtime-set', 'runtime-install', 'waf-preview',
-                    'waf-set', 'waf-engine', 'waf-restore', 'cloud-save', 'reputation', 'baseline-create',
+                    'waf-set', 'waf-engine', 'waf-restore', 'cloud-save', 'reputation', 'ignore-add', 'ignore-remove', 'baseline-create',
                     'repair-set', 'repair', 'repair-rollback', 'bots-set', 'diagnostics'];
         if (!in_array($operation, $allowed, true)) {
             throw new pm_Exception('Unbekannte Verwaltungsaktion.');

@@ -1,4 +1,4 @@
-# Guardian Lite v0.7.1 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.8.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -23,6 +23,11 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - API-Schluessel werden ueber stdin uebergeben und root-privat gespeichert. Kein Schluessel wird in Status, Jobs oder Diagnoseexport aufgenommen. Provider-URLs sind fest vorgegeben, TLS-Verifikation bleibt aktiv und Redirects werden abgelehnt.
 - Snuffleupagus wird aus einem festgelegten Upstream-Commit unter einem eigenen unprivilegierten Build-Benutzer kompiliert. PHP-/FPM-Pruefungen und Recovery-Backups gehen einer Aktivierung voraus. Root darf weiterhin bewusst nativen Modulcode installieren; eine Commit-Pin ist keine unabhaengige Herstellersignatur.
 - Guardian-WAF-Regeln werden nach Modul-/Include-/Syntaxpruefung installiert. Fremde Regeldateien werden nicht ueberschrieben. Die WAF darf nach wie vor keine ungeprueften Forwarded-IP-Header vertrauen.
+
+## 0.8.0 – Malware-Ignore-Hashes
+
+- SHA-256-Ausnahmen sind pro Domain begrenzt und root-privat gespeichert. Die Datei wird weiterhin gescannt und der Fund bleibt sichtbar. Die Ausnahme verhindert nur Malwarewarnung und automatische Baseline-Reparatur dieses exakten Inhalts.
+- Bei manueller Reparatur wird auch die aktuelle Ignore-Liste geprueft, damit alte Formulare oder Scanberichte die Sperre nicht umgehen.
 - Turnstile prueft Tokens serverseitig samt Hostname und Action. Ein Cookie ohne gueltige HMAC-Signatur reicht nicht aus. Ein kompromittierter Website-Benutzer kann seinen eigenen PHP-Guard umgehen; das ist keine Isolation gegen bereits erfolgreiche Codeausfuehrung.
 - Baselines sind root-private, mit Digests gepruefte und vom Administrator freigegebene Kopien. Sie sind weder Hersteller-signiert noch externer WORM-Speicher. Pfad-, UID-, Fingerprint- und Nicht-Ueberschreiben-Pruefungen begrenzen Reparaturen; gleichzeitig schreibende Websites bleiben ein Race-Risiko.
 - Bei Deinstallation werden Guardian-Policies rueckgenommen. Fremde zwischenzeitliche Konfigurationsaenderungen koennen die automatische Ruecknahme verhindern; dann wird abgebrochen, statt Konfigurationen ungeprueft zu ueberschreiben. Daten/Quarantaene und Module bleiben erhalten.

@@ -99,10 +99,28 @@ $domainSelect = function () use ($esc) {
   </form>
   <pre><?= $esc(json_encode(['baselines' => $management['baselines'] ?? [], 'autorepair' => $management['autorepair'] ?? []], JSON_PRETTY_PRINT)) ?></pre>
   <?php if (is_array($this->scan) && !empty($this->scan['findings'])): foreach ($this->scan['findings'] as $i => $finding): ?>
-    <p><?= $esc($finding['path']) ?> · <?= $esc($finding['state']) ?></p>
-    <?php if (($finding['state'] ?? '') === 'found') { $form('repair', ['jobid' => $this->scan['id'], 'index' => $i], 'Aus Baseline reparieren', 'Datei durch die freigegebene Baseline ersetzen? Original bleibt in Quarantaene.'); }
+    <?php $currentIgnoreHashes = $management['ignore_hashes'][$this->scan['domain'] ?? ''] ?? [];
+      $sha = $finding['fingerprint']['sha256'] ?? '';
+      $findingIgnored = !empty($finding['ignored']) || (is_string($sha) && in_array($sha, $currentIgnoreHashes, true)); ?>
+    <p><?= $esc($finding['path']) ?> · <?= $findingIgnored ? 'Ignoriert (SHA-256-Regel)' : $esc($finding['state']) ?></p>
+    <?php if (($finding['state'] ?? '') === 'found' && !$findingIgnored) { $form('repair', ['jobid' => $this->scan['id'], 'index' => $i], 'Aus Baseline reparieren', 'Datei durch die freigegebene Baseline ersetzen? Original bleibt in Quarantaene.'); }
       if (($finding['state'] ?? '') === 'repaired') { $form('repair-rollback', ['jobid' => $this->scan['id'], 'index' => $i], 'Reparatur zuruecknehmen', 'Infiziertes Original wiederherstellen? Malware kann danach wieder aktiv sein.'); } ?>
   <?php endforeach; endif; ?>
+
+  <h3>Malware-Ignore-Liste (SHA-256 je Domain)</h3>
+  <p>Ein Eintrag gilt nur fuer exakt denselben Dateiinhalt auf der Domain. Guardian scannt die Datei weiterhin und zeigt den Treffer als ignoriert; er loest keine automatische Reparatur oder Malwarewarnung aus. Nur nach manueller Pruefung verwenden.</p>
+  <?php foreach (($management['ignore_hashes'] ?? []) as $ignoredDomain => $hashes): foreach ($hashes as $hash): ?>
+    <p><?= $esc($ignoredDomain) ?> · <?= $esc($hash) ?>
+      <?php $form('ignore-remove', ['domain' => $ignoredDomain, 'sha256' => $hash], 'Eintrag entfernen'); ?>
+    </p>
+  <?php endforeach; endforeach; ?>
+  <?php if (is_array($this->scan) && !empty($this->scan['findings'])): foreach ($this->scan['findings'] as $finding):
+      $sha = $finding['fingerprint']['sha256'] ?? '';
+      if (($finding['state'] ?? '') === 'found' && empty($finding['ignored']) && preg_match('/^[a-f0-9]{64}$/D', $sha)): ?>
+        <p><?= $esc($this->scan['domain'] ?? '') ?> · <?= $esc($finding['path']) ?> · SHA-256 <?= $esc($sha) ?>
+          <?php $form('ignore-add', ['domain' => $this->scan['domain'] ?? '', 'sha256' => $sha], 'Exakten Dateiinhalt ignorieren', 'Diesen SHA-256-Inhalt fuer kuenftige Scans dieser Domain als ignoriert markieren? Er wird weiterhin gescannt und im Bericht gezeigt.'); ?>
+        </p>
+  <?php endif; endforeach; endif; ?>
 
   <h3>Auftraege</h3><pre><?= $esc(json_encode($management['jobs'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
   <h3>Diagnose fuer deinen Plesk-Test</h3>

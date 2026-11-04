@@ -510,6 +510,42 @@ def cloud_save(request):
     return {'message': 'Cloud-Einstellungen gespeichert. Es werden keine IPs automatisch gemeldet oder gesperrt.'}
 
 
+def ignore_hash_set(domain, sha256, mode):
+    h.site_docroot(domain)
+    if not isinstance(sha256, str) or not HEX.fullmatch(sha256) or mode not in ('add', 'remove'):
+        raise ValueError('Ungueltiger Ignore-List-Eintrag.')
+    settings = config()
+    entries = settings.setdefault('ignore_hashes', {})
+    if not isinstance(entries, dict):
+        entries = {}
+        settings['ignore_hashes'] = entries
+    values = entries.get(domain, [])
+    if not isinstance(values, list):
+        values = []
+    values = sorted({value for value in values if isinstance(value, str) and HEX.fullmatch(value)})
+    if mode == 'add':
+        total = sum(len(value) for value in entries.values() if isinstance(value, list))
+        if sha256 not in values and total >= 2000:
+            raise ValueError('Maximal 2000 Ignore-Hashes insgesamt; zuerst alte Eintraege entfernen.')
+        if sha256 not in values and len(values) >= 500:
+            raise ValueError('Maximal 500 Hashes je Domain; zuerst alte Eintraege entfernen.')
+        values = sorted(set(values) | {sha256})
+        entries[domain] = values
+        message = 'Exakter Dateiinhalt wird bei kuenftigen Scans fuer diese Domain als ignoriert markiert.'
+    else:
+        values = [value for value in values if value != sha256]
+        if values:
+            entries[domain] = values
+        else:
+            entries.pop(domain, None)
+        message = 'Hash aus der Ignore-Liste entfernt; Datei wird bei kuenftigen Scans wieder normal gemeldet.'
+    save_config(settings)
+    h.incident_log('operator', 'warning', domain,
+                   ('SHA256 zur Malware-Ignore-Liste hinzugefuegt: ' if mode == 'add' else
+                    'SHA256 aus Malware-Ignore-Liste entfernt: ') + sha256[:12])
+    return {'message': message}
+
+
 def baseline(domain, trusted):
     if trusted is not True:
         raise ValueError('Die saubere Herkunft muss ausdruecklich bestaetigt werden.')
@@ -603,9 +639,13 @@ def repair_one(jobid, index, blocking=False):
         if not report or report.get('status') != 'finished':
             raise ValueError('Abgeschlossener Scan erforderlich.')
         finding = report['findings'][index]
-        if finding.get('state') != 'found' or not finding.get('fingerprint'):
+        if finding.get('state') != 'found' or finding.get('ignored') is True or not finding.get('fingerprint'):
             raise ValueError('Unveraenderter, verifizierter Fund erforderlich.')
         domain = report['domain']
+        raw_ignored = config().get('ignore_hashes', {})
+        ignored_hashes = raw_ignored.get(domain, []) if isinstance(raw_ignored, dict) else []
+        if finding['fingerprint'].get('sha256') in ignored_hashes:
+            raise ValueError('Dateiinhalt steht auf der Ignore-Liste; Eintrag zuerst entfernen und neu scannen.')
         item = config().get('baselines', {}).get(domain, {})
         token = item.get('id', '')
         if not re.fullmatch(r'[a-f0-9]{32}', token):
@@ -721,8 +761,12 @@ def auto_repair(jobid):
     selected = settings.get('autorepair', {}).get(report['domain'])
     if not selected or selected != settings.get('baselines', {}).get(report['domain'], {}).get('id'):
         return
+    raw_ignored = settings.get('ignore_hashes', {})
+    ignored_hashes = raw_ignored.get(report['domain'], []) if isinstance(raw_ignored, dict) else []
     for index, finding in enumerate(report.get('findings', [])):
-        if finding.get('state') == 'found':
+        sha = (finding.get('fingerprint') or {}).get('sha256')
+        if (finding.get('state') == 'found' and finding.get('ignored') is not True and
+                sha not in ignored_hashes):
             try:
                 repair_one(jobid, index, blocking=True)
             except (ValueError, OSError, KeyError, IndexError):
@@ -892,6 +936,9 @@ def diagnostics(domain='', http_probe=False):
 def public_status():
     prepare()
     settings = config()
+    ignore_hashes = settings.get('ignore_hashes', {})
+    if not isinstance(ignore_hashes, dict):
+        ignore_hashes = {}
     handlers = []
     for path in sorted(PHP_BASE.glob('8.*')):
         if not VERSION.fullmatch(path.name):
@@ -922,6 +969,9 @@ def public_status():
             'abuseipdb_configured': bool(settings.get('abuseipdb_key')),
             'turnstile_configured': bool(settings.get('turnstile_sitekey') and settings.get('turnstile_secret'))},
             'baselines': settings.get('baselines', {}), 'autorepair': settings.get('autorepair', {}),
+            'ignore_hashes': {domain: sorted(value for value in values if isinstance(value, str) and HEX.fullmatch(value))
+                              for domain, values in ignore_hashes.items()
+                              if h.valid_domain(domain) and isinstance(values, list)},
             'bots': {d: {'enabled': v.get('enabled', False)} for d, v in settings.get('bots', {}).items()},
             'diagnostics': h.read_json(root() / 'diagnostics.json', {}),
             'jobs': [h.read_json(p, {}) for p in sorted((root() / 'jobs').glob('*.json'),
@@ -1041,6 +1091,9 @@ def dispatch(request):
             return waf_restore(request.get('backup', ''), request.get('sha256', ''))
         if action == 'cloud-save':
             return cloud_save(request)
+        if action in ('ignore-add', 'ignore-remove'):
+            return ignore_hash_set(request.get('domain', ''), request.get('sha256', ''),
+                                   'add' if action == 'ignore-add' else 'remove')
         if action == 'reputation':
             return reputation(request.get('ip', ''))
         if action == 'baseline-create':
