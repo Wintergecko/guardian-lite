@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.11.0';
+    private const GUARDIAN_VERSION = '0.12.0';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -515,5 +515,32 @@ class IndexController extends pm_Controller_Action
             throw new pm_Exception('Ungueltige IP-Sperraktion.');
         }
         $this->finishAction(['ip-action', $jail, $ip, $operation], 'Fail2Ban-IP-Aktion bearbeitet.');
+    }
+
+    public function firewallAction()
+    {
+        $this->verifyPost();
+        $request = $this->getRequest();
+        $operation = (string)$request->getPost('operation', '');
+        if (!in_array($operation, ['ban', 'unban', 'confirm', 'cancel'], true)) {
+            throw new pm_Exception('Ungueltige Plesk-Firewall-Aktion.');
+        }
+        if (in_array($operation, ['ban', 'unban'], true)) {
+            $network = trim((string)$request->getPost('network', ''));
+            if ($network === '' || strlen($network) > 80) {
+                throw new pm_Exception('IPv4-/IPv6-Adresse oder CIDR erforderlich.');
+            }
+            // REMOTE_ADDR is the actual panel connection peer. Do not trust forwarded headers here.
+            $remote = isset($_SERVER['REMOTE_ADDR']) && is_string($_SERVER['REMOTE_ADDR'])
+                ? $_SERVER['REMOTE_ADDR'] : '';
+            $this->finishAction(['firewall-action', $operation, $network, $remote],
+                'Plesk-Firewall-Aenderung wurde gestartet.');
+            return;
+        }
+        if ($operation === 'confirm' && $request->getPost('tested', '') !== '1') {
+            throw new pm_Exception('Vor der Bestaetigung zuerst eine getrennte SSH- oder Admin-Verbindung testen.');
+        }
+        $this->finishAction(['firewall-action', $operation],
+            $operation === 'confirm' ? 'Plesk-Firewall-Aenderung bestaetigt.' : 'Plesk-Firewall-Rollback angefordert.');
     }
 }

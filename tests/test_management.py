@@ -92,6 +92,36 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(source.read_bytes(), content)
         self.assertTrue(link.is_symlink())
 
+    def test_uninstall_removes_only_guardian_firewall_rules_through_confirmed_rollback(self):
+        managed = {'available': True, 'limited': False, 'pending': {}, 'rules': [
+            {'id': '41', 'network': '203.0.113.25/32'},
+            {'id': '42', 'network': '2001:db8::1/128'},
+            {'id': '43', 'network': '203.0.113.25/32'},
+        ]}
+        calls = []
+        def fake_firewall_action(operation, target='', remote_address=''):
+            calls.append((operation, target))
+            return {'state': 'awaiting_confirmation' if operation == 'unban' else 'confirmed'}
+        with mock.patch.object(m.h, 'firewall_rules', return_value=managed), \
+             mock.patch.object(m.h, 'firewall_status', return_value={'plesk_firewall_active': True}), \
+             mock.patch.object(m.h, 'firewall_action', side_effect=fake_firewall_action), \
+             mock.patch.object(m, 'public_status', return_value={'handlers': []}), \
+             mock.patch.object(m.h, 'monitor_config', return_value={}), \
+             mock.patch.object(m, 'waf_file', side_effect=ValueError('not configured')):
+            result = m.uninstall_cleanup()
+        self.assertIn('Firewallregeln entfernt', result['message'])
+        self.assertEqual(calls, [('unban', '2001:db8::1/128'), ('confirm', ''),
+                                 ('unban', '203.0.113.25/32'), ('confirm', '')])
+
+    def test_uninstall_refuses_when_installed_plesk_firewall_cannot_be_listed(self):
+        firewall_settings = self.base / 'firewall-settings'
+        firewall_settings.touch()
+        with mock.patch.object(m.h, 'FIREWALL_SETTINGS', firewall_settings), \
+             mock.patch.object(m.h, 'firewall_rules', return_value={
+                 'available': False, 'rules': [], 'pending': {}}):
+            with self.assertRaisesRegex(ValueError, 'Deinstallation abgebrochen'):
+                m.uninstall_cleanup()
+
     def fake_wp_cli(self, message, exit_code, kind='core'):
         temporary = tempfile.TemporaryDirectory(prefix='guardian-wp-cli-test-', dir='/var/lib')
         self.addCleanup(temporary.cleanup)

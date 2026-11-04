@@ -24,7 +24,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.11.0</span></h1>
+      <h1>Guardian Lite <span>v0.12.0</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -69,7 +69,7 @@ $action = static function ($name) use ($esc) {
         elseif (!empty($fw['installed'])): ?>Installiert, Status nicht feststellbar<?php
         else: ?>Plesk-Firewall nicht installiert<?php endif; ?>
       </div>
-      <p class="guardian-small">Andere System- oder Provider-Firewalls werden hier nicht bewertet.</p>
+      <p class="guardian-small">Der Status zeigt Plesk-Regelverwaltung, nicht die Verfuegbarkeit externer Provider-Firewalls.</p>
     </section>
   </div>
   <div class="guardian-grid guardian-lower" id="guardian-shield">
@@ -202,9 +202,51 @@ $action = static function ($name) use ($esc) {
         </form>
       <?php else: ?><p>Kein aktives Fail2Ban-Jail gefunden.</p><?php endif; ?>
     </section>
+    <section class="guardian-card">
+      <h2>Plesk-Firewall: Guardian-IP-Sperrliste</h2>
+      <p>Verwendet Plesks eigene Firewall-CLI. Vor jeder Sperre wird die aktuelle Admin-Verbindungs-IP geprueft. CIDR-Netze sind auf IPv4 /24 und IPv6 /64 begrenzt.</p>
+      <?php if (empty($fw['installed'])): ?>
+        <p class="guardian-alert">Plesk Firewall ist nicht installiert. Guardian installiert oder aktiviert sie nicht.</p>
+      <?php elseif (empty($fw['plesk_firewall_active'])): ?>
+        <p class="guardian-alert">Die Plesk-Firewall-Regelverwaltung ist nicht aktiv. Zuerst in Plesk unter Tools &amp; Einstellungen &gt; Firewall einrichten.</p>
+      <?php elseif (empty($fw['available'])): ?>
+        <p class="guardian-alert">Die Plesk-Regelliste ist nicht lesbar; Aenderungen sind deaktiviert.</p>
+      <?php else: ?>
+        <div class="guardian-scroll"><table><thead><tr><th>Regel</th><th>Netz</th><th>Aktion</th></tr></thead><tbody>
+        <?php foreach (isset($fw['rules']) && is_array($fw['rules']) ? $fw['rules'] : [] as $rule): ?>
+          <tr><td><?= $esc($rule['name'] ?? '') ?></td><td><?= $esc($rule['network'] ?? '') ?></td><td>
+            <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese Guardian-Sperrregel entfernen? Die Aenderung wird erst nach Verbindungstest bestaetigt.');">
+              <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="unban" />
+              <input type="hidden" name="network" value="<?= $esc($rule['network'] ?? '') ?>" /><button class="guardian-small-button" type="submit">Entsperren</button>
+            </form>
+          </td></tr>
+        <?php endforeach; ?>
+        </tbody></table></div>
+        <?php if (empty($fw['rules'])): ?><p class="guardian-small">Keine Guardian-Sperrregeln eingetragen.</p><?php endif; ?>
+        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Plesk-Firewall-Regel fuer dieses Netz vorbereiten? Nicht bestaetigte Aenderungen rollen nach 60 Sekunden zurueck.');">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="ban" />
+          <label for="guardian-firewall-network">IPv4, IPv6 oder begrenztes CIDR</label>
+          <div class="guardian-formline"><input id="guardian-firewall-network" name="network" type="text" maxlength="80" placeholder="203.0.113.25 oder 2001:db8::/64" required /><button class="guardian-danger" type="submit">Sperrregel vorbereiten</button></div>
+        </form>
+      <?php endif; ?>
+      <?php $pendingFirewall = isset($fw['pending']) && is_array($fw['pending']) ? $fw['pending'] : []; ?>
+      <?php if (($pendingFirewall['state'] ?? '') === 'awaiting_confirmation'): ?>
+        <div class="guardian-alert"><strong>Aenderung wartet auf Bestaetigung:</strong> <?= $esc($pendingFirewall['action'] ?? '') ?> <?= $esc($pendingFirewall['network'] ?? '') ?>. Teste erst in einer unabhaengigen SSH- oder Admin-Verbindung, ob der Server erreichbar ist. Ohne Bestaetigung rollt Plesk nach 60 Sekunden zurueck.</div>
+        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Hast du eine unabhaengige Verbindung zum Server getestet?');">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="confirm" />
+          <label><input type="checkbox" name="tested" value="1" required /> Unabhaengige SSH- oder Admin-Verbindung erfolgreich getestet</label><button type="submit">Plesk-Aenderung bestaetigen</button>
+        </form>
+        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="cancel" /><button class="guardian-small-button" type="submit">Aenderung jetzt zuruecksetzen</button>
+        </form>
+      <?php elseif (($pendingFirewall['state'] ?? '') === 'expired'): ?>
+        <p class="guardian-alert">Das Bestaetigungsfenster ist abgelaufen. Nicht bestaetigte Regeln werden von Plesk zurueckgerollt. Lade die Seite in einigen Sekunden neu, bevor du eine weitere Firewall-Aktion startest.</p>
+      <?php endif; ?>
+      <p class="guardian-small">Guardian aktiviert die Plesk-Firewall nicht automatisch und bearbeitet keine fremden Regeln. Die Plesk-CLI bietet 60-Sekunden-Rollback; CIDR ist auf /24 bzw. /64 begrenzt. Regeln bleiben bis zum manuellen Entfernen bestehen.</p>
+    </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.11.0</h2>
+    <h2>GitHub-Updater · v0.12.0</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -379,6 +421,6 @@ $action = static function ($name) use ($esc) {
     <p class="guardian-small">Volumetrische DDoS-Abwehr muss beim Provider oder vorgelagerten DDoS-/CDN-Dienst erfolgen.</p>
   </section>
   <?php include __DIR__ . '/management.phtml'; ?>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.11.0" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.12.0" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

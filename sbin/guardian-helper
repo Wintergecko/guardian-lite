@@ -32,6 +32,8 @@ FAIL2BAN_PATHS = ('/usr/bin/fail2ban-client', '/usr/local/bin/fail2ban-client', 
 SYSTEMCTL_PATHS = ('/usr/bin/systemctl', '/bin/systemctl')
 FIREWALL_SETTINGS = pathlib.Path('/usr/local/psa/bin/modules/firewall/settings')
 FIREWALL_UNITS = ('plesk-firewall', 'psa-firewall')
+FIREWALL_PENDING = ROOT / 'firewall-pending.json'
+FIREWALL_RULE_PREFIX = 'Guardian Lite managed deny '
 DOMAIN_LABEL = re.compile(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$', re.I)
 JAIL_NAME = re.compile(r'^[a-zA-Z0-9_.-]{1,80}$')
 JOB_ID = re.compile(r'^[a-f0-9]{32}$')
@@ -185,6 +187,188 @@ def firewall_status():
     installed = FIREWALL_SETTINGS.is_file()
     return {'installed': installed, 'status_known': known,
             'plesk_firewall_active': active, 'service': active_unit}
+
+
+def firewall_rules():
+    """Read only Guardian-owned custom deny rules from Plesk Firewall."""
+    pending = read_json(FIREWALL_PENDING, {})
+    if pending.get('state') == 'awaiting_confirmation':
+        elapsed = max(0, time.time() - float(pending.get('started_epoch', 0)))
+        pending['remaining_seconds'] = max(0, int(55 - elapsed))
+        if elapsed > 55:
+            pending['state'] = 'expired'
+    plesk = binary(PLESK_BINARIES)
+    if not plesk:
+        return {'available': False, 'rules': [], 'pending': pending}
+    result = execute([plesk, 'ext', 'firewall', '--list-json'], timeout=10)
+    if result is None or result.returncode:
+        return {'available': False, 'rules': [], 'pending': pending}
+    try:
+        decoded = json.loads(result.stdout)
+    except (ValueError, TypeError):
+        return {'available': False, 'rules': [], 'pending': pending}
+    if not isinstance(decoded, list) or len(decoded) > 2000:
+        return {'available': False, 'rules': [], 'pending': pending}
+    rules = []
+    for item in decoded:
+        if not isinstance(item, dict):
+            continue
+        name = item.get('name')
+        rule_id = item.get('id')
+        if (not isinstance(name, str) or not name.startswith(FIREWALL_RULE_PREFIX) or
+                not isinstance(rule_id, (str, int)) or not str(rule_id).isdigit() or
+                item.get('class') != 'custom' or item.get('direction') != 'input' or
+                item.get('action') != 'deny'):
+            continue
+        network = name[len(FIREWALL_RULE_PREFIX):]
+        try:
+            network = str(ipaddress.ip_network(network, strict=True))
+        except ValueError:
+            continue
+        addresses = item.get('from', item.get('remote-addresses', ''))
+        if isinstance(addresses, list):
+            addresses = ','.join(str(x) for x in addresses if isinstance(x, str))
+        if not isinstance(addresses, str):
+            continue
+        normalized_sources = []
+        for source in addresses.split(','):
+            try:
+                normalized_sources.append(str(ipaddress.ip_network(source.strip(), strict=False)))
+            except ValueError:
+                continue
+        if network not in normalized_sources:
+            continue
+        rules.append({'id': str(rule_id), 'name': name, 'network': network,
+                      'ports': str(item.get('ports', ''))[:100]})
+    rules.sort(key=lambda row: (row['network'], row['id']))
+    return {'available': True, 'limited': len(rules) > 100, 'rules': rules[:100],
+            'pending': pending}
+
+
+def _firewall_target(value):
+    try:
+        network = ipaddress.ip_network(value, strict=False)
+    except (TypeError, ValueError):
+        raise ValueError('Ungueltige IPv4-/IPv6-Adresse oder CIDR.')
+    if ((network.version == 4 and network.prefixlen < 24) or
+            (network.version == 6 and network.prefixlen < 64)):
+        raise ValueError('Zu grosses Netz: maximal IPv4 /24 oder IPv6 /64 sperrbar.')
+    protected = ([ipaddress.ip_network(x) for x in
+                  ('0.0.0.0/8', '127.0.0.0/8', '169.254.0.0/16', '224.0.0.0/4')]
+                 if network.version == 4 else
+                 [ipaddress.ip_network(x) for x in ('::/128', '::1/128', 'fe80::/10', 'ff00::/8')])
+    if any(network.overlaps(blocked) for blocked in protected):
+        raise ValueError('Lokale, Link-Local-, Multicast- oder unspezifizierte Netze duerfen nicht gesperrt werden.')
+    return str(network)
+
+
+def _firewall_action(operation, target='', remote_address=''):
+    """Stage one Plesk-native IP rule; Plesk rolls it back unless separately confirmed."""
+    if os.geteuid() != 0:
+        raise ValueError('Root-Verwaltung erforderlich.')
+    plesk = binary(PLESK_BINARIES)
+    if not plesk or not FIREWALL_SETTINGS.is_file():
+        raise ValueError('Plesk Firewall ist nicht installiert oder ihre CLI fehlt.')
+    state = firewall_status()
+    if not state['plesk_firewall_active']:
+        raise ValueError('Plesk Firewall-Regelverwaltung ist nicht aktiv; Guardian aktiviert sie nicht automatisch.')
+    ctl = binary(SYSTEMCTL_PATHS)
+    if ctl:
+        firewalld = execute([ctl, 'is-active', 'firewalld'], 3)
+        if firewalld and firewalld.returncode == 0 and firewalld.stdout.strip() == 'active':
+            raise ValueError('firewalld ist gleichzeitig aktiv; Plesk warnt vor konkurrierenden Firewall-Regeln.')
+
+    if operation in ('confirm', 'cancel'):
+        pending = read_json(FIREWALL_PENDING, {})
+        if not pending or pending.get('state') != 'awaiting_confirmation':
+            raise ValueError('Keine ausstehende Guardian-Firewall-Aenderung.')
+        elapsed = time.time() - float(pending.get('started_epoch', 0))
+        if operation == 'confirm' and elapsed > 55:
+            raise ValueError('Plesk-Bestaetigungsfenster ist fast abgelaufen; Firewall-Rollback abwarten und erneut pruefen.')
+        command = '--confirm' if operation == 'confirm' else '--reset'
+        result = execute([plesk, 'ext', 'firewall', command], timeout=12)
+        if result is None or result.returncode:
+            raise ValueError('Plesk Firewall hat die Aenderung nicht bestaetigt/zurueckgesetzt.')
+        try:
+            FIREWALL_PENDING.unlink()
+        except FileNotFoundError:
+            pass
+        incident_log('operator', 'warning' if operation == 'confirm' else 'info', '',
+                     'Guardian-Firewall-Aenderung ' + ('bestaetigt.' if operation == 'confirm' else 'zurueckgesetzt.'))
+        return {'ok': True, 'state': 'confirmed' if operation == 'confirm' else 'cancelled',
+                'network': pending.get('network', '')}
+
+    if operation not in ('ban', 'unban'):
+        raise ValueError('Ungueltige Guardian-Firewall-Aktion.')
+    network = _firewall_target(target)
+    if operation == 'ban':
+        try:
+            client = ipaddress.ip_address(remote_address)
+        except ValueError:
+            raise ValueError('Admin-Verbindungs-IP kann nicht sicher bestimmt werden; Sperre abgelehnt.')
+        if client in ipaddress.ip_network(network):
+            raise ValueError('Admin-Verbindungs-IP liegt im zu sperrenden Netz; Sperre abgelehnt.')
+
+    pending = read_json(FIREWALL_PENDING, {})
+    if pending and pending.get('state') == 'awaiting_confirmation':
+        if time.time() - float(pending.get('started_epoch', 0)) <= 90:
+            raise ValueError('Es gibt bereits eine ausstehende Firewall-Aenderung; erst bestaetigen oder zuruecksetzen.')
+        reset = execute([plesk, 'ext', 'firewall', '--reset'], timeout=12)
+        if reset is None or reset.returncode:
+            raise ValueError('Abgelaufene Firewall-Aenderung konnte nicht sicher zurueckgesetzt werden.')
+        try:
+            FIREWALL_PENDING.unlink()
+        except FileNotFoundError:
+            pass
+
+    listing = firewall_rules()
+    if not listing['available'] or listing.get('limited'):
+        raise ValueError('Guardian kann die Plesk-Firewallregeln nicht sicher auflisten.')
+    matches = [row for row in listing['rules'] if row['network'] == network]
+    if operation == 'ban' and matches:
+        raise ValueError('Dieses Netz ist bereits in der Guardian-Sperrliste.')
+    if operation == 'unban' and not matches:
+        raise ValueError('Guardian-Sperrregel nicht gefunden.')
+    if operation == 'ban':
+        name = FIREWALL_RULE_PREFIX + network
+        result = execute([plesk, 'ext', 'firewall', '--set-rule', '-name', name,
+                          '-direction', 'input', '-action', 'deny',
+                          '-remote-addresses', network], timeout=12)
+    else:
+        name = matches[0]['name']
+        result = execute([plesk, 'ext', 'firewall', '--remove-rules', matches[0]['id']], timeout=12)
+    if result is None or result.returncode:
+        raise ValueError('Plesk Firewall hat die Regelbearbeitung abgelehnt.')
+    applied = execute([plesk, 'ext', 'firewall', '--apply'], timeout=15)
+    if applied is None or applied.returncode:
+        reset = execute([plesk, 'ext', 'firewall', '--reset'], timeout=12)
+        if reset is None or reset.returncode:
+            raise ValueError('Plesk Firewall konnte Aenderung und Reset nicht bestaetigen; ausstehende Plesk-Konfiguration manuell pruefen.')
+        raise ValueError('Plesk Firewall konnte die Aenderung nicht anwenden; ausstehende Regeln wurden zurueckgesetzt.')
+    prepare_dir()
+    now = time.time()
+    write_json(FIREWALL_PENDING, {'state': 'awaiting_confirmation', 'action': operation,
+                                  'network': network, 'rule_name': name,
+                                  'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                  'started_epoch': now, 'rollback_seconds': 60})
+    incident_log('operator', 'warning', '', 'Plesk-Firewall-Regel fuer ' + network +
+                 ' geaendert; wartet auf getrennten Verbindungstest und Bestaetigung.')
+    return {'ok': True, 'state': 'awaiting_confirmation', 'action': operation,
+            'network': network, 'rollback_seconds': 60,
+            'message': 'Regel angewendet. Verbindung jetzt in einer getrennten Sitzung testen und innerhalb von 60 Sekunden bestaetigen; ohne Bestaetigung rollt Plesk zurueck.'}
+
+
+def firewall_action(operation, target='', remote_address=''):
+    if os.geteuid() != 0:
+        raise ValueError('Root-Verwaltung erforderlich.')
+    prepare_dir()
+    lockfd = os.open(str(ROOT / 'firewall.lock'), os.O_CREAT | os.O_RDWR |
+                     getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        fcntl.flock(lockfd, fcntl.LOCK_EX)
+        return _firewall_action(operation, target, remote_address)
+    finally:
+        os.close(lockfd)
 
 
 def parse_waf_lines(lines):
@@ -1254,11 +1438,13 @@ def http_flood_status():
 
 
 def status():
+    firewall = firewall_status()
+    firewall.update(firewall_rules())
     return {'ok': True,
             'services': {'fail2ban': fail2ban_status(),
                          'clamav': {'installed': bool(binary(CLAM_PATHS)),
                                     'database_age_days': clam_database_age()},
-                         'firewall': firewall_status(), 'waflog': waf_status(),
+                         'firewall': firewall, 'waflog': waf_status(),
                          'php_runtime': php_runtime_status(), 'http_flood': http_flood_status()},
             'scan': read_scan(), 'history': history(), 'schedules': schedules(),
             'watch': watch_status(), 'realtime': monitor_status(),
@@ -1297,6 +1483,11 @@ def main(argv):
             return respond(operation(argv[1], int(argv[2])))
         if len(argv) == 4 and argv[0] == 'ip-action':
             return respond(manual_ban(argv[1], argv[2], argv[3]))
+        if len(argv) in (2, 4) and argv[0] == 'firewall-action':
+            operation = argv[1]
+            target = argv[2] if len(argv) == 4 else ''
+            remote = argv[3] if len(argv) == 4 else ''
+            return respond(firewall_action(operation, target, remote))
         if len(argv) == 4 and argv[0] == 'worker':
             return scan_worker(argv[1], argv[2], int(argv[3]))
         return error('Ungueltige Aktion.')
