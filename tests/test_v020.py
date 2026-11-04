@@ -345,6 +345,7 @@ class NewFeatureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp) / 'guardian'
             (root / 'jobs').mkdir(parents=True)
+            os.chmod(root, 0o700)
             site = pathlib.Path(temp) / 'site'
             site.mkdir()
             file = site / 'index.php'
