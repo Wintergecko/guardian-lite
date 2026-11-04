@@ -71,11 +71,28 @@ class IndexController extends pm_Controller_Action
     {
         $this->verifyPost();
         $repo = trim((string)$this->getRequest()->getPost('repo', ''));
-        if ($repo !== '' && (!preg_match('/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_.-]{1,100}$/D', $repo)
-            || strpos($repo, '..') !== false || strpos($repo, '/.') !== false)) {
-            throw new pm_Exception('Repository bitte im Format owner/repo angeben.');
+        // Accept a GitHub repository URL as well as owner/repo. Never accept arbitrary hosts.
+        if (preg_match('~^https://github\\.com/~i', $repo)) {
+            $parts = parse_url($repo);
+            if (!is_array($parts) || strcasecmp((string)($parts['host'] ?? ''), 'github.com') !== 0
+                || isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])
+                || isset($parts['query']) || isset($parts['fragment'])) {
+                throw new pm_Exception('Bitte eine reine GitHub-Repository-URL ohne Parameter verwenden.');
+            }
+            $repo = trim((string)($parts['path'] ?? ''), '/');
+            if (substr($repo, -4) === '.git') {
+                $repo = substr($repo, 0, -4);
+            }
+        }
+        if ($repo === '' || !preg_match('~^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}$~D', $repo)
+            || strpos($repo, '..') !== false || strpos($repo, '/.') !== false
+            || substr($repo, -1) === '.') {
+            throw new pm_Exception('Bitte Wintergecko/guardian-lite oder https://github.com/Wintergecko/guardian-lite eingeben.');
         }
         pm_Settings::set('guardian_update_repo', $repo);
+        if ((string)pm_Settings::get('guardian_update_repo') !== $repo) {
+            throw new pm_Exception('Updater-Repository konnte nicht gespeichert werden. Bitte Plesk-Protokoll pruefen.');
+        }
         unset($_SESSION['guardian_update_result']);
         $this->_status->addMessage('info', 'GitHub-Repository fuer Updates gespeichert.');
         $this->redirect(pm_Context::getBaseUrl());
