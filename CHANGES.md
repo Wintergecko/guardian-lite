@@ -1,3 +1,11 @@
+## 0.15.0 – Speicheranzeige und manuelle Aufbewahrung
+
+- Verwaltung zeigt Guardian-Speicher pro Bereich und freien Speicher des Datentraegers an.
+- Baselines sind auf 512 MiB gesamt, 64 MiB und 5000 Dateien je Snapshot sowie 20 Verzeichnisse begrenzt; unvollstaendige Snapshots werden bei Fehlern entfernt.
+- PHP-/WAF-Backups sind auf 256 MiB und 200 Eintraege begrenzt. Vollstaendige Bestandsbackups werden im Panel aufgelistet.
+- Administratoren koennen unbenutzte Baselines und Backups nach Bestaetigung dauerhaft entfernen. Auto-Reparatur-Baselines und das aktive WAF-Rollback-Backup sind geschuetzt.
+- Regressionstests pruefen Speicherverbrauch, Quota-Blockade und Loeschschutz.
+
 ## 0.14.0 – Malware-Scan-Warteschlange und Laststeuerung
 
 - Manuelle und geplante Domain-Scans werden in einer root-privaten FIFO-Warteschlange mit maximal 100 wartenden Auftraegen serialisiert.

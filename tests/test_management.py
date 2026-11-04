@@ -73,6 +73,63 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(m.config()['baselines']['example.com']['files'], 1)
         self.assertNotIn('example.com', m.config()['autorepair'])
 
+    def test_baseline_inventory_quota_and_manual_deletion_guard(self):
+        self.write_site('index.php', b'GOOD')
+        self.clean_report()
+        m.baseline('example.com', True)
+        baseline = m.config()['baselines']['example.com']
+        token = baseline['id']
+        inventory = m.baseline_inventory()
+        self.assertEqual(len(inventory), 1)
+        self.assertEqual(inventory[0]['id'], token)
+        self.assertTrue(inventory[0]['active'])
+        self.assertGreater(inventory[0]['bytes'], 0)
+        self.assertEqual(m.storage_status()['areas']['baselines']['bytes'], inventory[0]['bytes'])
+        m.repair_set('example.com', 'on')
+        with self.assertRaisesRegex(ValueError, 'automatische Reparatur'):
+            m.baseline_delete(token, 'example.com')
+        m.repair_set('example.com', 'off')
+        with self.assertRaisesRegex(ValueError, 'anderen Domain'):
+            m.baseline_delete(token, 'wrong.example.com')
+        result = m.baseline_delete(token, 'example.com')
+        self.assertEqual(result['id'], token)
+        self.assertFalse((m.root() / 'baselines' / token).exists())
+        self.assertNotIn('example.com', m.config()['baselines'])
+        self.assertEqual(m.storage_status()['areas']['baselines']['bytes'], 0)
+
+    def test_backup_quota_visibility_and_active_waf_backup_protection(self):
+        source = self.base / 'waf-backup.conf'
+        source.write_bytes(b'# Guardian managed\nSecRuleEngine On\n')
+        backup = m.make_backup('waf', 'example.com', source)
+        status = m.storage_status()
+        self.assertEqual(status['areas']['backups']['bytes'], len(source.read_bytes()))
+        self.assertEqual(status['backup_quota_bytes'], m.BACKUP_QUOTA_BYTES)
+        settings = m.config()
+        settings['waf'] = {'backup': backup['id']}
+        m.save_config(settings)
+        with self.assertRaisesRegex(ValueError, 'aktuelle Guardian-WAF'):
+            m.backup_delete(backup['id'])
+        settings.pop('waf')
+        m.save_config(settings)
+        m.backup_delete(backup['id'])
+        self.assertFalse((m.root() / 'backups' / (backup['id'] + '.bin')).exists())
+        self.assertFalse((m.root() / 'backups' / (backup['id'] + '.json')).exists())
+        self.assertEqual(m.storage_status()['areas']['backups']['bytes'], 0)
+
+    def test_backup_quota_rejects_before_writing(self):
+        with mock.patch.object(m, 'directory_usage', return_value={'bytes': m.BACKUP_QUOTA_BYTES, 'files': 1, 'incomplete': False}):
+            with self.assertRaisesRegex(ValueError, '256 MiB'):
+                m.check_backup_capacity(1)
+
+    def test_baseline_global_quota_removes_partial_capture(self):
+        self.write_site('index.php', b'GOOD')
+        self.clean_report()
+        with mock.patch.object(m, 'directory_usage', return_value={
+                'bytes': m.BASELINE_QUOTA_BYTES, 'files': 1, 'incomplete': False}):
+            with self.assertRaisesRegex(ValueError, '512 MiB'):
+                m.baseline('example.com', True)
+        self.assertEqual(list((m.root() / 'baselines').iterdir()), [])
+
     def test_cron_audit_reports_suspicious_patterns_without_changing_sources(self):
         cron_root = self.base / 'cron'
         cron_root.mkdir()

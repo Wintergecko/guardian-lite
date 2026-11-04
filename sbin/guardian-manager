@@ -33,6 +33,10 @@ PHP_BASE = pathlib.Path('/opt/plesk/php')
 SNuffle_COMMIT = '1d8614af85a1baa52656f3adbd4684772df91288'
 VERSION = re.compile(r'^8\.[0-5]$')
 HEX = re.compile(r'^[a-f0-9]{64}$')
+BASELINE_QUOTA_BYTES = 512 * 1024 * 1024
+BACKUP_QUOTA_BYTES = 256 * 1024 * 1024
+MAX_BACKUPS = 200
+STORAGE_CACHE_TTL = 15
 WP_CLI_PATHS = ('/usr/local/bin/wp', '/usr/bin/wp', '/bin/wp')
 WP_HASH_WARNING = re.compile(r"^Warning: File doesn't verify against checksum:\s*(.+?)\s*$")
 WP_PLUGIN_SKIP_WARNING = re.compile(
@@ -157,11 +161,13 @@ def handler(version):
 
 def make_backup(kind, identity, path):
     data, st = checked(path)
+    check_backup_capacity(len(data))
     token = uuid.uuid4().hex
     atomic(root() / 'backups' / (token + '.bin'), data)
     record = {'id': token, 'kind': kind, 'identity': identity, 'sha256': digest(data),
               'mode': stat.S_IMODE(st.st_mode), 'gid': st.st_gid, 'created_at': h.utc_now()}
     h.write_json(root() / 'backups' / (token + '.json'), record)
+    invalidate_storage_cache()
     return record
 
 
@@ -418,7 +424,13 @@ def waf_engine(domain, mode):
     if previous not in ('on', 'off', 'detection-only'):
         raise ValueError('Vorheriger Plesk-WAF-Modus konnte nicht eindeutig ermittelt werden; keine Aenderung.')
     token = uuid.uuid4().hex
-    atomic(root() / 'backups' / (token + '.bin'), before.encode('utf-8'))
+    backup_data = before.encode('utf-8')
+    check_backup_capacity(len(backup_data))
+    atomic(root() / 'backups' / (token + '.bin'), backup_data)
+    h.write_json(root() / 'backups' / (token + '.json'), {
+        'id': token, 'kind': 'waf-engine', 'identity': domain, 'sha256': digest(backup_data),
+        'mode': 0o600, 'gid': os.getgid(), 'created_at': h.utc_now()})
+    invalidate_storage_cache()
     settings = config()
     settings.setdefault('waf_engines', {}).setdefault(domain, previous)
     save_config(settings)
@@ -561,6 +573,189 @@ def ignore_hash_set(domain, sha256, mode):
     return {'message': message}
 
 
+def directory_usage(path):
+    """Count regular files without following symlinks in a Guardian storage area."""
+    total = 0
+    files = 0
+    incomplete = False
+    path = pathlib.Path(path)
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return {'bytes': 0, 'files': 0, 'incomplete': False}
+    try:
+        if path.is_symlink() or not path.is_dir():
+            return {'bytes': 0, 'files': 0, 'incomplete': True}
+        for directory, dirs, names in os.walk(path, followlinks=False):
+            for name in list(dirs):
+                candidate = pathlib.Path(directory) / name
+                try:
+                    mode = candidate.lstat().st_mode
+                    if not stat.S_ISDIR(mode):
+                        dirs.remove(name)
+                        incomplete = True
+                except OSError:
+                    dirs.remove(name)
+                    incomplete = True
+            for name in names:
+                candidate = pathlib.Path(directory) / name
+                try:
+                    info = candidate.lstat()
+                    if not stat.S_ISREG(info.st_mode):
+                        incomplete = True
+                        continue
+                    total += info.st_size
+                    files += 1
+                except OSError:
+                    incomplete = True
+    except OSError:
+        incomplete = True
+    return {'bytes': total, 'files': files, 'incomplete': incomplete}
+
+
+def check_backup_capacity(additional_bytes):
+    area = root() / 'backups'
+    usage = directory_usage(area)
+    bin_count = sum(1 for _ in area.glob('*.bin'))
+    if bin_count >= MAX_BACKUPS:
+        raise ValueError('Maximal 200 Backups. Nicht mehr benoetigte Backups zuerst loeschen.')
+    if usage['bytes'] + max(0, int(additional_bytes)) + 4096 > BACKUP_QUOTA_BYTES:
+        raise ValueError('Backup-Quota von 256 MiB wuerde ueberschritten. Alte Wiederherstellungspunkte zuerst entfernen.')
+
+
+def invalidate_storage_cache():
+    try:
+        (root() / 'storage-cache.json').unlink()
+    except OSError:
+        pass
+
+
+def storage_status():
+    areas = {name: directory_usage(root() / name)
+             for name in ('backups', 'baselines', 'repair-journals', 'jobs')}
+    managed = sum(item['bytes'] for item in areas.values())
+    try:
+        disk = shutil.disk_usage(h.ROOT)
+        disk_info = {'total_bytes': disk.total, 'used_bytes': disk.used, 'free_bytes': disk.free}
+    except OSError:
+        disk_info = {'total_bytes': None, 'used_bytes': None, 'free_bytes': None}
+    return {'areas': areas, 'managed_bytes': managed, 'disk': disk_info,
+            'baseline_quota_bytes': BASELINE_QUOTA_BYTES,
+            'baseline_remaining_bytes': max(0, BASELINE_QUOTA_BYTES - areas['baselines']['bytes']),
+            'backup_quota_bytes': BACKUP_QUOTA_BYTES,
+            'backup_remaining_bytes': max(0, BACKUP_QUOTA_BYTES - areas['backups']['bytes']),
+            'incomplete': any(item['incomplete'] for item in areas.values())}
+
+
+def storage_snapshot():
+    path = root() / 'storage-cache.json'
+    cached = h.read_json(path, {})
+    epoch = cached.get('epoch', 0) if isinstance(cached, dict) else 0
+    if isinstance(epoch, (int, float)) and 0 <= time.time() - epoch < STORAGE_CACHE_TTL \
+            and isinstance(cached.get('storage'), dict) and isinstance(cached.get('baselines'), list):
+        return cached['storage'], cached['baselines'], epoch
+    storage = storage_status()
+    baselines = baseline_inventory()
+    epoch = time.time()
+    storage['measured_at'] = h.utc_now()
+    h.write_json(path, {'epoch': epoch, 'storage': storage, 'baselines': baselines})
+    return storage, baselines, epoch
+
+
+def baseline_inventory(settings=None):
+    settings = config() if settings is None else settings
+    active = settings.get('baselines', {}) if isinstance(settings.get('baselines', {}), dict) else {}
+    autorepair = settings.get('autorepair', {}) if isinstance(settings.get('autorepair', {}), dict) else {}
+    result = []
+    for folder in sorted((root() / 'baselines').iterdir(), key=lambda p: p.name, reverse=True):
+        if not re.fullmatch(r'[a-f0-9]{32}', folder.name):
+            continue
+        try:
+            info = folder.lstat()
+            if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+                continue
+        except OSError:
+            continue
+        manifest = h.read_json(folder / 'manifest.json', {}, max_bytes=2_000_000)
+        usage = directory_usage(folder)
+        domain = manifest.get('domain', '') if isinstance(manifest, dict) else ''
+        result.append({'id': folder.name, 'domain': domain if h.valid_domain(domain) else '',
+                       'created_at': manifest.get('created_at', '') if isinstance(manifest, dict) else '',
+                       'files': len(manifest.get('files', {})) if isinstance(manifest.get('files'), dict) else 0,
+                       'bytes': usage['bytes'], 'incomplete': not bool(manifest),
+                       'active': isinstance(active.get(domain), dict) and active[domain].get('id') == folder.name,
+                       'autorepair': any(value == folder.name for value in autorepair.values())})
+    return result
+
+
+def baseline_delete(token, domain=''):
+    if not re.fullmatch(r'[a-f0-9]{32}', token):
+        raise ValueError('Ungueltige Baseline-ID.')
+    if domain and not h.valid_domain(domain):
+        raise ValueError('Ungueltige Baseline-Domain.')
+    folder = root() / 'baselines' / token
+    try:
+        info = folder.lstat()
+    except OSError:
+        raise ValueError('Baseline nicht gefunden.')
+    if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
+        raise ValueError('Baseline-Verzeichnis ist nicht sicher.')
+    settings = config()
+    configured = settings.get('baselines', {}) if isinstance(settings.get('baselines', {}), dict) else {}
+    autorepair = settings.get('autorepair', {}) if isinstance(settings.get('autorepair', {}), dict) else {}
+    if any(value == token for value in autorepair.values()):
+        raise ValueError('Baseline wird fuer automatische Reparatur verwendet. Reparatur zuerst deaktivieren.')
+    manifest = h.read_json(folder / 'manifest.json', {}, max_bytes=2_000_000)
+    manifest_domain = manifest.get('domain', '') if isinstance(manifest, dict) else ''
+    owner = manifest_domain if h.valid_domain(manifest_domain) else ''
+    configured_domains = [name for name, item in configured.items()
+                          if isinstance(item, dict) and item.get('id') == token and h.valid_domain(name)]
+    if owner and configured_domains and owner not in configured_domains:
+        raise ValueError('Baseline-Metadaten widersprechen der Guardian-Konfiguration.')
+    owner = owner or (configured_domains[0] if configured_domains else '')
+    if domain and owner and domain != owner:
+        raise ValueError('Baseline gehoert zu einer anderen Domain.')
+    if domain and not owner:
+        raise ValueError('Domain der Baseline konnte nicht bestaetigt werden.')
+    shutil.rmtree(str(folder))
+    for name in configured_domains:
+        configured.pop(name, None)
+    if configured_domains:
+        settings['baselines'] = configured
+        save_config(settings)
+    h.incident_log('operator', 'warning', owner,
+                   'Administrator hat eine Good-File-Baseline dauerhaft geloescht: ' + token)
+    invalidate_storage_cache()
+    return {'message': 'Baseline geloescht und Speicher freigegeben.', 'id': token}
+
+
+def backup_delete(token):
+    if not re.fullmatch(r'[a-f0-9]{32}', token):
+        raise ValueError('Ungueltige Backup-ID.')
+    settings = config()
+    waf_settings = settings.get('waf', {})
+    if isinstance(waf_settings, dict) and waf_settings.get('backup') == token:
+        raise ValueError('Dieses Backup ist die aktuelle Guardian-WAF-Wiederherstellungsquelle.')
+    meta_path = root() / 'backups' / (token + '.json')
+    blob_path = root() / 'backups' / (token + '.bin')
+    meta = h.read_json(meta_path, {})
+    legacy_waf_engine = not meta and not meta_path.exists() and not meta_path.is_symlink()
+    if not legacy_waf_engine and (meta.get('id') != token or meta.get('kind') not in ('php', 'waf', 'waf-engine')):
+        raise ValueError('Verwaltetes PHP-/WAF-Backup nicht gefunden.')
+    data, _ = checked(blob_path)
+    if not legacy_waf_engine and digest(data) != meta.get('sha256'):
+        raise ValueError('Backup-Pruefsumme stimmt nicht; nichts geloescht.')
+    blob_path.unlink()
+    if not legacy_waf_engine:
+        meta_path.unlink()
+    kind = meta.get('kind', 'waf-engine')
+    identity = meta.get('identity', '') if kind in ('waf', 'waf-engine') else ''
+    h.incident_log('operator', 'warning', identity,
+                   'Administrator hat ein %s-Wiederherstellungsbackup dauerhaft geloescht: %s' % (kind, token))
+    invalidate_storage_cache()
+    return {'message': 'Backup geloescht und Speicher freigegeben.', 'id': token}
+
+
 def baseline(domain, trusted):
     if trusted is not True:
         raise ValueError('Die saubere Herkunft muss ausdruecklich bestaetigt werden.')
@@ -576,6 +771,7 @@ def baseline(domain, trusted):
         raise ValueError('Mindestens 128 MiB freier Speicher fuer eine Baseline erforderlich.')
     if sum(1 for _ in (root() / 'baselines').iterdir()) >= 20:
         raise ValueError('Maximal 20 Baselines. Nicht mehr benoetigte Baselines zuerst entfernen.')
+    baseline_bytes = directory_usage(root() / 'baselines')['bytes']
     destination = root() / 'baselines' / token
     destination.mkdir(mode=0o700)
     entries = {}
@@ -604,6 +800,8 @@ def baseline(domain, trusted):
                 total += len(data)
                 if total > 64 * 1024 * 1024:
                     raise ValueError('Baseline zu gross.')
+                if baseline_bytes + total > BASELINE_QUOTA_BYTES:
+                    raise ValueError('Baseline-Speicherquote von 512 MiB wuerde ueberschritten. Aeltere Baselines zuerst entfernen.')
                 blob = before['sha256']
                 if not (destination / blob).exists():
                     atomic(destination / blob, data, 0o400)
@@ -614,6 +812,8 @@ def baseline(domain, trusted):
                 'files': entries, 'created_at': h.utc_now(), 'scan': latest['id'],
                 'trust': 'administrator-attested; not vendor-authenticated'}
         h.write_json(destination / 'manifest.json', info)
+        if baseline_bytes + directory_usage(destination)['bytes'] > BASELINE_QUOTA_BYTES:
+            raise ValueError('Baseline-Speicherquote von 512 MiB wuerde ueberschritten. Aeltere Baselines zuerst entfernen.')
         os.chmod(destination / 'manifest.json', 0o400)
         settings = config()
         settings.setdefault('baselines', {})[domain] = {'id': token, 'files': len(entries),
@@ -621,8 +821,10 @@ def baseline(domain, trusted):
         # A new baseline must never silently change the source of automatic repair.
         settings.setdefault('autorepair', {}).pop(domain, None)
         save_config(settings)
+        invalidate_storage_cache()
     except Exception:
-        # Preserve incomplete captures for diagnosis; they are never selected.
+        # Incomplete captures are not useful recovery sources and must not consume quota.
+        shutil.rmtree(str(destination), ignore_errors=True)
         raise
     h.incident_log('operator', 'warning', domain, 'Good-File-Baseline vom Administrator freigegeben: ' + token)
     return {'message': 'Baseline mit %d Dateien gespeichert. Automatische Reparatur bleibt aus.' % len(entries)}
@@ -641,6 +843,7 @@ def repair_set(domain, mode):
     else:
         settings.setdefault('autorepair', {}).pop(domain, None)
     save_config(settings)
+    invalidate_storage_cache()
     h.incident_log('operator', 'warning', domain, 'Automatische Reparatur ' + mode)
     return {'message': 'Automatische Reparatur ' + mode}
 
@@ -1158,15 +1361,33 @@ def public_status():
     backups = []
     for path in (root() / 'backups').glob('*.json'):
         item = h.read_json(path, {})
-        if item:
+        if item and re.fullmatch(r'[a-f0-9]{32}', str(item.get('id', ''))):
+            try:
+                blob = root() / 'backups' / (str(item.get('id', '')) + '.bin')
+                blob_stat = blob.lstat()
+                item['bytes'] = blob_stat.st_size if stat.S_ISREG(blob_stat.st_mode) else 0
+            except OSError:
+                item['bytes'] = 0
             backups.append(item)
+    for blob in (root() / 'backups').glob('*.bin'):
+        if not re.fullmatch(r'[a-f0-9]{32}', blob.stem) or (root() / 'backups' / (blob.stem + '.json')).exists():
+            continue
+        try:
+            info = blob.lstat()
+            if stat.S_ISREG(info.st_mode):
+                backups.append({'id': blob.stem, 'kind': 'waf-engine', 'identity': 'Altes Diagnosebackup',
+                                'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(info.st_mtime)),
+                                'bytes': info.st_size, 'legacy': True})
+        except OSError:
+            continue
     backups.sort(key=lambda x: x.get('created_at', ''), reverse=True)
     try:
         path = waf_file()
         waf_sha = digest(checked(path)[0] if path.exists() else b'')
     except (ValueError, OSError):
         waf_sha = ''
-    return {'ok': True, 'handlers': handlers, 'backups': backups[:50], 'waf': settings.get('waf', {}),
+    storage, baseline_items, _ = storage_snapshot()
+    return {'ok': True, 'handlers': handlers, 'backups': backups, 'waf': settings.get('waf', {}),
             'waf_sha256': waf_sha, 'cloud': {'consent': bool(settings.get('cloud_consent')),
             'abuseipdb_configured': bool(settings.get('abuseipdb_key')),
             'turnstile_configured': bool(settings.get('turnstile_sitekey') and settings.get('turnstile_secret'))},
@@ -1175,6 +1396,7 @@ def public_status():
                               for domain, values in ignore_hashes.items()
                               if h.valid_domain(domain) and isinstance(values, list)},
             'bots': {d: {'enabled': v.get('enabled', False)} for d, v in settings.get('bots', {}).items()},
+            'storage': storage, 'baseline_inventory': baseline_items,
             'diagnostics': h.read_json(root() / 'diagnostics.json', {}),
             'cron_audit': h.read_json(root() / 'cron-audit.json', {}),
             'wordpress_checksum': h.read_json(root() / 'wordpress-checksum.json', {}),
@@ -1322,6 +1544,10 @@ def dispatch(request):
             if request.get('trusted') is not True:
                 raise ValueError('Saubere Herkunft der Baseline ausdruecklich bestaetigen.')
             return start_job({'action': action, 'domain': domain})
+        if action == 'baseline-delete':
+            return baseline_delete(request.get('baseline_id', ''), request.get('domain', ''))
+        if action == 'backup-delete':
+            return backup_delete(request.get('backup', ''))
         if action == 'repair-set':
             return repair_set(request.get('domain', ''), request.get('mode', ''))
         if action == 'repair':

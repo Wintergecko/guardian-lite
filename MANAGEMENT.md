@@ -1,4 +1,4 @@
-# Guardian Lite 0.14.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.15.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -21,6 +21,12 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |
 | WordPress-Core-Pruefsummen | WP-CLI als root-eigene Datei unter `/usr/local/bin/wp`, `/usr/bin/wp` oder `/bin/wp`; systemweite PHP-CLI und ausgehender HTTPS-Zugriff auf WordPress.org. Guardian installiert WP-CLI nicht. |
 | AbuseIPDB | HTTPS-Ausgangsverbindung und eigener API-Key; kein Serverpaket. |
+
+## Speicher, Quotas und Aufbewahrung
+
+Im Tab **Verwaltung & Diagnose** zeigt Guardian pro Bereich die belegten Bytes und Dateien sowie den freien Speicher des Dateisystems an. Die gemessenen Bereiche sind PHP-/WAF-Backups, Good-File-Baselines, Reparaturprotokolle und Scan-Berichte. Eine unvollstaendige Dateisystemmessung wird markiert.
+
+Baselines sind auf 20 Verzeichnisse, 512 MiB Gesamtspeicher, 64 MiB und 5000 Dateien pro Baseline begrenzt. PHP-/WAF-Backups sind auf 200 Eintraege und 256 MiB begrenzt. Bei voller Quote wird eine neue Sicherung vor einer Aenderung abgelehnt. Guardian loescht alte Sicherungen nie automatisch. Nicht mehr benoetigte Baselines und verwaltete Backups koennen einzeln nach ausdruecklicher Bestaetigung geloescht werden. Baselines, die fuer automatische Reparatur ausgewaehlt sind, und das aktuelle WAF-Rollback-Backup koennen erst nach Deaktivierung beziehungsweise Ablosung entfernt werden. Vor jeder Bereinigung VPS-Snapshot und externe Sicherung pruefen.
 
 ## Malware-Scan-Warteschlange
 

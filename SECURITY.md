@@ -1,4 +1,4 @@
-# Guardian Lite v0.14.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.15.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -62,6 +62,13 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - Nur valide Plesk-Domains und feste Scan-Trigger gelangen in die Warteschlange. Job-IDs werden streng validiert; wartende Jobs werden atomar persistiert und nacheinander aus einer root-privaten Queue-Datei entnommen.
 - Die Queue nimmt hoechstens 100 wartende Scans an. Ein Scheduler-Lauf reiht faellige Domains ein; das 24-Stunden-Intervall wird zwischen tatsaechlichen Scanstarts berechnet. Ein aktiver Worker behaelt den globalen `flock`; es laufen keine parallelen Vollscans.
 - Scannerprozess bleibt unter Website-UID/GID, startet mit niedriger CPU-Prioritaet und bestehenden CPU-/Dateigroessenlimits. Die Warteschlange reduziert Parallelitaet, garantiert aber keine Laufzeit und setzt ClamAV nicht in einen isolierten Container.
+
+## 0.15.0 – Speicherverwaltung
+
+- Speicherberichte zaehlen nur regulaere Dateien und folgen keinen Symlinks; problematische Eintraege setzen den Status `incomplete`.
+- Baselines liegen in root-privaten Verzeichnissen. Loeschaktionen akzeptieren nur hexadezimale IDs, pruefen Domain-/Manifest-Zuordnung und verweigern aktuell fuer automatische Reparatur ausgewaehlte Baselines.
+- Backup-Loeschung prueft ID, Dateityp und SHA-256. Das in der Guardian-WAF-Konfiguration referenzierte Rollback-Backup wird abgelehnt.
+- Neue Backups und Baselines werden bei voller Count-/Speicherquote abgelehnt, bevor Konfigurationsaenderungen stattfinden. Es gibt keine automatische Retention oder Hintergrundloeschung.
 
 ## 0.11.0 – WordPress-Plugin-Pruefsummen
 
