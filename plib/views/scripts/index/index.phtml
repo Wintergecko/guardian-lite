@@ -24,7 +24,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.24.0</span></h1>
+      <h1>Guardian Lite <span>v0.25.0</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -229,6 +229,24 @@ $action = static function ($name) use ($esc) {
     <section class="guardian-card">
       <h2>Plesk-Firewall: Guardian-IP- und Portregeln</h2>
       <p>Verwendet Plesks eigene Firewall-CLI und zeigt nur Guardian-Regeln. IP-Sperren begrenzen CIDR auf IPv4 /24 und IPv6 /64. Portregeln gelten nur fuer eine einzelne Quell-IP; eine Portfreigabe kann keine andere Plesk- oder Provider-Sperre ueberstimmen.</p>
+      <h3>Guardian-IP-Ausnahmen</h3>
+      <p>Diese Liste verhindert nur neue Guardian-eigene IP- und Port-Sperren fuer die eingetragenen Netze. Sie schaltet keine IP in Plesk oder beim Provider frei und hebt keine bereits bestehenden Regeln auf. Bestehende Guardian-Sperren muessen vorher entfernt werden.</p>
+      <?php if (!empty($fw['allowlist']) && is_array($fw['allowlist'])): foreach ($fw['allowlist'] as $entry): ?>
+        <div class="guardian-formline"><p><strong><?= $esc($entry['network'] ?? '') ?></strong> · <?= $esc($entry['comment'] ?? '') ?> · seit <?= $esc($entry['created_at'] ?? '') ?></p>
+          <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Guardian-Ausnahme wirklich entfernen? Zukuenftige Guardian-Sperren fuer diese IP sind dann wieder moeglich.');">
+            <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="allowlist-remove" /><input type="hidden" name="network" value="<?= $esc($entry['network'] ?? '') ?>" /><button class="guardian-small-button" type="submit">Ausnahme entfernen</button>
+          </form>
+        </div>
+      <?php endforeach; else: ?><p class="guardian-small">Keine Guardian-IP-Ausnahmen vorhanden.</p><?php endif; ?>
+      <?php if (count($fw['allowlist'] ?? []) < 200 && !empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?>
+        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese IP wird vor kuenftigen Guardian-Sperren geschuetzt. Plesk- und Provider-Firewalls werden dadurch nicht veraendert.');">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="allowlist-add" />
+          <label for="guardian-firewall-exception-network">Vertrauenswuerdige IP oder begrenztes CIDR</label><label for="guardian-firewall-exception-comment">Begruendung / Geraet</label>
+          <div class="guardian-formline"><input id="guardian-firewall-exception-network" name="network" type="text" maxlength="80" placeholder="203.0.113.25 oder 2001:db8::/64" required /><input id="guardian-firewall-exception-comment" name="comment" type="text" maxlength="120" placeholder="Admin-VPN" required /><button type="submit">Guardian-Ausnahme hinzufuegen</button></div>
+        </form>
+      <?php elseif (count($fw['allowlist'] ?? []) >= 200): ?><p class="guardian-alert">Die Guardian-IP-Ausnahmeliste hat ihr Limit von 200 Eintraegen erreicht.</p>
+      <?php else: ?><p class="guardian-small">Zum Hinzufuegen muss die Plesk-Firewall installiert, aktiv und ihre Regelliste lesbar sein. Vorhandene Ausnahmen koennen entfernt werden.</p><?php endif; ?>
+      <?php if (!empty($fw['allowlist_error'])): ?><p class="guardian-alert">Guardian-IP-Ausnahmeliste fehlerhaft: <?= $esc($fw['allowlist_error']) ?> Firewall-Aenderungen bleiben bis zur Behebung gesperrt.</p><?php endif; ?>
       <?php if (empty($fw['installed'])): ?>
         <p class="guardian-alert">Plesk Firewall ist nicht installiert. Guardian installiert oder aktiviert sie nicht.</p>
       <?php elseif (empty($fw['plesk_firewall_active'])): ?>
@@ -280,7 +298,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.24.0</h2>
+    <h2>GitHub-Updater · v0.25.0</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -455,6 +473,6 @@ $action = static function ($name) use ($esc) {
     <p class="guardian-small">Volumetrische DDoS-Abwehr muss beim Provider oder vorgelagerten DDoS-/CDN-Dienst erfolgen.</p>
   </section>
   <?php include __DIR__ . '/management.phtml'; ?>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.24.0" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.25.0" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Guardian Lite 0.2.0 privileged, fixed-verb Plesk helper.
+"""Guardian Lite privileged, fixed-verb Plesk helper.
 
 No arbitrary command, path, rule or shell execution is accepted from HTTP.
 The Plesk controller is the admin authorization boundary; this binary additionally
@@ -35,10 +35,12 @@ FIREWALL_SETTINGS = pathlib.Path('/usr/local/psa/bin/modules/firewall/settings')
 FIREWALL_UNITS = ('plesk-firewall', 'psa-firewall')
 FIREWALL_PENDING = ROOT / 'firewall-pending.json'
 FIREWALL_EXPIRIES = ROOT / 'firewall-expiries.json'
+FIREWALL_ALLOWLIST = ROOT / 'firewall-allowlist.json'
 FIREWALL_RULE_PREFIX = 'Guardian Lite managed deny '
 FIREWALL_PORT_RULE_PREFIX = 'Guardian Lite managed port '
 FIREWALL_TTLS = (0, 3600, 86400, 604800)
 MAX_FIREWALL_EXPIRATIONS_PER_TICK = 10
+MAX_FIREWALL_ALLOWLIST = 200
 DOMAIN_LABEL = re.compile(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$', re.I)
 JAIL_NAME = re.compile(r'^[a-zA-Z0-9_.-]{1,80}$')
 JOB_ID = re.compile(r'^[a-f0-9]{32}$')
@@ -215,18 +217,23 @@ def firewall_rules():
         pending['remaining_seconds'] = max(0, int(55 - elapsed))
         if elapsed > 55:
             pending['state'] = 'expired'
+    try:
+        allowlist = firewall_allowlist_entries()
+    except ValueError as exc:
+        return {'available': False, 'rules': [], 'allowlist': [],
+                'allowlist_error': str(exc)[:180], 'pending': pending}
     plesk = binary(PLESK_BINARIES)
     if not plesk:
-        return {'available': False, 'rules': [], 'pending': pending}
+        return {'available': False, 'rules': [], 'allowlist': allowlist, 'pending': pending}
     result = execute([plesk, 'ext', 'firewall', '--list-json'], timeout=10)
     if result is None or result.returncode:
-        return {'available': False, 'rules': [], 'pending': pending}
+        return {'available': False, 'rules': [], 'allowlist': allowlist, 'pending': pending}
     try:
         decoded = json.loads(result.stdout)
     except (ValueError, TypeError):
-        return {'available': False, 'rules': [], 'pending': pending}
+        return {'available': False, 'rules': [], 'allowlist': allowlist, 'pending': pending}
     if not isinstance(decoded, list) or len(decoded) > 2000:
-        return {'available': False, 'rules': [], 'pending': pending}
+        return {'available': False, 'rules': [], 'allowlist': allowlist, 'pending': pending}
     expiry_data = read_json(FIREWALL_EXPIRIES, {})
     rules = []
     for item in decoded:
@@ -288,7 +295,99 @@ def firewall_rules():
         rules.append(rule)
     rules.sort(key=lambda row: (row['network'], row['id']))
     return {'available': True, 'limited': len(rules) > 100, 'rules': rules[:100],
+            'allowlist': allowlist,
             'pending': pending}
+
+
+def firewall_allowlist_entries():
+    try:
+        st = FIREWALL_ALLOWLIST.lstat()
+    except FileNotFoundError:
+        return []
+    except OSError as exc:
+        raise ValueError('Guardian-IP-Ausnahmeliste kann nicht sicher gelesen werden.') from exc
+    if (not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_nlink != 1 or (st.st_mode & 0o077)):
+        raise ValueError('Guardian-IP-Ausnahmeliste hat unsichere Dateirechte oder ist keine regulaere Datei.')
+    data = read_json(FIREWALL_ALLOWLIST, None)
+    if not isinstance(data, dict) or set(data) != {'entries'}:
+        raise ValueError('Guardian-IP-Ausnahmeliste ist unlesbar; Firewall-Aktionen bleiben gesperrt.')
+    values = data['entries']
+    if not isinstance(values, list) or len(values) > MAX_FIREWALL_ALLOWLIST:
+        raise ValueError('Guardian-IP-Ausnahmeliste ist ungueltig oder ueberschreitet das Limit.')
+    entries = []
+    seen = set()
+    for item in values:
+        if not isinstance(item, dict):
+            raise ValueError('Guardian-IP-Ausnahmeliste enthaelt einen ungueltigen Eintrag.')
+        try:
+            network = str(ipaddress.ip_network(item.get('network', ''), strict=True))
+        except (TypeError, ValueError):
+            raise ValueError('Guardian-IP-Ausnahmeliste enthaelt ein ungueltiges Netz.')
+        comment = item.get('comment', '')
+        created_at = item.get('created_at', '')
+        if (network in seen or not isinstance(comment, str) or not 1 <= len(comment.strip()) <= 120 or
+                not isinstance(created_at, str) or not 1 <= len(created_at) <= 40):
+            raise ValueError('Guardian-IP-Ausnahmeliste enthaelt unvollstaendige Metadaten.')
+        try:
+            canonical = _firewall_target(network)
+        except ValueError as exc:
+            raise ValueError('Guardian-IP-Ausnahmeliste enthaelt ein unzulaessiges Netz: ' + str(exc))
+        if canonical != network:
+            raise ValueError('Guardian-IP-Ausnahmeliste enthaelt ein nicht-kanonisches Netz.')
+        network_obj = ipaddress.ip_network(network)
+        if any(network_obj.version == ipaddress.ip_network(row['network']).version and
+               network_obj.overlaps(ipaddress.ip_network(row['network'])) for row in entries):
+            raise ValueError('Guardian-IP-Ausnahmeliste enthaelt sich ueberschneidende Netze.')
+        seen.add(network)
+        entries.append({'network': network, 'comment': comment.strip(), 'created_at': created_at})
+    return entries
+
+
+def _firewall_allowlist_change(operation, value, comment=''):
+    if operation not in ('allowlist-add', 'allowlist-remove'):
+        raise ValueError('Ungueltige Guardian-IP-Ausnahmeaktion.')
+    network = _firewall_target(value)
+    entries = firewall_allowlist_entries()
+    existing = next((item for item in entries if item['network'] == network), None)
+    if operation == 'allowlist-remove':
+        if existing is None:
+            raise ValueError('Guardian-IP-Ausnahme nicht gefunden.')
+        entries = [item for item in entries if item['network'] != network]
+        message = 'Guardian-IP-Ausnahme entfernt; kuenftige Guardian-Sperren sind wieder moeglich.'
+    else:
+        if (not isinstance(comment, str) or not 1 <= len(comment.strip()) <= 120 or
+                any(ord(c) < 32 or ord(c) == 127 for c in comment)):
+            raise ValueError('Kommentar muss 1 bis 120 druckbare Zeichen enthalten.')
+        if existing:
+            raise ValueError('Diese Guardian-IP-Ausnahme ist bereits eingetragen.')
+        if len(entries) >= MAX_FIREWALL_ALLOWLIST:
+            raise ValueError('Guardian-IP-Ausnahmeliste ist voll (maximal %d Eintraege).' % MAX_FIREWALL_ALLOWLIST)
+        network_obj = ipaddress.ip_network(network)
+        if any(network_obj.version == ipaddress.ip_network(item['network']).version and
+               network_obj.overlaps(ipaddress.ip_network(item['network'])) for item in entries):
+            raise ValueError('Die IP ueberschneidet sich mit einer bestehenden Guardian-IP-Ausnahme.')
+        listing = firewall_rules()
+        if not listing.get('available') or listing.get('limited'):
+            raise ValueError('Plesk-Firewallregeln koennen nicht sicher auf Konflikte mit bestehenden Guardian-Sperren geprueft werden.')
+        if not firewall_status().get('plesk_firewall_active'):
+            raise ValueError('Plesk-Firewall-Regelverwaltung ist nicht aktiv; Guardian-Ausnahme nicht gespeichert.')
+        conflicts = [row for row in listing.get('rules', [])
+                     if row.get('kind') == 'ip_deny' or
+                     (row.get('kind') == 'port' and row.get('action') == 'deny')]
+        if any(network_obj.version == ipaddress.ip_network(row['network']).version and
+               network_obj.overlaps(ipaddress.ip_network(row['network'])) for row in conflicts):
+            raise ValueError('Es gibt bereits eine Guardian-Sperre fuer dieses Netz; zuerst die Sperre ueber Plesk entfernen.')
+        entries.append({'network': network, 'comment': comment.strip(), 'created_at': utc_now()})
+        entries.sort(key=lambda item: (ipaddress.ip_network(item['network']).version,
+                                       int(ipaddress.ip_network(item['network']).network_address)))
+        message = 'Guardian wird dieses Netz bei eigenen IP- und Port-Sperren ausnehmen.'
+    prepare_dir()
+    write_json(FIREWALL_ALLOWLIST, {'entries': entries}, max_bytes=64000)
+    incident_log('operator', 'warning' if operation == 'allowlist-add' else 'info', '',
+                 ('Guardian-IP-Ausnahme gesetzt: ' if operation == 'allowlist-add' else
+                  'Guardian-IP-Ausnahme entfernt: ') + network +
+                 ((' – ' + comment.strip()) if operation == 'allowlist-add' else ''))
+    return {'ok': True, 'network': network, 'message': message}
 
 
 def _firewall_target(value):
@@ -312,6 +411,8 @@ def _firewall_action(operation, target='', remote_address='', ttl_seconds=0, por
     """Stage one Plesk-native IP/port rule; Plesk rolls it back unless confirmed."""
     if os.geteuid() != 0:
         raise ValueError('Root-Verwaltung erforderlich.')
+    if operation in ('allowlist-add', 'allowlist-remove'):
+        return _firewall_allowlist_change(operation, target, remote_address)
     plesk = binary(PLESK_BINARIES)
     if not plesk or not FIREWALL_SETTINGS.is_file():
         raise ValueError('Plesk Firewall ist nicht installiert oder ihre CLI fehlt.')
@@ -406,6 +507,13 @@ def _firewall_action(operation, target='', remote_address='', ttl_seconds=0, por
     listing = firewall_rules()
     if not listing['available'] or listing.get('limited'):
         raise ValueError('Guardian kann die Plesk-Firewallregeln nicht sicher auflisten.')
+    if operation in ('ban', 'port-deny'):
+        blocked_network = ipaddress.ip_network(network)
+        for exception in firewall_allowlist_entries():
+            trusted_network = ipaddress.ip_network(exception['network'])
+            if (blocked_network.version == trusted_network.version and
+                    blocked_network.overlaps(trusted_network)):
+                raise ValueError('Die IP ueberschneidet sich mit einer Guardian-IP-Ausnahme; Sperre abgelehnt.')
     if operation == 'ban':
         matches = [row for row in listing['rules'] if row['kind'] == 'ip_deny' and row['network'] == network]
     elif operation in ('port-allow', 'port-deny'):
@@ -2166,9 +2274,9 @@ def main(argv):
         if len(argv) in (2, 3, 4, 5, 6) and argv[0] == 'firewall-action':
             operation = argv[1]
             target = argv[2] if len(argv) >= 4 else ''
-            if len(argv) == 3 and operation != 'port-remove':
+            if len(argv) == 3 and operation not in ('port-remove', 'allowlist-remove'):
                 raise ValueError('Ungueltige Firewall-Aktion.')
-            if operation == 'port-remove' and len(argv) == 3:
+            if operation in ('port-remove', 'allowlist-remove') and len(argv) == 3:
                 target = argv[2]
             remote = argv[3] if len(argv) >= 4 else ''
             ttl = 0

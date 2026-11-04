@@ -1,4 +1,4 @@
-# Weitere Features nach 0.24.0
+# Weitere Features nach 0.25.0
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
@@ -8,7 +8,7 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 |---|---|---|
 | Hoch | Hersteller-Pruefsummen weiterer CMS | WordPress-Core, WordPress.org-Plugins und passende Theme-Archive geprueft; Joomla/Magento-Herstellerquellen und signierte Good-File-Pakete fehlen. Keine automatische Reparatur aus Pruefergebnissen |
 | Hoch | CMS-Datenbankreinigung mit sicherem Backup und Rollback | Read-only ClamAV-Streams fuer WordPress/Joomla/Magento; MDS-Herstellersignaturen, Datenbankbereinigung, Backup und Rollback fehlen |
-| Hoch | Globale Firewall-Allowlist und Notfall-Freischaltung | Quell-IP-gebundene Plesk-Portfreigaben sind vorhanden; globale priorisierte Admin-/Monitoring-Ausnahmen fehlen und benoetigen Tests gegen bestehende Systemrichtlinien |
+| Hoch | Plesk-weite priorisierte Allowlist und Greylist | Guardian-IP-Ausnahmen verhindern nur kuenftige Guardian-Sperren; sie schalten keine Firewall frei. Eine echte Whitelist-Prioritaet und Greylist brauchen einen dokumentierten Plesk-Mechanismus und Integrationstests gegen Systemrichtlinien |
 | Hoch | Baseline-/Backup-Aufbewahrung und Speicheranzeige | Globale Speicheranzeige und manuelle Loeschung vorhanden; Quota pro Domain, Aufbewahrungsregeln, Backups ausserhalb der verwalteten PHP-/WAF-Metadaten und Reparaturquellenanzeige fehlen |
 | Hoch | Cronjob-Regelausbau und Verifikation | Read-only Heuristiken plus optionale lokale ClamAV-Signaturen sind umgesetzt; breitere Distributionenabdeckung und Tests auf echten Plesk-Distributionen fehlen |
 | Hoch | Echte Plesk-Testmatrix | Reproduzierbare VPS-Tests mit installierten Plesk-Versionen, Debian/Ubuntu/AlmaLinux und mehreren PHP-Handlern; aktuell nicht automatisiert nachgewiesen |
