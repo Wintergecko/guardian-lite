@@ -1,4 +1,4 @@
-# Guardian Lite 0.18.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.19.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -20,6 +20,7 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | Snuffleupagus | Pro verwaltetem Plesk-PHP-FPM-Handler das passende Entwicklerpaket, z. B. `plesk-php83-dev`, ausserdem `git`, `gcc`, `make`, `autoconf`; Handler-Version 8.0–8.5. Beispiel Debian/Ubuntu: `apt install plesk-php83-dev git gcc make autoconf`. |
 | Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |
 | WordPress-Core-Pruefsummen | WP-CLI als root-eigene Datei unter `/usr/local/bin/wp`, `/usr/bin/wp` oder `/bin/wp`; systemweite PHP-CLI und ausgehender HTTPS-Zugriff auf WordPress.org. Guardian installiert WP-CLI nicht. |
+| WordPress.org-Themes | WP-CLI als root-eigene Datei an einem der obigen Pfade, lesbarer WordPress-Docroot und HTTPS-Zugriff auf `api.wordpress.org` und `downloads.wordpress.org`. Pro Domain maximal 40 Theme-Verzeichnisse, Archive bis 32 MiB und entpackter Inhalt bis 128 MiB je Pruefung. |
 | AbuseIPDB | HTTPS-Ausgangsverbindung und eigener API-Key; kein Serverpaket. |
 
 ## Speicher, Quotas und Aufbewahrung

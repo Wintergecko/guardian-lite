@@ -1,3 +1,10 @@
+## 0.19.0 – WordPress.org-Themeintegritaet
+
+- Neue manuelle Read-only-Pruefung vergleicht installierte Theme-Dateien mit dem HTTPS-Archiv derselben Version aus dem WordPress.org-Verzeichnis.
+- Gepruefte Themes werden einzeln ausgewiesen; unbekannte Versionen, eigene/kommerzielle Themes und unsichere/unvollstaendige Archive erscheinen als unvollstaendig.
+- Abweichungen erzeugen einen Incident, aber keine Datei wird veraendert. ZIP-/Dateigroessen, Anzahl, Pfade und HTTPS-Redirect-Ziele sind begrenzt/geprueft.
+- Regressionstests fuer exakten Treffer, geaenderte Datei, Pfad-Traversal und nicht verfuegbare Theme-Version.
+
 ## 0.18.0 – Lokaler signaturgebundener RapidScan
 
 - Lokaler Cache ueberspringt unveraenderte saubere Dateien nur bei gleichem ClamAV-Binary und unveraenderten lokalen Signaturdateien.

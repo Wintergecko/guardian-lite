@@ -181,6 +181,11 @@ $domainSelect = function () use ($esc) {
   </form>
   <p>Plugins ohne WordPress.org-Pruefsummen (z. B. kommerzielle oder eigene Plugins) werden als nicht geprueft aufgelistet. Ein Teilstatus ist kein sauberer Gesamtbefund. Themes und Must-Use-Plugins sind nicht enthalten.</p>
   <pre><?= $esc(json_encode($management['wordpress_plugin_checksum'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="wp-theme-checksum-audit"><?php $domainSelect(); ?><button>WordPress.org-Themes pruefen</button>
+  </form>
+  <p>Themes werden dateiweise mit einem HTTPS-Archiv der passenden Version aus dem WordPress.org-Verzeichnis verglichen. Eigene/kommerzielle Themes bleiben ungeprueft. Das Archiv ist nicht signiert; Abweichungen sind manuell zu bewerten, Guardian repariert nichts. Symlinks, Sonderdateien und uebergrosse Archive werden abgelehnt.</p>
+  <pre><?= $esc(json_encode($management['wordpress_theme_checksum'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
   <h3>WordPress-Datenbankindikatoren</h3>
   <p>Prueft WordPress-Beitragstexte, Metadaten und Optionen read-only mit begrenzten SQL-SELECT-Abfragen. WP-CLI laeuft als Website-Benutzer und nutzt die vorhandenen Zugangsdaten aus wp-config.php; Guardian fragt oder speichert keine Datenbankpasswoerter. Ausgegeben werden nur Tabellenname, numerische Zeilen-ID, Spaltenname und feste Regelkennung, niemals Datenbankinhalte. Die Heuristik sucht kombinierte Verschleierungs- und Ausfuehrungsmuster, ist kein Malware-Vollnachweis und ersetzt weder ClamAV noch Imunify Malware Database Scanner. Es werden keine Daten geaendert oder bereinigt.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
