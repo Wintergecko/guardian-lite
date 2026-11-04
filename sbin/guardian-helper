@@ -1311,12 +1311,13 @@ def annotate_ignored_findings(domain, findings):
     return count
 
 
-def drop_privileges(uid, gid):
+def drop_privileges(uid, gid, cpu_limit=1800):
     os.setgroups([])
     os.setgid(gid)
     os.setuid(uid)
     os.nice(10)
-    resource.setrlimit(resource.RLIMIT_CPU, (1800, 1800))
+    cpu_limit = max(1, min(1800, int(cpu_limit)))
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit, cpu_limit))
     resource.setrlimit(resource.RLIMIT_FSIZE, (5 * 1024 * 1024, 5 * 1024 * 1024))
 
 

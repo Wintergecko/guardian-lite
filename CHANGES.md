@@ -1,3 +1,9 @@
+## 0.17.0 – WordPress-Datenbankindikatoren
+
+- Neue manuelle, read-only WordPress-Datenbankpruefung mit festen SELECT-Abfragen und begrenzter Laufzeit/Ausgabe.
+- Berichte enthalten nur Tabellen-/Spaltennamen, numerische Zeilen-IDs und Regelkennungen; Treffer erzeugen Incidents.
+- Heuristikstatus und Grenzen erklaeren, dass dies weder MDS noch vollstaendige Malware-Erkennung oder Bereinigung ist.
+
 ## 0.16.0 – Erkennung von Admin-Tools
 
 - Domain-Scans erkennen in begrenztem Umfang Adminer- und TinyFileManager-Dateien anhand von Name und Quelltextmerkmalen.

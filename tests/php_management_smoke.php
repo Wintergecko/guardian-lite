@@ -115,6 +115,13 @@ $backupRequest = json_decode($backupCall[3], true);
 checkManagement(($backupRequest['action'] ?? '') === 'backup-delete' &&
     $backupRequest['backup'] === str_repeat('b', 32), 'Backup deletion did not reach the fixed manager request');
 
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'wp-db-scan', 'domain' => 'example.com'];
+try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
+$wpDbScanCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+$wpDbScanRequest = json_decode($wpDbScanCall[3], true);
+checkManagement(($wpDbScanRequest['action'] ?? '') === 'wp-db-scan' &&
+    $wpDbScanRequest['domain'] === 'example.com', 'WordPress DB scan did not reach the fixed manager request');
+
 foreach ([['csrf' => 'wrong', 'operation' => 'cloud-save'],
           ['csrf' => 'test-token', 'operation' => 'shell'],
           ['csrf' => 'test-token', 'operation' => 'diagnostics', 'domain' => 'unknown.com'],
