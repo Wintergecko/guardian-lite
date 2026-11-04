@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.5.2';
+    private const GUARDIAN_VERSION = '0.6.0';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
 
     public function init()
@@ -153,6 +153,9 @@ class IndexController extends pm_Controller_Action
         $this->view->history = [];
         $this->view->schedules = [];
         $this->view->watch = [];
+        $this->view->realtime = [];
+        $this->view->incidents = [];
+        $this->view->alerts = ['enabled' => false, 'recipient' => ''];
         $this->view->waf = [];
         $this->view->wafError = null;
         $this->view->domains = [];
@@ -175,6 +178,9 @@ class IndexController extends pm_Controller_Action
             $this->view->history = isset($status['history']) ? $status['history'] : [];
             $this->view->schedules = isset($status['schedules']) ? $status['schedules'] : [];
             $this->view->watch = isset($status['watch']) ? $status['watch'] : [];
+            $this->view->realtime = isset($status['realtime']) ? $status['realtime'] : [];
+            $this->view->incidents = isset($status['incidents']) ? $status['incidents'] : [];
+            $this->view->alerts = isset($status['alerts']) ? $status['alerts'] : ['enabled' => false, 'recipient' => ''];
             $reportId = (string)$this->getRequest()->getQuery('report', '');
             if (preg_match('/^[a-f0-9]{32}$/', $reportId)) {
                 $report = $this->helper(['report', $reportId]);
@@ -263,6 +269,54 @@ class IndexController extends pm_Controller_Action
             throw new pm_Exception('Ungueltiger Scan-Fund.');
         }
         $this->finishAction([$command, $jobid, $index], $message);
+    }
+
+    public function monitorAction()
+    {
+        $this->verifyPost();
+        $domain = (string)$this->getRequest()->getPost('domain', '');
+        $mode = (string)$this->getRequest()->getPost('mode', '');
+        if (!$this->isDomainKnown($domain) || !in_array($mode, ['on', 'off'], true)) {
+            throw new pm_Exception('Ungueltige Echtzeit-Ueberwachungseinstellung.');
+        }
+        $this->finishAction(['monitor-set', $domain, $mode], 'Echtzeit-Ueberwachung aktualisiert.');
+    }
+
+    public function alertsAction()
+    {
+        $this->verifyPost();
+        $mode = (string)$this->getRequest()->getPost('mode', '');
+        $recipient = trim((string)$this->getRequest()->getPost('recipient', ''));
+        if (!in_array($mode, ['on', 'off'], true) || strlen($recipient) > 254 ||
+            preg_match('/[\r\n]/', $recipient)) {
+            throw new pm_Exception('Ungueltige Benachrichtigungseinstellung.');
+        }
+        $this->finishAction(['alerts-set', $recipient, $mode], 'E-Mail-Einstellungen aktualisiert.');
+    }
+
+    public function alertsTestAction()
+    {
+        $this->verifyPost();
+        $this->finishAction(['alerts-test'], 'Testmail an den lokalen Mail-Transport uebergeben.');
+    }
+
+    public function incidentsExportAction()
+    {
+        // Admin-only GET; export contains only sanitized incident metadata.
+        $data = $this->helper(['incidents']);
+        $items = isset($data['incidents']) && is_array($data['incidents']) ? $data['incidents'] : [];
+        $body = json_encode(['exported_at' => gmdate('c'), 'incidents' => $items],
+                            JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($body === false || strlen($body) > 120000) {
+            throw new pm_Exception('Export ist zu gross.');
+        }
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+        $response = $this->getResponse();
+        $response->setHeader('Content-Type', 'application/json; charset=UTF-8', true);
+        $response->setHeader('Content-Disposition', 'attachment; filename="guardian-incidents.json"', true);
+        $response->setHeader('Cache-Control', 'no-store', true);
+        $response->setBody($body);
     }
 
     public function ipAction()

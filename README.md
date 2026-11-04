@@ -122,3 +122,70 @@ Das Feature-Backlog ist bewusst keine Zusage eines vollstaendigen Imunify360-Ers
 ### Updater-Repository (ab v0.5.2)
 
 Ohne gespeicherte Einstellung wird `Wintergecko/guardian-lite` als Voreinstellung verwendet. Unter Updates ist „Auf neue Version pruefen“ immer sichtbar. Die Extension liest nur GitHub-Releases und installiert Updates erst nach einem ausdruecklichen Admin-Klick. Ein geeignetes veroeffentlichtes Release muss das ZIP-Asset samt GitHub SHA-256-Digest enthalten.
+
+
+## 0.6.0 – Echtzeit-Dateiwache und Incidents (Beta)
+
+**Voraussetzung:** Linux mit `inotify`, Plesk Extension als direkter Administrator und
+ClamAV fuer Live-Einzeldatei-Scans. Auf der Registerkarte **Incidents** muss die
+Ueberwachung pro Domain explizit aktiviert werden. Standardmaessig ist sie aus.
+Maximal fuenf Domains und 450 Verzeichnisse je Domain werden ueberwacht.
+Bei einem inotify-Queue-Overflow oder wenn Limits erreicht sind, gelten
+Ergebnisse als unvollstaendig; dann einen manuellen Vollscan durchfuehren.
+Der Plesk-Stundentask startet ausgefallene aktivierte Beobachter erneut,
+was eine moegliche Luecke bis zum naechsten Stundenlauf bedeutet.
+Monitor-Aus/Einschalten veraendert keine Website-Dateien.
+
+Bei einer erkannten Aenderung wird nur Ereignis-Metadatenprotokoll gespeichert.
+Die ClamAV-Einzeldateipruefung erfolgt nur fuer kleine, sichere Dateien unter
+der Website-UID, soweit ClamAV vorhanden ist. Verdaechtige Dateien werden
+**nicht automatisch** geloescht, repariert oder in Quarantaene verschoben.
+Fuer manuelle Quarantaene wird weiter ein abgeschlossener Vollscan benoetigt.
+
+Incidents werden root-privat unter `/var/lib/guardian-lite/incidents.jsonl`
+(maximal 2 MB und eine rotierte Vorgaengerversion) gespeichert. Nur Administratoren
+koennen die letzten 200 Ereignisse als JSON herunterladen. Das ist kein
+externes SIEM und keine kryptografisch unveraenderbare Ereigniskette.
+
+E-Mail-Benachrichtigungen sind standardmaessig aus und benoetigen einen
+lokalen sendmail-kompatiblen Mail-Transport. Bei Malwareereignissen versucht
+Guardian eine Mail zu senden; das garantiert keine Zustellung. Bei gleichem
+Ereignistyp/Domain wird maximal alle 15 Minuten benachrichtigt, global
+hoechstens alle 60 Sekunden. Eine Testfunktion steht zur Verfuegung.
+
+### PHP-Handler-Backup und manueller Rollback
+
+Keine produktive Aktivierung von Snuffleupagus erfolgt durch Guardian Lite.
+Vor manueller PHP-Handler-Konfigurationsaenderung kann der Admin ein
+root-privates Backup anlegen:
+
+```bash
+sudo python3 security/php-runtime/handler_rollback.py backup 8.3
+```
+
+Bei einem Rollback muss der aktuelle SHA-256-Wert der PHP-Konfiguration bekannt
+sein, damit zwischenzeitliche Aenderungen nicht ungefragt ueberschrieben werden:
+
+```bash
+sudo sha256sum /opt/plesk/php/8.3/etc/php.ini
+sudo python3 security/php-runtime/handler_rollback.py rollback 8.3 8-3-<backup-id>.ini <aktueller-sha256>
+```
+
+Danach PHP-FPM/Dienste kontrolliert neu starten und Websites testen.
+Diese CLI ist **nicht** mit der Plesk-GUI verbunden. Keine automatischen
+Server- oder PHP-Dienst-Neustarts.
+
+### Nicht fertig / benoetigt VPS-Test
+
+- **Automatische Malware-Reparatur:** benoetigt verifizierte, unveraenderbare
+  Good-File-Backups je CMS und sicheres Rollback. Bis dahin bewusst nicht aktiv.
+- **PHP-Laufzeitschutz:** Snuffleupagus muss je Handler installiert, aktiviert
+  und unter echten Requests getestet werden. Eine php.ini-Aenderung kann
+  produktive Sites zerstoeren.
+- **Aktive Bot-Challenges / adaptives Blockieren / Cloud-Reputation:**
+  brauchen stabile Reverse-Proxy-/WAF-Integration, Reputationsanbieter,
+  Datenschutzeinwilligung und Lasttests. Eine zusaetzliche ModSecurity-Regelvorlage
+  liegt unter `security/http-guard/`, bleibt aber deaktiviert.
+- **Plesk-Integrationstests:** Der CI-Testlauf prueft Python-/PHP-Syntax und
+  Unittests auf Ubuntu 22.04/24.04 mit Python 3.11/3.12/3.13. Das ist KEIN
+  Test auf Debian-, AlmaLinux- oder Ubuntu-VPS mit installiertem Plesk.

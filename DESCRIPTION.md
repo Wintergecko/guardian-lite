@@ -1,1 +1,1 @@
-Guardian Lite: Open-Source-Plesk-Security-Dashboard, Malware-Scans, manuelle Quarantaene, Fail2Ban, WAF und optionale Snuffleupagus-/HTTP-Flood-Policy-Vorlagen.
+Guardian Lite: Plesk Security Dashboard mit Opt-in-Live-Dateiwache, Incident-Log, E-Mail-Warnungen, ClamAV, Fail2Ban und GitHub-Updater. Beta; automatische Malware-Reparatur und Cloud-Reputation noch nicht enthalten.

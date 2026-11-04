@@ -1,0 +1,10 @@
+# EXPERIMENTELL – NICHT AUTOMATISCH AKTIVIEREN
+# ModSecurity v2 example for test domain ONLY, persistent IP collection required.
+# Requires SecDataDir, correct REMOTE_ADDR behind CDN, CRS rule ID collision check.
+# Escalating detection/deny levels on selected expensive routes. Keep first phase
+# in DetectionOnly and inspect legitimate traffic before enabling any deny.
+SecAction "id:9974010,phase:1,pass,nolog,initcol:ip=%{REMOTE_ADDR}"
+SecRule REQUEST_URI "@rx (?i)(?:/wp-login\.php|/xmlrpc\.php|/administrator/|/login)" "id:9974011,phase:1,pass,nolog,setvar:ip.guardian_sensitive=+1,expirevar:ip.guardian_sensitive=60"
+SecRule IP:guardian_sensitive "@gt 30" "id:9974012,phase:1,pass,log,msg:'Guardian sensitivity threshold exceeded (detection-only)'"
+# After validation, advanced operators can replace pass with deny,status:429,
+# but MUST not use this sample as a substitute for edge DDoS protection.

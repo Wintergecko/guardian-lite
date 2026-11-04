@@ -1,3 +1,15 @@
+## 0.6.0 – Opt-in-Echtzeit-Dateiwache und Incident-Zentrale
+
+- Linux-inotify Echtzeitueberwachung pro freigegebener Plesk-Domain (max. 5 Domains / 450 Verzeichnisse je Domain), standardmaessig AUS.
+- Neue/geaenderte PHP-Dateien: optionale ClamAV-Einzeldateipruefung als Website-UID, ohne automatische Dateiveraenderungen.
+- Root-private Incident-Protokollierung mit begrenzter Groesse und JSON-Export aus Plesk (nur Administrator).
+- Opt-in E-Mail-Warnungen fuer ClamAV-Malwareereignisse ueber lokalen Mail-Transport; Versand gedrosselt und Testfunktion.
+- Neue Plesk-Registerkarte „Incidents“ mit Echtzeitmonitor, Protokoll und E-Mail-Konfiguration.
+- Dry-run-nahe PHP-Handler-Konfigurationssicherung plus SHA-geschuetzter manueller Rollback-CLI-Helfer; keine Aktivierung auf Live-Websites.
+- Beispiel eines stufenweisen ModSecurity-Botlimits (zunaechst nur Monitoring, keine automatische Sperre).
+- GitHub CI mit Python 3.11 bis 3.13 und Ubuntu 22.04/24.04; echte Plesk-Multidistributions-Integrationstests stehen aus.
+- Keine vollautomatische Malware-Reparatur, Snuffleupagus-Aktivierung, Bot-Challenges oder Cloud-Reputation ohne produktiv getestete Voraussetzungen.
+
 ## 0.5.2 – Updater-Button immer sichtbar
 
 - Das Guardian-Repository Wintergecko/guardian-lite wird automatisch als Default verwendet, wenn noch keine Repository-Einstellung gespeichert ist.

@@ -5,7 +5,10 @@ No arbitrary command, path, rule or shell execution is accepted from HTTP.
 The Plesk controller is the admin authorization boundary; this binary additionally
 validates all inputs and filesystem operations. Linux / Python >= 3.8.
 """
+import ctypes
 import datetime
+import select
+import struct
 import fcntl
 import hashlib
 import ipaddress
@@ -34,6 +37,15 @@ MAX_HISTORY = 30
 MAX_FINDINGS = 50
 LOG_LIMIT = 128 * 1024
 MAX_SNAPSHOT_FILE = 25 * 1024 * 1024
+INCIDENT_LOG = ROOT / 'incidents.jsonl'
+ALERT_FILE = ROOT / 'alerts.json'
+MONITOR_CONFIG = ROOT / 'realtime.json'
+MAIL_PATHS = ('/usr/sbin/sendmail', '/usr/lib/sendmail')
+MAX_MONITOR_DOMAINS = 5
+MAX_WATCH_DIRS = 450
+WATCH_SUFFIXES = ('.php', '.phtml', '.phar', '.inc', '.htaccess', '.user.ini')
+EMAIL_RE = re.compile(r'^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,190}\.[A-Za-z]{2,24}$')
+
 
 
 def respond(data, code=0):
@@ -205,6 +217,367 @@ def write_json(path, info):
             temp.unlink()
         except FileNotFoundError:
             pass
+
+
+def incident_log(event_type, severity, domain='', detail='', relative=''):
+    """Root-private bounded audit trail; never log file bodies or credentials."""
+    prepare_dir()
+    if event_type not in ('file_change', 'malware_detected', 'scan_complete',
+                          'monitor_started', 'monitor_stopped', 'monitor_limit',
+                          'monitor_overflow', 'operator', 'notification_error'):
+        raise ValueError('Unbekannter Ereignistyp.')
+    if severity not in ('info', 'warning', 'critical'):
+        raise ValueError('Ungueltige Schwere.')
+    if domain and not valid_domain(domain):
+        domain = ''
+    if relative and not safe_relative(relative):
+        relative = ''
+    obj = {'id': uuid.uuid4().hex, 'time': utc_now(), 'type': event_type,
+           'severity': severity, 'domain': domain, 'path': relative[:240],
+           'detail': re.sub(r'[\x00-\x1f]+', ' ', str(detail))[:180]}
+    lock = os.open(str(ROOT / 'incidents.lock'), os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if INCIDENT_LOG.is_file() and INCIDENT_LOG.stat().st_size > 2_000_000:
+            archived = ROOT / 'incidents.previous.jsonl'
+            os.replace(str(INCIDENT_LOG), str(archived))
+        fd = os.open(str(INCIDENT_LOG), os.O_WRONLY | os.O_APPEND | os.O_CREAT |
+                     getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        with os.fdopen(fd, 'ab') as output:
+            output.write((json.dumps(obj, ensure_ascii=False) + '\n').encode('utf-8'))
+            output.flush()
+    finally:
+        os.close(lock)
+    if event_type == 'malware_detected':
+        try:
+            notify_alert(obj)
+        except (OSError, ValueError):
+            pass
+    return obj
+
+
+def incident_list(limit=25):
+    """Return limited newest-first metadata; avoid reading an unbounded log."""
+    limit = min(200, max(1, int(limit)))
+    items = []
+    for path in (ROOT / 'incidents.previous.jsonl', INCIDENT_LOG):
+        try:
+            fd = os.open(str(path), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+            with os.fdopen(fd, 'rb') as stream:
+                stream.seek(0, os.SEEK_END)
+                end = stream.tell()
+                stream.seek(max(0, end - 180000))
+                raw = stream.read(180000)
+                if end > len(raw):
+                    raw = raw.partition(b'\n')[2]
+                for row in raw.splitlines():
+                    try:
+                        item = json.loads(row)
+                        if isinstance(item, dict):
+                            items.append({k: item.get(k, '') for k in
+                                          ('id', 'time', 'type', 'severity', 'domain', 'path', 'detail')})
+                    except (ValueError, UnicodeError):
+                        continue
+        except OSError:
+            continue
+    return items[-limit:][::-1]
+
+
+def alert_settings():
+    settings = read_json(ALERT_FILE, {})
+    recipient = settings.get('recipient', '') if isinstance(settings, dict) else ''
+    return {'enabled': settings.get('enabled') is True and bool(EMAIL_RE.fullmatch(recipient)),
+            'recipient': recipient if EMAIL_RE.fullmatch(recipient) else ''}
+
+
+def set_alert_settings(recipient, enabled):
+    if os.geteuid() != 0:
+        raise ValueError('Root-Rechte erforderlich.')
+    if enabled and not EMAIL_RE.fullmatch(recipient):
+        raise ValueError('Bitte eine gueltige E-Mail-Adresse angeben.')
+    prepare_dir()
+    data = {'enabled': bool(enabled), 'recipient': recipient if EMAIL_RE.fullmatch(recipient) else ''}
+    write_json(ALERT_FILE, data)
+    incident_log('operator', 'info', detail='E-Mail-Benachrichtigungen ' + ('aktiviert' if enabled else 'deaktiviert'))
+    return {'ok': True, 'alerts': data}
+
+
+def notify_alert(event, test=False):
+    settings = alert_settings()
+    if not settings['enabled']:
+        if test:
+            raise ValueError('E-Mail-Benachrichtigungen sind deaktiviert.')
+        return False
+    program = binary(MAIL_PATHS)
+    if not program:
+        raise ValueError('Sendmail-kompatibler Mail-Transport fehlt.')
+    prepare_dir()
+    lock = os.open(str(ROOT / 'alert.lock'), os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        history_file = ROOT / 'alert-throttle.json'
+        history = read_json(history_file, {'sent': {}})
+        sent = history.get('sent', {})
+        if not isinstance(sent, dict):
+            sent = {}
+        key = event.get('type', '') + ':' + event.get('domain', '')
+        now = time.time()
+        if not test and now - float(sent.get(key, 0)) < 900:
+            return False
+        if not test and now - float(sent.get('__global__', 0)) < 60:
+            return False
+        # Fixed ASCII header, no user-controlled header fields beyond strictly validated recipient.
+        body = ('Guardian Lite Ereignis\n\nTyp: %s\nDomain: %s\nZeit: %s\n'
+                'Details: %s\n\nPlesk Guardian Lite > Incidents oeffnen.\n' %
+                (event.get('type', ''), event.get('domain', ''), event.get('time', ''), event.get('detail', '')))
+        message = ('To: ' + settings['recipient'] + '\nSubject: Guardian Lite Sicherheitswarnung\n'
+                   'MIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\n\n' + body)
+        proc = subprocess.run([program, '-t', '-i'], input=message.encode('utf-8'),
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                              timeout=8, check=False, env={'PATH': '/usr/sbin:/usr/bin:/bin'})
+        if proc.returncode:
+            raise ValueError('Mail-Transport hat den Versand abgelehnt.')
+        if not test:
+            sent[key] = now
+            sent['__global__'] = now
+            sent = {k: v for k, v in sent.items() if now - float(v) < 86400}
+            write_json(history_file, {'sent': sent})
+        return True
+    finally:
+        os.close(lock)
+
+
+def alert_test():
+    if os.geteuid() != 0:
+        raise ValueError('Root-Rechte erforderlich.')
+    event = {'type': 'operator', 'domain': '', 'detail': 'Testbenachrichtigung', 'time': utc_now()}
+    notify_alert(event, test=True)
+    return {'ok': True, 'message': 'Testmail an lokalen Mail-Transport uebergeben (Zustellung nicht garantiert).'}
+
+
+def monitor_config():
+    data = read_json(MONITOR_CONFIG, {'domains': {}})
+    items = data.get('domains', {}) if isinstance(data, dict) else {}
+    return {d: True for d, enabled in items.items()
+            if valid_domain(d) and enabled is True} if isinstance(items, dict) else {}
+
+
+def monitor_state_path(domain):
+    if not valid_domain(domain):
+        raise ValueError('Ungueltige Monitoring-Domain.')
+    return ROOT / 'watch' / ('live-' + hashlib.sha256(domain.encode('ascii')).hexdigest() + '.json')
+
+
+def monitor_running(domain):
+    state = read_json(monitor_state_path(domain), {})
+    pid = state.get('pid') if state else None
+    if not isinstance(pid, int) or pid < 2:
+        return False
+    try:
+        cmdline = pathlib.Path('/proc/%d/cmdline' % pid).read_bytes()
+        return b'guardian-helper' in cmdline and b'watch-worker' in cmdline and domain.encode('ascii') in cmdline
+    except OSError:
+        return False
+
+
+def monitor_launch(domain):
+    if monitor_running(domain):
+        return False
+    child = subprocess.Popen([sys.executable, os.path.realpath(__file__), 'watch-worker', domain],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, close_fds=True, cwd='/',
+                             start_new_session=True, env={'PATH': '/usr/sbin:/usr/bin:/bin', 'LANG': 'C'})
+    write_json(monitor_state_path(domain), {'pid': child.pid, 'started': utc_now(),
+                                            'heartbeat': time.time(), 'state': 'starting',
+                                            'watch_count': 0})
+    return True
+
+
+def monitor_set(domain, enable):
+    if os.geteuid() != 0 or not valid_domain(domain) or enable not in ('on', 'off'):
+        raise ValueError('Ungueltige Live-Monitor-Einstellung.')
+    if enable == 'on':
+        site_docroot(domain)
+    prepare_dir()
+    fd = os.open(str(ROOT / 'monitor.lock'), os.O_RDWR | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        config = monitor_config()
+        if enable == 'on':
+            if domain not in config and len(config) >= MAX_MONITOR_DOMAINS:
+                raise ValueError('Maximal fuenf Echtzeit-Domains zulaessig.')
+            config[domain] = True
+        else:
+            config.pop(domain, None)
+        write_json(MONITOR_CONFIG, {'domains': config})
+        if enable == 'on':
+            monitor_launch(domain)
+    finally:
+        os.close(fd)
+    incident_log('operator', 'info', domain, 'Echtzeitmonitor ' + ('aktiviert' if enable == 'on' else 'deaktiviert'))
+    return {'ok': True, 'domain': domain, 'enabled': enable == 'on'}
+
+
+def monitor_status():
+    config = monitor_config()
+    result = []
+    for domain in sorted(config):
+        state = read_json(monitor_state_path(domain), {})
+        alive = monitor_running(domain)
+        stamp = float(state.get('heartbeat', 0)) if isinstance(state, dict) else 0
+        active = alive and (time.time() - stamp < 120)
+        result.append({'domain': domain, 'running': active,
+                       'state': state.get('state', 'unknown') if active else 'stopped',
+                       'watch_count': state.get('watch_count', 0) if active else 0})
+    return result
+
+
+# Linux inotify: each subdirectory needs its own watch. Hard limit avoids a VPS DoS.
+IN_MODIFY = 0x00000002
+IN_CLOSE_WRITE = 0x00000008
+IN_MOVED_TO = 0x00000080
+IN_CREATE = 0x00000100
+IN_DELETE = 0x00000200
+IN_DELETE_SELF = 0x00000400
+IN_MOVE_SELF = 0x00000800
+IN_Q_OVERFLOW = 0x00004000
+IN_IGNORED = 0x00008000
+IN_ISDIR = 0x40000000
+IN_DONT_FOLLOW = 0x02000000
+IN_MASK = IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE | IN_DELETE_SELF | IN_MOVE_SELF
+IN_EVENT = struct.Struct('iIII')
+
+
+def watch_worker(domain):
+    if os.geteuid() != 0 or not valid_domain(domain) or domain not in monitor_config():
+        return 2
+    root, uid, gid = site_docroot(domain)
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.inotify_init1.argtypes = (ctypes.c_int,)
+    libc.inotify_init1.restype = ctypes.c_int
+    libc.inotify_add_watch.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32)
+    libc.inotify_add_watch.restype = ctypes.c_int
+    fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+    if fd < 0:
+        raise OSError(ctypes.get_errno(), 'Linux inotify nicht verfuegbar')
+    by_wd = {}
+    limited = False
+    recent = {}
+    try:
+        def add_tree(path, rel='', depth=0):
+            nonlocal limited
+            if depth > 12 or len(by_wd) >= MAX_WATCH_DIRS:
+                limited = True
+                return
+            if path.is_symlink() or not path.is_dir():
+                return
+            wd = libc.inotify_add_watch(fd, os.fsencode(str(path)), IN_MASK | IN_DONT_FOLLOW)
+            if wd < 0:
+                limited = True
+                return
+            by_wd[wd] = rel
+            try:
+                with os.scandir(path) as it:
+                    # Limit each directory to avoid unbounded memory on hostile sites.
+                    for index, entry in enumerate(it):
+                        if index >= 2500:
+                            limited = True
+                            break
+                        if entry.is_dir(follow_symlinks=False) and not entry.is_symlink():
+                            child = rel + '/' + entry.name if rel else entry.name
+                            if safe_relative(child):
+                                add_tree(pathlib.Path(entry.path), child, depth + 1)
+            except OSError:
+                limited = True
+        add_tree(root)
+        state = 'degraded' if limited else 'running'
+        write_json(monitor_state_path(domain), {'pid': os.getpid(), 'state': state,
+                   'started': utc_now(), 'heartbeat': time.time(), 'watch_count': len(by_wd)})
+        incident_log('monitor_started', 'warning' if limited else 'info', domain,
+                     'Live-Monitor gestartet; %d Verzeichnisse%s' %
+                     (len(by_wd), ' (Limit erreicht)' if limited else ''))
+        last_heartbeat = 0
+        while domain in monitor_config():
+            now = time.time()
+            if now - last_heartbeat > 25:
+                write_json(monitor_state_path(domain), {'pid': os.getpid(),
+                    'state': 'degraded' if limited else 'running', 'started': utc_now(),
+                    'heartbeat': now, 'watch_count': len(by_wd)})
+                last_heartbeat = now
+            readable, _, _ = select.select([fd], [], [], 3)
+            if not readable:
+                continue
+            try:
+                payload = os.read(fd, 65536)
+            except BlockingIOError:
+                continue
+            offset = 0
+            while offset + IN_EVENT.size <= len(payload):
+                wd, mask, cookie, namelen = IN_EVENT.unpack_from(payload, offset)
+                offset += IN_EVENT.size
+                if offset + namelen > len(payload):
+                    break
+                name = payload[offset:offset + namelen].split(b'\x00', 1)[0].decode('utf-8', 'replace')
+                offset += namelen
+                if mask & IN_Q_OVERFLOW:
+                    limited = True
+                    incident_log('monitor_overflow', 'warning', domain, 'inotify-Queue uebergelaufen; erneuten Vollscan ausfuehren.')
+                    continue
+                if mask & IN_IGNORED:
+                    by_wd.pop(wd, None)
+                    continue
+                if wd not in by_wd or not name or '/' in name or name in ('.', '..'):
+                    continue
+                parent = by_wd[wd]
+                rel = parent + '/' + name if parent else name
+                if not safe_relative(rel):
+                    continue
+                abs_path = root / rel
+                if mask & IN_ISDIR:
+                    if mask & (IN_CREATE | IN_MOVED_TO):
+                        add_tree(abs_path, rel, rel.count('/') + 1)
+                    continue
+                if not rel.lower().endswith(WATCH_SUFFIXES):
+                    continue
+                # Do not log every transient create; only closed or atomically moved writes.
+                if not mask & (IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE):
+                    continue
+                if now - recent.get(rel, 0) < 6:
+                    continue
+                recent[rel] = now
+                if len(recent) > 1200:
+                    recent = {k: t for k, t in recent.items() if now - t < 30}
+                if mask & IN_DELETE:
+                    incident_log('file_change', 'warning', domain, 'Datei geloescht', rel)
+                    continue
+                incident_log('file_change', 'info', domain, 'Schreibvorgang erkannt', rel)
+                # Targeted virus scan runs as the site owner, never as root.
+                clam = binary(CLAM_PATHS)
+                if not clam:
+                    continue
+                try:
+                    metadata, dfd, _ = file_metadata(root, rel, max_bytes=8 * 1024 * 1024)
+                    os.close(dfd)
+                    if metadata['uid'] != uid:
+                        continue
+                    result = subprocess.run([clam, '--infected', '--no-summary',
+                                             '--follow-file-symlinks=0', '--max-filesize=8M',
+                                             str(abs_path)], stdin=subprocess.DEVNULL,
+                                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                            timeout=25, cwd='/', check=False,
+                                            preexec_fn=lambda: drop_privileges(uid, gid),
+                                            env={'PATH': '/usr/bin:/bin', 'LANG': 'C'})
+                    if result.returncode == 1 and b' FOUND' in result.stdout:
+                        incident_log('malware_detected', 'critical', domain,
+                                     'ClamAV meldet Malware. Datei nicht automatisch veraendert.', rel)
+                except (ValueError, OSError, subprocess.TimeoutExpired):
+                    continue
+        incident_log('monitor_stopped', 'info', domain, 'Live-Monitor beendet')
+        return 0
+    finally:
+        os.close(fd)
+        write_json(monitor_state_path(domain), {'pid': 0, 'state': 'stopped',
+                                                 'heartbeat': time.time(), 'watch_count': 0})
 
 
 def job_path(jobid):
@@ -451,6 +824,9 @@ def scan_worker(domain, jobid, inherited_fd):
         findings = findings_from_log(path, text)
         scan.update(status='finished' if done.returncode in (0, 1) else 'error',
                     finished_at=utc_now(), infected=len(findings), findings=findings)
+        if done.returncode == 1 and findings:
+            incident_log('malware_detected', 'critical', domain,
+                         'ClamAV meldet %d verifizierte Funde (manuelle Pruefung erforderlich).' % len(findings))
         if done.returncode not in (0, 1):
             scan['error'] = 'ClamAV Scan-Fehler (Exit-Code %d).' % done.returncode
         elif done.returncode == 1 and not findings:
@@ -590,6 +966,12 @@ def scheduled_tick():
         except (OSError, ValueError):
             pass
     prune_reports()
+    for domain in list(sorted(monitor_config()))[:MAX_MONITOR_DOMAINS]:
+        try:
+            site_docroot(domain)
+            monitor_launch(domain)
+        except (OSError, ValueError):
+            pass
     latest_per_domain = {}
     for item in history():
         if item.get('domain') not in latest_per_domain and item.get('trigger') == 'schedule':
@@ -777,7 +1159,8 @@ def status():
                          'firewall': firewall_status(), 'waflog': waf_status(),
                          'php_runtime': php_runtime_status(), 'http_flood': http_flood_status()},
             'scan': read_scan(), 'history': history(), 'schedules': schedules(),
-            'watch': watch_status()}
+            'watch': watch_status(), 'realtime': monitor_status(),
+            'alerts': alert_settings(), 'incidents': incident_list(25)}
 
 
 def main(argv):
@@ -789,6 +1172,16 @@ def main(argv):
             if not report:
                 raise ValueError('Bericht nicht gefunden.')
             return respond({'ok': True, 'report': report})
+        if argv == ['incidents']:
+            return respond({'ok': True, 'incidents': incident_list(200)})
+        if len(argv) == 3 and argv[0] == 'monitor-set':
+            return respond(monitor_set(argv[1], argv[2]))
+        if len(argv) == 3 and argv[0] == 'alerts-set':
+            return respond(set_alert_settings(argv[1], argv[2] == 'on'))
+        if argv == ['alerts-test']:
+            return respond(alert_test())
+        if len(argv) == 2 and argv[0] == 'watch-worker':
+            return watch_worker(argv[1])
         if len(argv) == 2 and argv[0] == 'scan-start':
             return respond(scan_start(argv[1]))
         if len(argv) == 3 and argv[0] == 'schedule-set':

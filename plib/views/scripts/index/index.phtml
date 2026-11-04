@@ -23,7 +23,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.5.2</span></h1>
+      <h1>Guardian Lite <span>v0.6.0</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -188,7 +188,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.5.2</h2>
+    <h2>GitHub-Updater · v0.6.0</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -258,6 +258,61 @@ $action = static function ($name) use ($esc) {
       </tbody></table></div>
     <?php endif; ?>
   </section>
+  <section class="guardian-card guardian-lower" id="guardian-incidents">
+    <h2>Echtzeit-Dateiwache &amp; Sicherheitsvorfaelle</h2>
+    <p>Linux inotify ueberwacht neue/geaenderte PHP- und Konfigurationsdateien nach ausdruecklicher Freigabe pro Domain. Bei Aenderungen kann ClamAV die Datei mit Website-Rechten pruefen. <strong>Keine automatische Dateiloeschung oder Reparatur.</strong></p>
+    <p class="guardian-alert">Beta: Maximal fuenf Domains und 450 Verzeichnisse je Domain. Bei Ereignis-Queue-Ueberlauf oder Limit muss ein Vollscan folgen. Vor Aktivierung auf Testdomain beginnen.</p>
+    <h3>Domain-Ueberwachung</h3>
+    <?php if (empty($this->domains)): ?><p>Keine Domains vorhanden.</p><?php endif; ?>
+    <div class="guardian-scroll"><table><thead><tr><th>Domain</th><th>Live-Status</th><th>Verzeichnisse</th><th>Aktion</th></tr></thead><tbody>
+      <?php foreach ($this->domains as $domain):
+        $monitor = null;
+        foreach ($this->realtime as $entry) {
+            if (isset($entry['domain']) && $entry['domain'] === $domain) { $monitor = $entry; break; }
+        }
+        $enabled = $monitor !== null;
+      ?>
+        <tr><td><?= $esc($domain) ?></td>
+        <td><?= $enabled ? (!empty($monitor['running']) ? $esc($monitor['state']) : 'Aktiviert, aber Prozess nicht erreichbar') : 'Aus' ?></td>
+        <td><?= $enabled ? $esc($monitor['watch_count'] ?? 0) : '–' ?></td>
+        <td><form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'monitor'])) ?>">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+          <input type="hidden" name="domain" value="<?= $esc($domain) ?>" />
+          <input type="hidden" name="mode" value="<?= $enabled ? 'off' : 'on' ?>" />
+          <button type="submit" class="guardian-small-button"><?= $enabled ? 'Stoppen' : 'Aktivieren' ?></button>
+        </form></td></tr>
+      <?php endforeach; ?>
+    </tbody></table></div>
+    <h3>E-Mail-Warnungen</h3>
+    <p class="guardian-small">Optional bei ClamAV-Malwaremeldungen, mit Benachrichtigungslimit. Voraussetzung: lokaler sendmail-kompatibler Mail-Transport.</p>
+    <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'alerts'])) ?>">
+      <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+      <label for="guardian-alert-recipient">Empfaenger (E-Mail)</label>
+      <input type="text" id="guardian-alert-recipient" name="recipient" maxlength="254" value="<?= $esc($this->alerts['recipient'] ?? '') ?>" placeholder="admin@example.com" />
+      <div class="guardian-formline">
+        <button type="submit" name="mode" value="on">Warnungen aktivieren</button>
+        <button type="submit" name="mode" value="off" class="guardian-danger">Deaktivieren</button>
+      </div>
+    </form>
+    <p>Status: <strong><?= !empty($this->alerts['enabled']) ? 'E-Mail-Warnungen aktiviert' : 'Deaktiviert' ?></strong></p>
+    <?php if (!empty($this->alerts['enabled'])): ?>
+      <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'alerts-test'])) ?>">
+        <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+        <button type="submit">Testmail an Mail-Transport uebergeben</button>
+      </form>
+    <?php endif; ?>
+    <h3>Incident-Audit-Log</h3>
+    <p>Nur Ereignis-Metadaten, keine HTTP-Bodies, keine Malware-Inhalte. Maximal 25 aktuelle Ereignisse in der Tabelle. Logs liegen root-privat auf dem Server.</p>
+    <p><a href="<?= $esc($this->url(['controller' => 'index', 'action' => 'incidents-export'])) ?>">Letzte 200 Ereignisse als JSON exportieren</a></p>
+    <div class="guardian-scroll"><table><thead><tr><th>Zeit</th><th>Stufe</th><th>Typ</th><th>Domain / Pfad</th><th>Hinweis</th></tr></thead><tbody>
+      <?php foreach ($this->incidents as $incident): ?>
+        <tr><td><?= $esc($incident['time'] ?? '') ?></td><td><?= $esc($incident['severity'] ?? '') ?></td>
+          <td><?= $esc($incident['type'] ?? '') ?></td><td><?= $esc($incident['domain'] ?? '') ?> / <?= $esc($incident['path'] ?? '') ?></td>
+          <td><?= $esc($incident['detail'] ?? '') ?></td></tr>
+      <?php endforeach; ?>
+    </tbody></table></div>
+    <?php if (empty($this->incidents)): ?><p class="guardian-small">Noch keine Ereignisse erfasst.</p><?php endif; ?>
+  </section>
   <section class="guardian-card guardian-lower" id="guardian-roadmap" aria-label="Feature-Liste">
     <h2>Feature-Liste und Entwicklungsstand</h2>
     <p>Guardian Lite befindet sich in der Beta-Phase. Ein erkannter Dienst oder eine Regelvorlage ist noch kein aktivierter Schutz.</p>
@@ -284,11 +339,11 @@ $action = static function ($name) use ($esc) {
       <div>
         <h3>Noch nicht umgesetzt</h3>
         <ul>
-          <li>Echtzeit-Dateiueberwachung und automatische Malware-Reparatur</li>
-          <li>Produktiv getesteter PHP-Laufzeitschutz mit Rollback pro Handler</li>
-          <li>Aktive Bot-Challenges, adaptives Rate-Limiting und Cloud-Reputation</li>
-          <li>E-Mail-Benachrichtigungen, Incident-Audit-Log und Exportberichte</li>
-          <li>Vollstaendige Integrationstests auf verschiedenen Plesk-Distributionen</li>
+          <li>Opt-in-Live-Dateiwache mit gezielter ClamAV-Pruefung; automatische Malware-Reparatur bleibt aus Sicherheitsgruenden offen</li>
+          <li>PHP-Laufzeitschutz: Konfigurationserkennung und Regelvorlage vorhanden; produktive Handler-Aktivierung/Rollback noch nicht getestet</li>
+          <li>Bot-Challenges und Cloud-Reputation: benoetigen getestete Proxy-/WAF-Integration und Drittanbieter-Zustimmung</li>
+          <li>E-Mail-Warnungen, Incident-Audit-Log und JSON-Export implementiert; Zustellung und Plesk-Verhalten vor Ort pruefen</li>
+          <li>Automatisierte Linux-Testmatrix vorhanden; echte Plesk-Integrationstests auf mehreren Distributionen noch offen</li>
         </ul>
       </div>
     </div>
