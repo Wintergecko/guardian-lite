@@ -1,5 +1,6 @@
 name: Publish Guardian Release
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*.*.*'
@@ -7,6 +8,7 @@ permissions:
   contents: write
 jobs:
   release:
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,12 +25,38 @@ jobs:
           find plib -name '*.phtml' -print0 | xargs -0 -n1 php -l
       - name: Python tests
         run: python3 -m unittest discover -s tests -v
-      - name: Build release and enforce matching tag
+      - name: Build release and verify version
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 tools/build_release.py --tag "$RELEASE_TAG"
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION=$(python3 -c "import xml.etree.ElementTree as E; print(E.parse('meta.xml').getroot().findtext('version'))")
+          TAG="v${VERSION}"
+          if [ "$EVENT_NAME" = "push" ] && [ "$REF_NAME" != "$TAG" ]; then
+            echo "::error::Tag and meta.xml version differ"
+            exit 1
+          fi
+          python3 tools/build_release.py --tag "$TAG"
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+      - name: Create version tag when started manually
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag ${RELEASE_TAG} already exists. Refusing to overwrite it."
+            exit 1
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f "ref=refs/tags/${RELEASE_TAG}" \
+            -f "sha=${GITHUB_SHA}"
       - name: Publish ZIP + SHA256 checksum
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" dist/*.zip dist/*.sha256 --verify-tag --generate-notes --title "Guardian Lite $RELEASE_TAG"
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release $RELEASE_TAG already exists. Refusing to overwrite it."
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" dist/*.zip dist/*.sha256 \
+            --verify-tag --generate-notes --title "Guardian Lite $RELEASE_TAG"
