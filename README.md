@@ -189,3 +189,16 @@ Server- oder PHP-Dienst-Neustarts.
 - **Plesk-Integrationstests:** Der CI-Testlauf prueft Python-/PHP-Syntax und
   Unittests auf Ubuntu 22.04/24.04 mit Python 3.11/3.12/3.13. Das ist KEIN
   Test auf Debian-, AlmaLinux- oder Ubuntu-VPS mit installiertem Plesk.
+
+
+### Update-Pruefung sichtbar (ab v0.6.1)
+
+Die Update-Formulare verwenden die offiziellen Plesk-Action-URLs. Nach dem Klick
+landet man wieder im Tab **Updates**. Erfolg, bereits aktuelle Version und
+Fehler der GitHub-Abfrage werden direkt in diesem Tab angezeigt. Der letzte
+Pruefstatus ist ueber ein Neuladen der Seite hinweg gespeichert. Ein zuvor
+erfolgreich geprueftes Release ist maximal 30 Minuten lang zur Installation
+freigegeben; die Update-Engine prueft das Release beim Start nochmals.
+
+Bei Verbindungsschwierigkeiten wird die Fehlermeldung der privilegierten
+Updater-Engine angezeigt. Es wird **nicht** automatisch installiert.

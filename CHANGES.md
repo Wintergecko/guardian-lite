@@ -1,3 +1,12 @@
+## 0.6.1 – Update-Pruefung zeigt zuverlaessig Rueckmeldung
+
+- Update-Formular nutzt offizielle Plesk-Action-URLs.
+- Nach dem POST bleibt der Updates-Tab ueber URL-Fragment aktiv.
+- Letzter Pruefstatus und GitHub-Fehler werden in Plesk sichtbar gespeichert.
+- Pruefresultat ist maximal 30 Minuten lang zur Installationsbestaetigung gueltig.
+- Der Button zeigt unmittelbar nach dem Absenden eine Statusmeldung.
+- Keine stillen automatischen Updates; Installation weiterhin nur mit Admin-Bestaetigung.
+
 ## 0.6.0 – Opt-in-Echtzeit-Dateiwache und Incident-Zentrale
 
 - Linux-inotify Echtzeitueberwachung pro freigegebener Plesk-Domain (max. 5 Domains / 450 Verzeichnisse je Domain), standardmaessig AUS.

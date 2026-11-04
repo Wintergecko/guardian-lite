@@ -25,6 +25,8 @@ jobs:
           find plib -name '*.phtml' -print0 | xargs -0 -n1 php -l
       - name: Python tests
         run: sudo "$(command -v python3)" -m unittest discover -s tests -v
+      - name: Plesk updater controller smoke test
+        run: php tests/plesk_updater_smoke.php
       - name: Build release and verify version
         env:
           EVENT_NAME: ${{ github.event_name }}

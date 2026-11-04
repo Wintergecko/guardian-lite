@@ -78,6 +78,15 @@
         activate(sections[next].id, true, true);
       });
     });
+    // Always tell the administrator that the update check form was submitted.
+    // The server response remains a normal POST/redirect: no JavaScript required.
+    var checkForm = document.getElementById('guardian-update-check-form');
+    if (checkForm) {
+      checkForm.addEventListener('submit', function () {
+        var progress = document.getElementById('guardian-update-progress');
+        if (progress) progress.hidden = false;
+      });
+    }
     var saved = null;
     try { saved = window.sessionStorage.getItem('guardian_active_tab'); } catch (e) { /* storage optional */ }
     var requested = fromHash();

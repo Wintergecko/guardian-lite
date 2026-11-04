@@ -32,5 +32,7 @@ jobs:
           find plib -name '*.phtml' -print0 | xargs -0 -n1 php -l
       - name: Python tests
         run: sudo "$(command -v python3)" -m unittest discover -s tests -v
+      - name: Plesk updater controller smoke test
+        run: php tests/plesk_updater_smoke.php
       - name: Build ZIP
         run: python3 tools/build_release.py

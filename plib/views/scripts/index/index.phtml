@@ -23,7 +23,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.6.0</span></h1>
+      <h1>Guardian Lite <span>v0.6.1</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -188,12 +188,12 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.6.0</h2>
+    <h2>GitHub-Updater · v0.6.1</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
        Eine GitHub-Pruefsumme ist <strong>keine unabhaengige digitale Signatur</strong>. Bei kompromittiertem Repository ist auch das Update gefaehrdet.</p>
-    <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'update-repo'])) ?>">
+    <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'update-repo')) ?>">
       <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
       <label for="guardian-update-repo">GitHub-Repository (URL oder owner/repo)</label>
       <div class="guardian-formline">
@@ -202,10 +202,19 @@ $action = static function ($name) use ($esc) {
       </div>
     </form>
     <p class="guardian-small">Voreingestellt ist das offizielle Guardian-Lite-Repository. Du kannst direkt nach Updates suchen, ohne vorher auf Speichern zu klicken.</p>
-    <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'update-check'])) ?>">
+    <form id="guardian-update-check-form" method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'update-check')) ?>">
       <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
       <button type="submit">Auf neue Version pruefen</button>
+      <p id="guardian-update-progress" role="status" hidden>Pruefe das neueste GitHub-Release …</p>
     </form>
+    <?php if ($this->updateCheckAt): ?>
+      <p class="guardian-small" id="guardian-update-check-time">Letzter Aufruf der Update-Pruefung: <?= $esc(gmdate('Y-m-d H:i', $this->updateCheckAt)) ?> UTC</p>
+      <?php if ($this->updateCheckStatus === 'error'): ?>
+        <p class="guardian-alert" role="alert"><strong>Update-Pruefung fehlgeschlagen:</strong> <?= $esc($this->updateCheckError) ?></p>
+      <?php elseif ($this->updateCheckStatus === 'installing'): ?>
+        <p class="guardian-state is-warn" role="status">Update-Installation gestartet. Status nach erneutem Laden pruefen.</p>
+      <?php endif; ?>
+    <?php endif; ?>
     <?php $release = is_array($this->updateResult) ? $this->updateResult : null; ?>
     <?php if ($release && ($release['repo'] ?? '') === $this->updateRepo): ?>
       <div class="guardian-state <?= !empty($release['newer']) ? 'is-warn' : 'is-good' ?>">
@@ -218,7 +227,7 @@ $action = static function ($name) use ($esc) {
       <?php if (!empty($release['newer'])): ?>
         <p class="guardian-small">ZIP-Paket: <?= $esc($release['asset']) ?> · SHA-256:
            <code><?= $esc($release['sha256']) ?></code></p>
-        <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'update-apply'])) ?>"
+        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'update-apply')) ?>"
             onsubmit="return confirm('VPS-Snapshot vorhanden? Quellcode des Releases geprueft? Guardian Lite wird mit Root-Rechten aktualisiert. Wirklich installieren?');">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
           <button type="submit" class="guardian-danger">Update auf v<?= $esc($release['latest']) ?> installieren</button>
@@ -349,6 +358,6 @@ $action = static function ($name) use ($esc) {
     </div>
     <p class="guardian-small">Volumetrische DDoS-Abwehr muss beim Provider oder vorgelagerten DDoS-/CDN-Dienst erfolgen.</p>
   </section>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.6.1" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie oder automatische Bereinigung.</footer>
 </div>

@@ -3,8 +3,9 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.6.0';
+    private const GUARDIAN_VERSION = '0.6.1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
+    private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
 
     public function init()
     {
@@ -74,6 +75,40 @@ class IndexController extends pm_Controller_Action
         return $saved !== '' ? $saved : self::DEFAULT_UPDATE_REPO;
     }
 
+    // Keep the last check visible after Plesk redirects or a PHP session renewal.
+    // No access tokens are stored: these are public GitHub release metadata only.
+    private function getLastUpdateCheck()
+    {
+        $raw = (string)pm_Settings::get(self::LAST_UPDATE_KEY);
+        if ($raw === '' || strlen($raw) > 4096) {
+            return [];
+        }
+        $record = json_decode($raw, true);
+        return is_array($record) && isset($record['checked_at']) && is_int($record['checked_at'])
+            ? $record : [];
+    }
+
+    private function storeUpdateCheck($repo, $status, $result = null, $error = '')
+    {
+        $record = [
+            'repo' => $repo,
+            'checked_at' => time(),
+            'status' => $status,
+            'result' => is_array($result) ? $result : null,
+            'error' => substr((string)$error, 0, 300),
+        ];
+        $data = json_encode($record, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+        if (!is_string($data) || strlen($data) > 4096) {
+            throw new pm_Exception('Updater-Pruefergebnis konnte nicht gespeichert werden.');
+        }
+        pm_Settings::set(self::LAST_UPDATE_KEY, $data);
+    }
+
+    private function redirectToUpdates()
+    {
+        $this->redirect(pm_Context::getBaseUrl() . '#guardian-tab-updates');
+    }
+
     public function updateRepoAction()
     {
         $this->verifyPost();
@@ -100,47 +135,47 @@ class IndexController extends pm_Controller_Action
         if ((string)pm_Settings::get('guardian_update_repo') !== $repo) {
             throw new pm_Exception('Updater-Repository konnte nicht gespeichert werden. Bitte Plesk-Protokoll pruefen.');
         }
-        unset($_SESSION['guardian_update_result']);
+        pm_Settings::set(self::LAST_UPDATE_KEY, '');
         $this->_status->addMessage('info', 'GitHub-Repository fuer Updates gespeichert.');
-        $this->redirect(pm_Context::getBaseUrl());
+        $this->redirectToUpdates();
     }
 
     public function updateCheckAction()
     {
         $this->verifyPost();
         $repo = $this->updateRepository();
-        if ($repo === '') {
-            throw new pm_Exception('Zuerst ein GitHub-Repository festlegen.');
-        }
-        unset($_SESSION['guardian_update_result']);
         try {
-            $_SESSION['guardian_update_result'] = $this->updater(['check', $repo, self::GUARDIAN_VERSION]);
-            $this->_status->addMessage('info', 'GitHub-Release geprueft.');
-        } catch (Exception $e) {
-            $this->_status->addMessage('error', $e->getMessage());
+            $result = $this->updater(['check', $repo, self::GUARDIAN_VERSION]);
+            $this->storeUpdateCheck($repo, 'checked', $result);
+        } catch (\Throwable $e) {
+            // Show the actual network, GitHub or helper error in the Updates tab.
+            $this->storeUpdateCheck($repo, 'error', null, $e->getMessage());
         }
-        $this->redirect(pm_Context::getBaseUrl());
+        $this->redirectToUpdates();
     }
 
     public function updateApplyAction()
     {
         $this->verifyPost();
         $repo = $this->updateRepository();
-        $result = isset($_SESSION['guardian_update_result']) ? $_SESSION['guardian_update_result'] : null;
-        if (!is_array($result) || empty($result['newer']) || $repo !== ($result['repo'] ?? '')
+        $check = $this->getLastUpdateCheck();
+        $result = isset($check['result']) ? $check['result'] : null;
+        // Re-check the release before applying; stale checks cannot trigger an update.
+        if (($check['status'] ?? '') !== 'checked' || ($check['repo'] ?? '') !== $repo
+            || time() - (int)($check['checked_at'] ?? 0) > 1800
+            || !is_array($result) || empty($result['newer']) || $repo !== ($result['repo'] ?? '')
             || !preg_match('/^\d+\.\d+\.\d+$/D', (string)($result['latest'] ?? ''))
             || !preg_match('/^[a-f0-9]{64}$/D', (string)($result['sha256'] ?? ''))) {
-            throw new pm_Exception('Zuerst erneut nach Updates suchen.');
+            throw new pm_Exception('Zuerst erneut nach Updates suchen (Pruefung maximal 30 Minuten alt).');
         }
         try {
             $this->updater(['apply', $repo, self::GUARDIAN_VERSION,
                 (string)$result['latest'], (string)$result['sha256']]);
-            unset($_SESSION['guardian_update_result']);
-            $this->_status->addMessage('info', 'Plesk-Upgrade wurde gestartet. Status im Updater pruefen.');
-        } catch (Exception $e) {
-            $this->_status->addMessage('error', $e->getMessage());
+            $this->storeUpdateCheck($repo, 'installing');
+        } catch (\Throwable $e) {
+            $this->storeUpdateCheck($repo, 'error', null, 'Update konnte nicht gestartet werden: ' . $e->getMessage());
         }
-        $this->redirect(pm_Context::getBaseUrl());
+        $this->redirectToUpdates();
     }
 
     public function indexAction()
@@ -160,8 +195,19 @@ class IndexController extends pm_Controller_Action
         $this->view->wafError = null;
         $this->view->domains = [];
         $this->view->updateRepo = $this->updateRepository();
-        $this->view->updateResult = isset($_SESSION['guardian_update_result'])
-            ? $_SESSION['guardian_update_result'] : null;
+        $this->view->updateResult = null;
+        $this->view->updateCheckAt = null;
+        $this->view->updateCheckStatus = '';
+        $this->view->updateCheckError = '';
+        $lastCheck = $this->getLastUpdateCheck();
+        if (($lastCheck['repo'] ?? '') === $this->view->updateRepo
+            && time() - (int)$lastCheck['checked_at'] < 86400) {
+            $this->view->updateCheckAt = (int)$lastCheck['checked_at'];
+            $this->view->updateCheckStatus = (string)($lastCheck['status'] ?? '');
+            $this->view->updateCheckError = (string)($lastCheck['error'] ?? '');
+            $this->view->updateResult = isset($lastCheck['result']) && is_array($lastCheck['result'])
+                ? $lastCheck['result'] : null;
+        }
         $this->view->updateState = [];
         $this->view->updateError = null;
         try {
