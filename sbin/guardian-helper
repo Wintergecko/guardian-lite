@@ -44,6 +44,11 @@ MAX_JAILS = 24
 MAX_HISTORY = 30
 MAX_FINDINGS = 50
 MAX_SCAN_QUEUE = 100
+MAX_ADMIN_TOOL_FILES = 5000
+MAX_ADMIN_TOOL_ENTRIES = 10000
+MAX_ADMIN_TOOL_RESULTS = 25
+MAX_ADMIN_TOOL_FILE_BYTES = 2 * 1024 * 1024
+MAX_ADMIN_TOOL_SCAN_SECONDS = 10
 LOG_LIMIT = 128 * 1024
 MAX_SNAPSHOT_FILE = 25 * 1024 * 1024
 INCIDENT_LOG = ROOT / 'incidents.jsonl'
@@ -1177,6 +1182,115 @@ def findings_from_log(docroot, logtext):
     return findings
 
 
+def admin_tool_candidates(docroot):
+    """Read-only, bounded checks for common uploaded PHP administration tools.
+
+    These are exposure indicators, not malware verdicts. Never delete or repair them.
+    """
+    docroot = pathlib.Path(docroot)
+    try:
+        root_stat = docroot.lstat()
+    except OSError:
+        return {'findings': [], 'checked': 0, 'incomplete': True, 'truncated': False}
+    if not stat.S_ISDIR(root_stat.st_mode) or stat.S_ISLNK(root_stat.st_mode):
+        return {'findings': [], 'checked': 0, 'incomplete': True, 'truncated': False}
+    deadline = time.monotonic() + MAX_ADMIN_TOOL_SCAN_SECONDS
+    findings = []
+    checked = 0
+    visited = 0
+    incomplete = False
+    truncated = False
+    stack = [('', 0)]
+    while stack and not truncated:
+        relative_dir, depth = stack.pop()
+        dirfd = os.open(str(docroot), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            for component in relative_dir.split('/') if relative_dir else ():
+                next_fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dirfd)
+                os.close(dirfd)
+                dirfd = next_fd
+            entries = os.scandir(dirfd)
+            try:
+                for entry in entries:
+                    if time.monotonic() >= deadline or visited >= MAX_ADMIN_TOOL_ENTRIES:
+                        incomplete = True
+                        truncated = True
+                        break
+                    visited += 1
+                    try:
+                        info = entry.stat(follow_symlinks=False)
+                    except OSError:
+                        incomplete = True
+                        continue
+                    relative = (relative_dir + '/' if relative_dir else '') + entry.name
+                    if stat.S_ISDIR(info.st_mode):
+                        if info.st_dev != root_stat.st_dev:
+                            incomplete = True
+                        elif depth >= 16:
+                            incomplete = True
+                        elif safe_relative(relative):
+                            stack.append((relative, depth + 1))
+                        else:
+                            incomplete = True
+                        continue
+                    if not stat.S_ISREG(info.st_mode):
+                        incomplete = True
+                        continue
+                    checked += 1
+                    if checked > MAX_ADMIN_TOOL_FILES:
+                        incomplete = True
+                        truncated = True
+                        break
+                    if not entry.name.lower().endswith('.php'):
+                        continue
+                    base = entry.name.lower()
+                    adminer_name = re.fullmatch(r'adminer(?:[-_.][0-9][0-9._-]*)?\.php', base) is not None
+                    tinyfm_name = base in ('tinyfilemanager.php', 'tiny-file-manager.php', 'filemanager.php')
+                    if info.st_size > MAX_ADMIN_TOOL_FILE_BYTES:
+                        incomplete = incomplete or adminer_name or tinyfm_name
+                        continue
+                    if not safe_relative(relative):
+                        incomplete = True
+                        continue
+                    if not adminer_name and not tinyfm_name:
+                        continue
+                    metadata, file_dirfd, leaf = file_metadata(docroot, relative, MAX_ADMIN_TOOL_FILE_BYTES)
+                    try:
+                        fd = os.open(leaf, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=file_dirfd)
+                        try:
+                            before = os.fstat(fd)
+                            with os.fdopen(fd, 'rb', closefd=False) as stream:
+                                prefix = stream.read(65536).lower()
+                            after = os.fstat(fd)
+                            expected = (metadata['ino'], metadata['dev'], metadata['size'], metadata['mtime_ns'])
+                            actual = (after.st_ino, after.st_dev, after.st_size, after.st_mtime_ns)
+                            if not stat.S_ISREG(after.st_mode) or actual != expected or before.st_ino != after.st_ino:
+                                incomplete = True
+                                continue
+                        finally:
+                            os.close(fd)
+                    finally:
+                        os.close(file_dirfd)
+                    if adminer_name and (b'adminer.org' in prefix or b'adminer' in prefix):
+                        tool = 'Adminer'
+                    elif tinyfm_name and (b'tinyfilemanager' in prefix or b'tiny file manager' in prefix):
+                        tool = 'TinyFileManager'
+                    else:
+                        continue
+                    findings.append({'path': relative, 'tool': tool, 'state': 'review',
+                                     'sha256': metadata['sha256']})
+                    if len(findings) >= MAX_ADMIN_TOOL_RESULTS:
+                        truncated = True
+                        break
+            finally:
+                entries.close()
+        except OSError:
+            incomplete = True
+        finally:
+            os.close(dirfd)
+    return {'findings': findings, 'checked': checked, 'incomplete': incomplete, 'truncated': truncated}
+
+
 def ignored_hash_set(domain):
     settings = read_json(ROOT / 'management' / 'config.json', {})
     ignored = settings.get('ignore_hashes', {}) if isinstance(settings, dict) else {}
@@ -1235,10 +1349,16 @@ def scan_worker(domain, jobid, inherited_fd):
         with (ROOT / 'jobs' / (jobid + '.log')).open('rb') as log:
             text = log.read(5 * 1024 * 1024).decode('utf-8', 'replace')
         findings = findings_from_log(path, text)
+        admin_tools = admin_tool_candidates(path)
         ignored_count = annotate_ignored_findings(domain, findings)
         active_findings = [item for item in findings if item.get('state') == 'found' and not item.get('ignored')]
         scan.update(status='finished' if done.returncode in (0, 1) else 'error',
-                    finished_at=utc_now(), infected=len(findings), ignored=ignored_count, findings=findings)
+                    finished_at=utc_now(), infected=len(findings), ignored=ignored_count, findings=findings,
+                    admin_tools=admin_tools)
+        if admin_tools['findings']:
+            incident_log('admin_tool_detected', 'warning', domain,
+                         '%d bekannte Admin-Tool-Kandidaten gefunden; manuelle Pruefung empfohlen. Keine Datei wurde veraendert.' %
+                         len(admin_tools['findings']))
         if done.returncode == 1 and active_findings:
             incident_log('malware_detected', 'critical', domain,
                          'ClamAV meldet %d nicht ignorierte Funde (manuelle Pruefung erforderlich).' % len(active_findings))

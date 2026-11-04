@@ -1,4 +1,4 @@
-# Weitere Features nach 0.15.0
+# Weitere Features nach 0.16.0
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
@@ -19,7 +19,8 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Mittel | Zentraler Audit-Verlauf | Konfigurationsaenderungen mit Backup-ID, Akteur, vorher/nachher Hash und optionalem externem Append-only-Ziel dokumentieren |
 | Mittel | Dateiwache fuer groessere Installationen | Watch-Budget je Domain, nachvollziehbare Abdeckung, robuste Wiederaufnahme nach Overflow und kuerzere Healthchecks |
 | Niedrig | Benachrichtigungen/Webhooks | Ereignisse in vorhandene Betriebswerkzeuge integrieren; Geheimnisse und Zielhosts strikt begrenzen |
+| Niedrig | Admin-Tool-Erkennung ausbauen | Aktuell begrenzte Namens-/Markerpruefung fuer Adminer und TinyFileManager; kuratierte, gepruefte Markerlisten und weitere Admin-Werkzeuge fehlen |
 
-Fuer die naechste Runde sind Snapshot-Verwaltung mit Quota und sichere CMS-Datenbank-Scans am wertvollsten. Eine Firewall-Allowlist benoetigt zuerst Plesk-Regelprioritaetstests, damit Freigaben Deny-Regeln wirklich sicher uebersteuern.
+Fuer die naechste Runde sind sichere CMS-Datenbank-Scans und ein lokaler, signaturgebundener RapidScan-Hash-Cache am wertvollsten. Cloud-Hash-Reputation benoetigt eine eigene Datenschutz-/Anbieterfreigabe. Eine Firewall-Allowlist benoetigt zuerst Plesk-Regelprioritaetstests, damit Freigaben Deny-Regeln wirklich sicher uebersteuern.
 
 Technische Grundlage fuer Hersteller-Pruefsummen: [WP-CLI core verify-checksums](https://developer.wordpress.org/cli/commands/core/verify-checksums/) vergleicht WordPress-Core-Dateien mit WordPress.org-Pruefsummen, ohne WordPress dafuer zu laden. Premium-Erweiterungen und angepasste Dateien benoetigen eigene Vertrauensquellen.
