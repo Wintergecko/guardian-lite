@@ -1,6 +1,12 @@
 <?php
 /** PHPUnit-free smoke test for Guardian Lite scan scheduler controller. No Plesk required. */
 error_reporting(E_ALL);
+if (getenv('GITHUB_ACTIONS') === 'true') {
+    set_exception_handler(static function (Throwable $error) {
+        fwrite(STDERR, '::error::' . str_replace(["\r", "\n"], ' ', (string)$error) . "\n");
+        exit(1);
+    });
+}
 
 class pm_Exception extends Exception {}
 class RedirectForTest extends Exception {}
@@ -17,6 +23,7 @@ class pm_Settings {
 }
 class pm_DomainItem {
     public function getName() { return 'example.com'; }
+    public function hasHosting() { return true; }
 }
 class pm_Domain {
     public static function getAllDomains() { return [new pm_DomainItem()]; }
