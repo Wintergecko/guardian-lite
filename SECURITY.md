@@ -1,9 +1,10 @@
-# Guardian Lite v0.11.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.12.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
 - Kein frei konfigurierbarer Shell-Befehl, keine direkten Website-Pfade aus Form-Parametern.
 - Fail2Ban: nur validierte aktive Jail-Namen und per ipaddress gepruefte IPv4/IPv6-Adressen. Die Sperre einer externen Administrator-IP bleibt moeglich; Panel bestaetigt vor der Aktion.
+- Plesk Firewall: nur Plesks eigene CLI und Guardian-eigene Regeln; fremde Regeln und firewalld werden nicht umgeschrieben. Aktuelle `REMOTE_ADDR` wird bei Sperren ausgespart, breite Netze sowie loopback/link-local/multicast werden abgelehnt. Nach `--apply` sind getrennte Verbindungspruefung und explizite Bestaetigung erforderlich; sonst rollt Plesk nach 60 Sekunden zurueck.
 - Scanner folgt keinen Symlinks, laeuft mit Website-UID; CPU/Log/Groessen-/Zeit-Limits. Ist nicht gleichbedeutend mit sicherer PHP-Laufzeit-Analyse.
 - Ein Scan/Quarantaene-Vorgang zur Zeit durch `flock`; Job-Reports atomar geschrieben. Plesk-Scheduler nur Opt-in.
 - Quarantaene speichert Dateien in privatem root-Verzeichnis, Restore ueberschreibt nie. Bei Crash im Status `pending` kann Restore die Dateiverschiebung rueckgaengig machen, wenn die Datei tatsaechlich in Quarantaene liegt.
@@ -43,6 +44,12 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - Guardian ruft nur eine root-eigene WP-CLI-Binary aus festen Systempfaden mit festem Unterbefehl/Optionen auf. Die Domain wird als nicht-shell-ausgewertetes `--path`-Argument uebergeben.
 - WP-CLI laeuft mit Webspace-UID/GID, begrenzter Laufzeit/Dateiausgabe, isoliertem Home, deaktiviertem Auto-Update und ohne Plugins, Themes oder Packages.
 - Netzwerkverifikation bleibt auf WP-CLI/WordPress.org HTTPS mit Zertifikatspruefung angewiesen. Keine automatische Datei-Reparatur; MD5-Pruefsummen sind kein signierter Build-Nachweis.
+
+## 0.12.0 – Plesk-Firewall-IP-Sperrliste
+
+- Eine IP- oder begrenzte CIDR-Sperre wird nur als Guardian-eigene Plesk-Custom-Regel erstellt oder entfernt.
+- Plesk muss installiert und aktiv sein. Guardian aktiviert keine Firewall und fasst keine fremden Regeln an.
+- Plesks Aktivierungs-Timeout wird genutzt: nicht bestaetigte Aenderungen rollen nach 60 Sekunden zurueck.
 
 ## 0.11.0 – WordPress-Plugin-Pruefsummen
 

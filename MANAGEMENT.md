@@ -1,4 +1,4 @@
-# Guardian Lite 0.11.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.12.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -15,6 +15,7 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | E-Mail-Warnungen | Lokaler Sendmail-kompatibler Mailtransport oder in Plesk funktionierender Mailtransport. |
 | Dateiwache | Linux `inotify` (Kernel-Schnittstelle); kein zusaetzliches PHP-Modul. |
 | Plesk-Firewall-Status | Optionale Plesk-Erweiterung **Firewall**. Die Installation allein aktiviert keine Regeln. Die Erweiterung ist keine Voraussetzung fuer andere Guardian-Funktionen. |
+| Plesk-Firewall-IP-Sperrliste | Plesk Firewall muss installiert und aktiv sein; Plesk-CLI `plesk ext firewall` und der dazugehoerige Dienst muessen funktionieren. `firewalld` darf laut Plesk nicht parallel betrieben werden. |
 | Guardian-WAF/HTTP-Limits | Apache-ModSecurity **v2**, geladenes `mod_unique_id`, `SecDataDir` und Plesk-WAF fuer wirksames Blockieren. In Plesk ueber Installer/Komponentenverwaltung einrichten und danach Guardian-Vorschau pruefen. |
 | Snuffleupagus | Pro verwaltetem Plesk-PHP-FPM-Handler das passende Entwicklerpaket, z. B. `plesk-php83-dev`, ausserdem `git`, `gcc`, `make`, `autoconf`; Handler-Version 8.0–8.5. Beispiel Debian/Ubuntu: `apt install plesk-php83-dev git gcc make autoconf`. |
 | Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |
@@ -24,6 +25,16 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 Plesk-Pakete/Handler-Komponenten koennen je nach Betriebssystem und PHP-Version abweichen. System-PHP-Entwicklungspakete ersetzen nicht die zum Plesk-Handler gehoerigen Pakete.
 
 Automatisierte Tests ersetzen die Plesk-Praxistests nicht. Die Tests des Betreibers finden auf einem separaten Plesk-Testserver statt. Guardian fuehrt keine pauschale Aktivierung auf vorhandenen Domains durch.
+
+## Plesk-Firewall-IP-Sperrliste
+
+Im Angriffe-&-Schutz-Bereich zeigt Guardian eigene Deny-Regeln, die es in der Plesk-Firewall angelegt hat. Es erstellt nur manuelle eingehende Deny-Regeln ueber `plesk ext firewall --set-rule` und entfernt nur exakt passende Guardian-Regeln ueber `--remove-rules`. Andere Regeln werden weder veraendert noch geloescht. Plesk Firewall muss bereits aktiv sein; Guardian aktiviert sie nicht.
+
+Unterstuetzt sind einzelne IPv4-/IPv6-Adressen und CIDR-Netze bis maximal IPv4 `/24` bzw. IPv6 `/64`. Loopback-, unspecified-, link-local- und Multicast-Netze sowie die aktuelle `REMOTE_ADDR` der Plesk-Admin-Verbindung werden abgelehnt. Weitergeleitete Proxy-Header werden nicht als Admin-IP verwendet. Ein Admin hinter Proxy/CDN muss nach dem ersten Plesk-Test die tatsaechlich ankommende Verbindung beruecksichtigen.
+
+Nach jeder Aenderung fuehrt Plesk `--apply` aus und startet sein 60-Sekunden-Rollback. Teste zuerst in einer unabhaengigen SSH- oder Plesk-Admin-Verbindung, dass Panel und erforderliche Dienste erreichbar bleiben; bestaetige erst danach im Guardian-Panel. Ohne Bestaetigung stellt Plesk die vorherige aktive Konfiguration wieder her. Die Guardian-Regel bleibt nach erfolgreicher Bestaetigung bestehen, bis sie manuell entfernt wird. Automatische IP-Reputation, Ablaufzeiten, Allowlisten und Provider-Firewalls sind noch nicht enthalten.
+
+Plesk warnt vor gleichzeitig aktivem `firewalld`, weil beide Dienste dieselben Firewallregeln verwalten koennen. Guardian blockiert deshalb Aenderungen, wenn `firewalld` als aktiv erkannt wird. [Plesk Firewall: Regeln und Rollback](https://docs.plesk.com/en-US/obsidian/administrator-guide/plesk-administration/plesk-for-linux-the-plesk-firewall.72046/) · [Plesk CLI](https://support.plesk.com/hc/en-us/articles/12377519983511-How-to-manage-local-firewall-rules-using-Plesk-Firewall-in-Plesk-for-Linux)
 
 ## PHP-Handler und Snuffleupagus
 

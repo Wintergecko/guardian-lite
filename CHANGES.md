@@ -1,3 +1,11 @@
+## 0.12.0 – Plesk-Firewall-IP-Sperrliste
+
+- Manuelle IP-/CIDR-Deny-Regeln ausschliesslich ueber die installierte Plesk-Firewall-CLI.
+- Admin-Verbindungs-IP wird vor Sperren abgeglichen; IPv4-Netze breiter als /24, IPv6 breiter als /64 sowie lokale/reservierte Netze werden abgelehnt.
+- Jede Aenderung nutzt Plesks 60-Sekunden-Rollback und bleibt unbestaetigt, bis ein separater Verbindungstest bestaetigt wurde.
+- Fremde Plesk-Regeln werden nicht bearbeitet; Firewall-Aktivierung und automatische Reputation bleiben aus.
+- Tests fuer Regelisolation, Lockout-Schutz, CIDR-Grenzen, Rollback/Bestaetigung und CSRF-geschuetzten Panel-Aufruf.
+
 ## 0.11.0 – WordPress.org-Pluginpruefsummen
 
 - Manuelle WP-CLI-Pruefung fuer installierte Plugins mit verfuegbaren WordPress.org-Pruefsummen.

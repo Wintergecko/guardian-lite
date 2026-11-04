@@ -38,10 +38,14 @@ class ManagementRequest {
     public function isPost() { return true; }
     public function getPost($key, $fallback = '') { return $this->post[$key] ?? $fallback; }
 }
+class ManagementStatus {
+    public function addMessage($type, $message) {}
+}
 class pm_Controller_Action {
     public $request;
     public $view;
-    public function __construct() { $this->request = new ManagementRequest(); $this->view = new stdClass(); }
+    protected $_status;
+    public function __construct() { $this->request = new ManagementRequest(); $this->view = new stdClass(); $this->_status = new ManagementStatus(); }
     public function init() {}
     public function getRequest() { return $this->request; }
     public function redirect($url) { throw new ManagementRedirect($url); }
@@ -65,6 +69,24 @@ $controller->request->post = ['csrf' => 'test-token', 'operation' => 'ignore-add
 try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
 $request = json_decode(pm_ApiCli::$calls[1][3], true);
 checkManagement(($request['action'] ?? '') === 'ignore-add' && $request['sha256'] === str_repeat('a', 64), 'Ignore action did not reach fixed manager API');
+
+$_SERVER['REMOTE_ADDR'] = '198.51.100.4';
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'ban', 'network' => '203.0.113.9'];
+try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
+$firewallCall = pm_ApiCli::$calls[2];
+checkManagement($firewallCall[0] === 'guardian-helper' &&
+    $firewallCall[1] === ['firewall-action', 'ban', '203.0.113.9', '198.51.100.4'],
+    'Plesk firewall action did not use the fixed helper and socket peer address');
+
+$before = count(pm_ApiCli::$calls);
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'confirm'];
+try { $controller->firewallAction(); throw new RuntimeException('Firewall change was confirmed without a connection test'); }
+catch (pm_Exception $e) {}
+checkManagement(count(pm_ApiCli::$calls) === $before, 'Firewall confirmation without a separate connection test reached helper');
+
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'confirm', 'tested' => '1'];
+try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
+checkManagement(pm_ApiCli::$calls[3][1] === ['firewall-action', 'confirm'], 'Firewall confirmation action not routed correctly');
 
 foreach ([['csrf' => 'wrong', 'operation' => 'cloud-save'],
           ['csrf' => 'test-token', 'operation' => 'shell'],

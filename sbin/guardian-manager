@@ -1187,6 +1187,21 @@ def public_status():
 def uninstall_cleanup():
     # Removing an extension must undo its own active policies, not leave orphaned guards.
     settings = config()
+    firewall = h.firewall_rules()
+    if h.FIREWALL_SETTINGS.is_file() and not firewall.get('available'):
+        raise ValueError('Plesk Firewall ist installiert, aber Guardian kann ihre Regeln nicht sicher auflisten. Deinstallation abgebrochen, damit keine Guardian-Regel als verwaiste Sperre bestehen bleibt.')
+    if firewall.get('available'):
+        if firewall.get('limited'):
+            raise ValueError('Zu viele Guardian-Firewallregeln fuer einen sicheren Deinstallations-Rollback.')
+        if firewall.get('pending', {}).get('state') == 'awaiting_confirmation':
+            h.firewall_action('cancel')
+            firewall = h.firewall_rules()
+        if firewall.get('rules'):
+            if not h.firewall_status().get('plesk_firewall_active'):
+                raise ValueError('Guardian-Firewallregeln sind gespeichert, Plesk-Firewall aber inaktiv. Firewall zuerst in Plesk aktivieren und Guardian-Regeln vor der Deinstallation entfernen.')
+            for network in sorted({rule['network'] for rule in firewall['rules']}):
+                h.firewall_action('unban', network)
+                h.firewall_action('confirm')
     for domain, item in settings.get('bots', {}).items():
         if item.get('enabled'):
             bots_set(domain, 'off')
@@ -1222,7 +1237,7 @@ def uninstall_cleanup():
     settings['autorepair'] = {}
     settings['waf_engines'] = {}
     save_config(settings)
-    return {'message': 'Guardian-eigene aktive Policies deaktiviert. Backups, Module und Quarantaene bleiben erhalten.'}
+    return {'message': 'Guardian-eigene aktive Policies deaktiviert und Guardian-Plesk-Firewallregeln entfernt. Backups, Module und Quarantaene bleiben erhalten.'}
 
 
 def start_job(request):
