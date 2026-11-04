@@ -1,3 +1,8 @@
+## 0.9.1 – Plattformunabhaengige Release-Pakete
+
+- Der ZIP-Build normalisiert jetzt auch eingebettete Markdown-Dateien in Unterordnern auf LF, damit Windows- und Linux-Builds dieselben Paketdateiinhalte enthalten.
+- Regressionstest fuer die Zeilenenden im Security-Dokument.
+
 ## 0.9.0 – Cronjob-Sicherheitspruefung
 
 - Neue read-only Admin-Pruefung ueblicher System- und Benutzer-Cronpfade auf ausgewaehlte verdächtige Befehlsmuster.

@@ -21,6 +21,7 @@ class ReleasePackageTests(unittest.TestCase):
                 for name in ('meta.xml', 'MANAGEMENT.md', 'FEATURES.md',
                              'plib/views/scripts/index/management.phtml', 'sbin/guardian-bot-guard.php'):
                     self.assertIn(name, archive.namelist())
+                self.assertNotIn(b'\r\n', archive.read('security/README.md'))
                 for name in ('guardian-helper', 'guardian-manager', 'guardian-updater'):
                     filename = 'sbin/' + name
                     self.assertEqual(archive.read(filename).split(b'\n')[0], b'#!/usr/bin/python3')

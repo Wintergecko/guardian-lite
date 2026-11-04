@@ -1,4 +1,4 @@
-# Guardian Lite 0.9.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.9.1 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
