@@ -1,4 +1,4 @@
-# Guardian Lite 0.23.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.24.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -116,6 +116,10 @@ Referenzen: [AbuseIPDB CHECK](https://docs.abuseipdb.com/#check-endpoint), [Turn
 Unter **Verwaltung & Diagnose** kann ein Administrator die gaengigen System- und Benutzer-Cronpfade manuell pruefen lassen. Der read-only Check sucht nach deutlichen Mustern und prueft sicher gelesene Dateien zusaetzlich mit lokalen ClamAV-Signaturen, sofern ClamAV installiert ist. Fuer den Signaturscan kopiert Guardian die begrenzten Inhalte in ein privates temporaeres Verzeichnis (maximal 4 MiB insgesamt und 45 Sekunden); der Pfad und Signaturname erscheinen im Bericht. Treffer erscheinen auch im Incident-Verlauf. Bei heuristischen Treffern werden nur Datei, Zeilennummer und Regelkennung gezeigt, nicht der Befehlstext. Guardian deaktiviert oder loescht keine Cronjobs.
 
 Auch ClamAV ist nur ein lokaler Signaturnachweis und kein Malware-Vollscan oder Imunify-Cron-Erkennungsersatz. Ein sauberer Bericht beweist nicht, dass alle Cronjobs harmlos sind. Ungewoehnlich grosse Dateien, Symlinks und nicht lesbare Quellen werden ausgelassen; das Ergebnis markiert eine unvollstaendige Pruefung. Fehlt ClamAV, bleibt die Heuristikpruefung verfuegbar und der Signaturstatus wird als nicht ausgefuehrt angezeigt.
+
+## Globale Malware-Ignore-Liste
+
+Unter **Verwaltung & Diagnose** kann ein Administrator einen geprueften SHA-256-Inhalt domainuebergreifend ignorieren. Der Dateiinhalt wird weiterhin von ClamAV gescannt und Treffer bleiben im Bericht sichtbar; Guardian unterdrueckt aber Malwarewarnung und automatische Reparatur fuer genau diesen Hash auf allen gehosteten Domains. Eine globale Ausnahme kann echte Malware auf mehreren Websites verdecken. Globale Hashes sind auf 2.000 Eintraege begrenzt und koennen einzeln entfernt werden.
 
 ## WordPress-Core-Pruefsummen
 

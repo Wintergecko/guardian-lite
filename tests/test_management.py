@@ -656,6 +656,24 @@ class ManagementTests(unittest.TestCase):
         restored = {'fingerprint': {'sha256': sha}}
         self.assertEqual(m.h.annotate_ignored_findings('example.com', [restored]), 0)
         self.assertFalse(restored['ignored'])
+
+    def test_global_ignore_hash_applies_to_all_domains_but_keeps_finding_visible(self):
+        sha = m.digest(b'global known false positive')
+        report = self.malware_report(b'global known false positive')
+        m.global_ignore_hash_set(sha, 'add')
+        finding = {'path': 'cache.php', 'state': 'found', 'fingerprint': {'sha256': sha}}
+        self.assertEqual(m.h.annotate_ignored_findings('other.example', [finding]), 1)
+        self.assertTrue(finding['ignored'])
+        self.assertEqual(finding['ignore_scope'], 'global')
+        self.assertIn(sha, m.public_status()['global_ignore_hashes'])
+        with self.assertRaisesRegex(ValueError, 'Ignore-Liste'):
+            m.repair_one(report['id'], 0)
+        with self.assertRaisesRegex(ValueError, 'globaler Ignore-List-Eintrag'):
+            m.global_ignore_hash_set('invalid', 'add')
+        m.global_ignore_hash_set(sha, 'remove')
+        restored = {'fingerprint': {'sha256': sha}}
+        self.assertEqual(m.h.annotate_ignored_findings('other.example', [restored]), 0)
+        self.assertFalse(restored['ignored'])
     def test_status_never_contains_provider_secrets(self):
         m.cloud_save({'abuseipdb_key': 'ABUSE_SECRET_12345', 'turnstile_sitekey': 'SITE_KEY_12345',
                       'turnstile_secret': 'TURNSTILE_SECRET_12345', 'consent': True})

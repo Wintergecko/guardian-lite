@@ -51,8 +51,14 @@ class ScanUiTests(unittest.TestCase):
         self.assertNotIn('unlink(', scanner)
         self.assertNotIn('rmtree(', scanner)
 
+    def test_global_ignore_is_labeled_and_disables_quarantine(self):
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        self.assertIn("$currentGlobalIgnoreHashes = $management['global_ignore_hashes'] ?? []", view)
+        self.assertIn('Global ignoriert (SHA-256)', view)
+        self.assertIn("['found', 'quarantined'], true) && !$findingIgnored", view)
+
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.23.0')
+        self.assertEqual(version, '0.24.0')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())
