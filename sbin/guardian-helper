@@ -25,6 +25,7 @@ import uuid
 
 ROOT = pathlib.Path('/var/lib/guardian-lite')
 VHOSTS = pathlib.Path('/var/www/vhosts')
+PLESK_BINARIES = ('/usr/sbin/plesk', '/usr/bin/plesk')
 MODSEC_LOG = pathlib.Path('/var/log/modsec_audit.log')
 CLAM_PATHS = ('/usr/bin/clamscan', '/usr/local/bin/clamscan', '/bin/clamscan')
 FAIL2BAN_PATHS = ('/usr/bin/fail2ban-client', '/usr/local/bin/fail2ban-client', '/bin/fail2ban-client')
@@ -76,19 +77,56 @@ def valid_domain(domain):
             all(DOMAIN_LABEL.fullmatch(s) for s in domain.split('.')))
 
 
-def site_docroot(domain):
+def plesk_hosting_path(domain):
+    """Read the authoritative document root and webspace home from Plesk.
+
+    Plesk domains may share a subscription and may not have an httpdocs folder
+    beneath their own hostname. We query the hosting record using a fixed SQL
+    statement instead of guessing a filesystem path. Input is validated before
+    it reaches the command, and nothing is passed through a shell.
+    """
     if not valid_domain(domain):
         raise ValueError('Ungueltiger Domainname.')
-    root = VHOSTS / domain
+    plesk = binary(PLESK_BINARIES)
+    if not plesk:
+        raise ValueError('Plesk-Kommando nicht gefunden; Hostingpfad nicht bestimmbar.')
+    sql = ("SELECT h.www_root, u.home FROM domains d "
+           "JOIN hosting h ON h.dom_id = d.id "
+           "JOIN sys_users u ON u.id = h.sys_user_id "
+           "WHERE d.name = '" + domain + "' LIMIT 1")
+    result = execute([plesk, 'db', '-Ne', sql], timeout=12)
+    if result is None or result.returncode:
+        raise ValueError('Plesk-Hostinginformationen nicht lesbar (plesk db).')
+    rows = result.stdout.strip().splitlines()
+    if len(rows) != 1:
+        raise ValueError('Domain hat kein eindeutiges aktives Website-Hosting in Plesk.')
+    columns = rows[0].split('\t')
+    if len(columns) != 2 or any(not p or p == 'NULL' or len(p) > 2048 for p in columns):
+        raise ValueError('Ungueltige Document-Root-Angabe in Plesk.')
+    return tuple(columns)
+
+
+def site_docroot(domain):
+    """Resolve only the configured document root inside its own webspace.
+
+    Resolving symlinks is intentional: their final target must remain strictly
+    inside the domain's Plesk subscription, not merely inside all vhosts.
+    Root-owned targets are never scanned with root privileges.
+    """
+    configured_root, configured_home = plesk_hosting_path(domain)
+    if not pathlib.PurePosixPath(configured_root).is_absolute() or not pathlib.PurePosixPath(configured_home).is_absolute():
+        raise ValueError('Plesk-Hostingpfade muessen absolut sein.')
     try:
-        site = root.resolve(strict=True)
-        target = (root / 'httpdocs').resolve(strict=True)
         base = VHOSTS.resolve(strict=True)
+        home = pathlib.Path(configured_home).resolve(strict=True)
+        target = pathlib.Path(configured_root).resolve(strict=True)
     except (OSError, RuntimeError):
-        raise ValueError('Standard-Document-Root nicht gefunden.')
-    if (os.path.commonpath((str(base), str(site))) != str(base) or
-        os.path.commonpath((str(site), str(target))) != str(site) or not target.is_dir()):
-        raise ValueError('Scan-Ziel ausserhalb des Plesk-vhosts abgelehnt.')
+        raise ValueError('Plesk-Document-Root existiert nicht.')
+    if (home == base or target == home or
+            os.path.commonpath((str(base), str(home))) != str(base) or
+            os.path.commonpath((str(home), str(target))) != str(home) or
+            not home.is_dir() or not target.is_dir()):
+        raise ValueError('Document-Root ausserhalb des Plesk-Webspaces abgelehnt.')
     st = target.stat()
     if st.st_uid == 0:
         raise ValueError('Document-Root ist root-eigen; Scan als root wird abgelehnt.')

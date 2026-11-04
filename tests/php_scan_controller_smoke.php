@@ -17,6 +17,7 @@ class pm_Settings {
 }
 class pm_DomainItem {
     public function getName() { return 'example.com'; }
+    public function hasHosting() { return true; }
 }
 class pm_Domain {
     public static function getAllDomains() { return [new pm_DomainItem()]; }

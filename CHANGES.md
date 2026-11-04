@@ -1,3 +1,12 @@
+## 0.6.3 – Plesk-Document-Root-Resolver und automatische Release-Veröffentlichung
+
+- Scanner, geplante Scans, Dateiwache und Quarantaene verwenden den zu jeder Domain in der Plesk-Hosting-Datenbank gespeicherten Document-Root statt `/var/www/vhosts/<domain>/httpdocs`.
+- Zusatzdomains in gemeinsamen Abonnements und individuell konfigurierte Document-Roots werden unterstuetzt.
+- Sicherheitspruefung: Kanonischer Pfad muss unter dem zugeordneten Plesk-Webspace liegen, ausserhalb liegende Symlinks sowie root-eigene Ziele werden abgelehnt.
+- Plesk-Domainliste zeigt nur Domains mit Website-Hosting; der letzte manuelle Scan-Zielname bleibt bei der Rueckmeldung erhalten.
+- Neue Tests fuer Zusatzdomains, Webspace-Isolation und Plesk-Datenbankantworten.
+- Diese Version wird per freigegebenem GitHub-Release-Workflow nach bestandenen Tests veroeffentlicht.
+
 ## 0.6.2 – Domainauswahl und Scanplanung in Plesk
 
 - Alle Formularaktionen benutzen die offizielle Plesk-URL via pm_Context::getActionUrl.

@@ -31,8 +31,15 @@ class ScanUiTests(unittest.TestCase):
         view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
         self.assertIn('guardian-action-feedback', view)
 
+    def test_hosted_only_and_preserves_selected_domain(self):
+        controller = (ROOT / 'plib/controllers/IndexController.php').read_text()
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        self.assertIn("$domain->hasHosting()", controller)
+        self.assertIn("guardian_scan_selected_domain", controller)
+        self.assertIn("$this->scanSelectedDomain === $domain", view)
+
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.6.2')
+        self.assertEqual(version, '0.6.3')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
-            self.assertIn('0.6.2', (ROOT / file).read_text())
+            self.assertIn('0.6.3', (ROOT / file).read_text())

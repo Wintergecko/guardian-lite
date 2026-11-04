@@ -23,7 +23,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.6.2</span></h1>
+      <h1>Guardian Lite <span>v0.6.3</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -99,14 +99,14 @@ $action = static function ($name) use ($esc) {
           <?= $esc($this->malwareAction['message']) ?>
         </div>
       <?php endif; ?>
-      <p>Die Standard-Document-Roots werden mit ClamAV unter der Website-UID geprueft. Nur ein Scan gleichzeitig.</p>
+      <p>Die in Plesk hinterlegten Document-Roots werden mit ClamAV unter der Website-UID geprueft. Nur ein Scan gleichzeitig.</p>
       <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'scan')) ?>">
         <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
         <label for="guardian-domain">Domain</label>
         <div class="guardian-formline">
           <select name="domain" id="guardian-domain" aria-describedby="guardian-domain-selection" required <?= empty($this->domains) ? 'disabled' : '' ?>>
-            <option value="" selected disabled>Bitte Domain auswaehlen</option>
-            <?php foreach ($this->domains as $domain): ?><option value="<?= $esc($domain) ?>"><?= $esc($domain) ?></option><?php endforeach; ?>
+            <option value="" disabled <?= $this->scanSelectedDomain === '' ? 'selected' : '' ?>>Bitte Domain auswaehlen</option>
+            <?php foreach ($this->domains as $domain): ?><option value="<?= $esc($domain) ?>" <?= $this->scanSelectedDomain === $domain ? 'selected' : '' ?>><?= $esc($domain) ?></option><?php endforeach; ?>
           </select>
           <button type="submit" <?= empty($this->domains) || empty($clam['installed']) ? 'disabled' : '' ?>>Jetzt scannen</button>
         </div>
@@ -196,7 +196,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.6.2</h2>
+    <h2>GitHub-Updater · v0.6.3</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.

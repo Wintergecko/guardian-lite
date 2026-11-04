@@ -6,6 +6,7 @@ import pathlib
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 helper = importlib.machinery.SourceFileLoader('guardian_monitor_integration', str(ROOT/'sbin/guardian-helper')).load_module()
@@ -29,6 +30,9 @@ class InotifyIntegrationTests(unittest.TestCase):
                 os.chown(web, 65534, 65534)
                 helper.prepare_dir()
                 helper.write_json(helper.MONITOR_CONFIG, {'domains': {'example.com': True}})
+                # Stub the authoritative Plesk metadata for this isolated test.
+                original_lookup = helper.plesk_hosting_path
+                helper.plesk_hosting_path = lambda domain: (str(web), str(web.parent))
                 worker = multiprocessing.Process(target=helper.watch_worker, args=('example.com',))
                 worker.start()
                 for _ in range(80):
@@ -57,5 +61,7 @@ class InotifyIntegrationTests(unittest.TestCase):
                 if worker is not None and worker.is_alive():
                     worker.terminate()
                     worker.join(timeout=3)
+                if 'original_lookup' in locals():
+                    helper.plesk_hosting_path = original_lookup
                 (helper.ROOT, helper.VHOSTS, helper.INCIDENT_LOG,
                  helper.ALERT_FILE, helper.MONITOR_CONFIG) = prev

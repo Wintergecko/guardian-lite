@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.6.2';
+    private const GUARDIAN_VERSION = '0.6.3';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -39,7 +39,7 @@ class IndexController extends pm_Controller_Action
     private function isDomainKnown($name)
     {
         foreach (pm_Domain::getAllDomains() as $domain) {
-            if ($domain->getName() === $name) {
+            if ($domain->getName() === $name && $domain->hasHosting()) {
                 return true;
             }
         }
@@ -201,6 +201,7 @@ class IndexController extends pm_Controller_Action
         $this->view->waf = [];
         $this->view->wafError = null;
         $this->view->domains = [];
+        $this->view->scanSelectedDomain = '';
         $this->view->updateRepo = $this->updateRepository();
         $this->view->updateResult = null;
         $this->view->updateCheckAt = null;
@@ -257,6 +258,9 @@ class IndexController extends pm_Controller_Action
         }
         try {
             foreach (pm_Domain::getAllDomains() as $domain) {
+                if (!$domain->hasHosting()) {
+                    continue;
+                }
                 $name = $domain->getName();
                 if (is_string($name) && strlen($name) <= 253 &&
                     preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i', $name)) {
@@ -265,6 +269,8 @@ class IndexController extends pm_Controller_Action
             }
             $this->view->domains = array_values(array_unique($this->view->domains));
             sort($this->view->domains, SORT_NATURAL | SORT_FLAG_CASE);
+            $remembered = (string)pm_Settings::get('guardian_scan_selected_domain');
+            $this->view->scanSelectedDomain = in_array($remembered, $this->view->domains, true) ? $remembered : '';
         } catch (Exception $e) {
             $this->view->helperError = 'Domainliste konnte nicht gelesen werden: ' . $e->getMessage();
         }
@@ -305,7 +311,7 @@ class IndexController extends pm_Controller_Action
             $this->storeMalwareAction($operation, $domain, true, $message);
             $this->_status->addMessage('info', $message);
         } catch (Exception $e) {
-            $error = 'Aktion fehlgeschlagen: ' . $e->getMessage();
+            $error = $e->getMessage();
             $this->storeMalwareAction($operation, $domain, false, $error);
             $this->_status->addMessage('error', $error);
         }
@@ -330,6 +336,7 @@ class IndexController extends pm_Controller_Action
         if (!$this->isDomainKnown($domain)) {
             throw new pm_Exception('Unbekannte Domain.');
         }
+        pm_Settings::set('guardian_scan_selected_domain', $domain);
         $this->finishMalwareAction('scan', $domain, ['scan-start', $domain], 'Malware-Scan fuer ' . $domain . ' gestartet.');
     }
 
@@ -341,6 +348,7 @@ class IndexController extends pm_Controller_Action
         if (!$this->isDomainKnown($domain) || !in_array($mode, ['on', 'off'], true)) {
             throw new pm_Exception('Ungueltige Scan-Planung.');
         }
+        pm_Settings::set('guardian_scan_selected_domain', $domain);
         $this->finishMalwareAction('schedule', $domain, ['schedule-set', $domain, $mode], 'Scan-Planung fuer ' . $domain . ' ' . ($mode === 'on' ? 'aktiviert.' : 'deaktiviert.'));
     }
 

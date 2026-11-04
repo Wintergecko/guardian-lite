@@ -212,3 +212,8 @@ Wenn das Aktivieren fehlschlaegt, den Text im rot markierten Statusfeld und die 
 Die Domainauswahl besitzt ein kontrastreiches natives Select und eine zusaetzliche Textausgabe.
 Ein gruenes Erfolgssignal bestaetigt die Rueckgabe von `guardian-helper`, nicht die
 Ausfuehrung des geplanten Scans. Der geplante Scan erfordert weiterhin den Plesk-Scheduler.
+
+
+### Plesk-Document-Roots (ab 0.6.3)
+
+Der privilegierte Scanner liest fuer jede gehostete Domain den konfigurierten `hosting.www_root` sowie `sys_users.home` aus der lokalen Plesk-Datenbank (`plesk db -Ne`). Das unterstuetzt Zusatzdomains und geaenderte Document-Roots innerhalb einer Subscription. Es gibt keinen Fallback auf erratene Pfade. Vor dem Scan werden der kanonische Pfad, die Webspace-Grenze und ein nicht-root-Eigentuemer geprueft. Domain-Eingaben werden strikt validiert, die CLI wird ohne Shell aufgerufen. Auf Servern ohne lesbare Plesk-Hosting-Daten wird der Scan mit Fehlermeldung abgebrochen.
