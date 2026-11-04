@@ -3,7 +3,8 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.6.1';
+    private const GUARDIAN_VERSION = '0.6.2';
+    private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
 
@@ -187,6 +188,12 @@ class IndexController extends pm_Controller_Action
         $this->view->scan = null;
         $this->view->history = [];
         $this->view->schedules = [];
+        $this->view->malwareAction = null;
+        $lastAction = json_decode((string)pm_Settings::get(self::LAST_MALWARE_ACTION_KEY), true);
+        if (is_array($lastAction) && isset($lastAction['at']) && is_numeric($lastAction['at'])
+            && time() - (int)$lastAction['at'] < 86400) {
+            $this->view->malwareAction = $lastAction;
+        }
         $this->view->watch = [];
         $this->view->realtime = [];
         $this->view->incidents = [];
@@ -263,6 +270,48 @@ class IndexController extends pm_Controller_Action
         }
     }
 
+    // Persist the most recent scan/schedule result because Plesk may not show
+    // global status messages after a redirect into a JavaScript tab.
+    private function storeMalwareAction($operation, $domain, $ok, $message)
+    {
+        $record = [
+            'operation' => $operation,
+            'domain' => $domain,
+            'ok' => (bool)$ok,
+            'message' => substr((string)$message, 0, 240),
+            'at' => time(),
+        ];
+        pm_Settings::set(self::LAST_MALWARE_ACTION_KEY,
+            json_encode($record, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE));
+    }
+
+    private function redirectToMalware()
+    {
+        $this->redirect(pm_Context::getBaseUrl() . '#guardian-tab-malware');
+    }
+
+    private function finishMalwareAction($operation, $domain, $args, $message)
+    {
+        try {
+            $result = $this->helper($args);
+            if ($operation === 'schedule') {
+                // Do not claim success if the helper acknowledged a different domain/state.
+                $expected = $args[2] === 'on';
+                if (($result['domain'] ?? '') !== $domain
+                    || !isset($result['enabled']) || (bool)$result['enabled'] !== $expected) {
+                    throw new RuntimeException('Scan-Planung konnte nicht bestaetigt werden.');
+                }
+            }
+            $this->storeMalwareAction($operation, $domain, true, $message);
+            $this->_status->addMessage('info', $message);
+        } catch (Exception $e) {
+            $error = 'Aktion fehlgeschlagen: ' . $e->getMessage();
+            $this->storeMalwareAction($operation, $domain, false, $error);
+            $this->_status->addMessage('error', $error);
+        }
+        $this->redirectToMalware();
+    }
+
     private function finishAction($args, $message)
     {
         try {
@@ -281,7 +330,7 @@ class IndexController extends pm_Controller_Action
         if (!$this->isDomainKnown($domain)) {
             throw new pm_Exception('Unbekannte Domain.');
         }
-        $this->finishAction(['scan-start', $domain], 'Malware-Scan fuer ' . $domain . ' gestartet.');
+        $this->finishMalwareAction('scan', $domain, ['scan-start', $domain], 'Malware-Scan fuer ' . $domain . ' gestartet.');
     }
 
     public function scheduleAction()
@@ -292,7 +341,7 @@ class IndexController extends pm_Controller_Action
         if (!$this->isDomainKnown($domain) || !in_array($mode, ['on', 'off'], true)) {
             throw new pm_Exception('Ungueltige Scan-Planung.');
         }
-        $this->finishAction(['schedule-set', $domain, $mode], 'Scan-Planung aktualisiert.');
+        $this->finishMalwareAction('schedule', $domain, ['schedule-set', $domain, $mode], 'Scan-Planung fuer ' . $domain . ' ' . ($mode === 'on' ? 'aktiviert.' : 'deaktiviert.'));
     }
 
     public function quarantineAction()

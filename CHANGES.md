@@ -1,3 +1,13 @@
+## 0.6.2 – Domainauswahl und Scanplanung in Plesk
+
+- Alle Formularaktionen benutzen die offizielle Plesk-URL via pm_Context::getActionUrl.
+- Erzwungene kontrastreiche Auswahlfeld-Farben, unabhaengig von Plesk-Skins; ausgewaehlte Domain wird zusaetzlich als Text angezeigt.
+- Opt-in-Planungsaktionen zeigen Erfolg oder Fehler direkt im Malware-Tab, auch nach einem Redirect.
+- Der Malware-Tab bleibt nach Scan-/Planungsaktionen geoeffnet.
+- Scanplanung validiert die Antwort des privilegierten Helfers, bevor Erfolg angezeigt wird.
+- Tests fuer Plesk-Formular-URLs, Domainanzeige, Statusfeedback und Version.
+- Keine automatisch aktivierten Scans, WAF- oder PHP-Schutzregeln. Kein echter VPS-End-to-End-Test.
+
 ## 0.6.1 – Update-Pruefung zeigt zuverlaessig Rueckmeldung
 
 - Update-Formular nutzt offizielle Plesk-Action-URLs.

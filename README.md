@@ -202,3 +202,13 @@ freigegeben; die Update-Engine prueft das Release beim Start nochmals.
 
 Bei Verbindungsschwierigkeiten wird die Fehlermeldung der privilegierten
 Updater-Engine angezeigt. Es wird **nicht** automatisch installiert.
+
+
+### Plesk Domainauswahl/Scanplanung (v0.6.2)
+
+Alle Formulare verwenden nun `pm_Context::getActionUrl`. Im Tab Malware & Dateien wird nach
+Klick auf Aktivieren/Deaktivieren die Serverantwort (Erfolg oder Fehler) direkt angezeigt.
+Wenn das Aktivieren fehlschlaegt, den Text im rot markierten Statusfeld und die Plesk-Logs pruefen.
+Die Domainauswahl besitzt ein kontrastreiches natives Select und eine zusaetzliche Textausgabe.
+Ein gruenes Erfolgssignal bestaetigt die Rueckgabe von `guardian-helper`, nicht die
+Ausfuehrung des geplanten Scans. Der geplante Scan erfordert weiterhin den Plesk-Scheduler.

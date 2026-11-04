@@ -78,6 +78,23 @@
         activate(sections[next].id, true, true);
       });
     });
+    // Show a readable domain independently of native select styling and Plesk skins.
+    var domainSelect = document.getElementById('guardian-domain');
+    var selectedName = document.getElementById('guardian-domain-selection-value');
+    if (domainSelect && selectedName) {
+      function showSelectedDomain() {
+        selectedName.textContent = domainSelect.value || 'Keine';
+      }
+      domainSelect.addEventListener('change', showSelectedDomain);
+      showSelectedDomain();
+    }
+    // Visible progress while Plesk processes the form; server also persists feedback.
+    Array.prototype.forEach.call(document.querySelectorAll('.guardian-schedule-form'), function (form) {
+      form.addEventListener('submit', function () {
+        var button = form.querySelector('button[type="submit"]');
+        if (button) { button.textContent = 'Wird gespeichert ...'; button.setAttribute('aria-busy', 'true'); }
+      });
+    });
     // Always tell the administrator that the update check form was submitted.
     // The server response remains a normal POST/redirect: no JavaScript required.
     var checkForm = document.getElementById('guardian-update-check-form');

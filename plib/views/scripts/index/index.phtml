@@ -23,7 +23,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.6.1</span></h1>
+      <h1>Guardian Lite <span>v0.6.2</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -93,17 +93,25 @@ $action = static function ($name) use ($esc) {
   <div class="guardian-grid guardian-lower" id="guardian-scan">
     <section class="guardian-card">
       <h2>Malware-Scan starten</h2>
+      <?php if (is_array($this->malwareAction) && !empty($this->malwareAction['message'])): ?>
+        <div class="guardian-action-feedback <?= !empty($this->malwareAction['ok']) ? 'is-ok' : 'is-error' ?>" role="status" aria-live="polite">
+          <strong><?= !empty($this->malwareAction['ok']) ? 'Aktion erfolgreich' : 'Aktion fehlgeschlagen' ?>:</strong>
+          <?= $esc($this->malwareAction['message']) ?>
+        </div>
+      <?php endif; ?>
       <p>Die Standard-Document-Roots werden mit ClamAV unter der Website-UID geprueft. Nur ein Scan gleichzeitig.</p>
-      <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'scan'])) ?>">
+      <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'scan')) ?>">
         <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
         <label for="guardian-domain">Domain</label>
         <div class="guardian-formline">
-          <select name="domain" id="guardian-domain" required <?= empty($this->domains) || empty($clam['installed']) ? 'disabled' : '' ?>>
-            <option value="">Domain waehlen</option>
+          <select name="domain" id="guardian-domain" aria-describedby="guardian-domain-selection" required <?= empty($this->domains) ? 'disabled' : '' ?>>
+            <option value="" selected disabled>Bitte Domain auswaehlen</option>
             <?php foreach ($this->domains as $domain): ?><option value="<?= $esc($domain) ?>"><?= $esc($domain) ?></option><?php endforeach; ?>
           </select>
           <button type="submit" <?= empty($this->domains) || empty($clam['installed']) ? 'disabled' : '' ?>>Jetzt scannen</button>
         </div>
+        <p class="guardian-small" id="guardian-domain-selection" aria-live="polite">Ausgewaehlte Domain: <strong id="guardian-domain-selection-value">Keine</strong></p>
+        <?php if (empty($clam['installed'])): ?><p class="guardian-alert">ClamAV ist nicht installiert. Du kannst Domains auswaehlen, aber erst nach Installation von ClamAV scannen.</p><?php endif; ?>
       </form>
       <h3>Automatische Scans</h3>
       <p class="guardian-small">Opt-in pro Domain. Der Plesk-Scheduler prueft stuendlich auf faellige Domains und startet maximal einen Scan je Durchlauf (mindestens 24 Stunden Abstand je Domain).</p>
@@ -111,7 +119,7 @@ $action = static function ($name) use ($esc) {
       <div class="guardian-scroll"><table><thead><tr><th>Domain</th><th>Automatisch</th><th>Aktion</th></tr></thead><tbody>
         <?php foreach ($this->domains as $domain): $on = isset($schedules[$domain]); ?>
           <tr><td><?= $esc($domain) ?></td><td><?= $on ? 'Aktiv' : 'Aus' ?></td><td>
-            <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'schedule'])) ?>">
+            <form class="guardian-schedule-form" method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'schedule')) ?>">
               <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
               <input type="hidden" name="domain" value="<?= $esc($domain) ?>" />
               <input type="hidden" name="mode" value="<?= $on ? 'off' : 'on' ?>" />
@@ -140,7 +148,7 @@ $action = static function ($name) use ($esc) {
               <td>
                 <?php if (in_array($finding['state'], ['found', 'quarantined'], true)): ?>
                   <?php $isFound = $finding['state'] === 'found'; ?>
-                  <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => $isFound ? 'quarantine' : 'restore'])) ?>" onsubmit="return confirm('<?= $isFound ? 'Datei wirklich von der Website entfernen und in Quarantaene verschieben? Die Website kann danach nicht mehr funktionieren.' : 'Moeglicherweise infizierte Datei wirklich wiederherstellen?' ?>');">
+                  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', $isFound ? 'quarantine' : 'restore')) ?>" onsubmit="return confirm('<?= $isFound ? 'Datei wirklich von der Website entfernen und in Quarantaene verschieben? Die Website kann danach nicht mehr funktionieren.' : 'Moeglicherweise infizierte Datei wirklich wiederherstellen?' ?>');">
                     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
                     <input type="hidden" name="jobid" value="<?= $esc($scan['id']) ?>" />
                     <input type="hidden" name="index" value="<?= $esc($i) ?>" />
@@ -172,7 +180,7 @@ $action = static function ($name) use ($esc) {
       <h2>IP manuell mit Fail2Ban verwalten</h2>
       <p class="guardian-alert">Vorsicht: Du kannst deine eigene Administrator-IP sperren. Keine automatische IP-Reputation oder Bot-Challenge.</p>
       <?php if (!empty($f2b['jails'])): ?>
-        <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'ip'])) ?>" onsubmit="return confirm('Fail2Ban-Aktion wirklich ausfuehren? Eigene Admin-IP kontrollieren!');">
+        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'ip')) ?>" onsubmit="return confirm('Fail2Ban-Aktion wirklich ausfuehren? Eigene Admin-IP kontrollieren!');">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
           <label for="guardian-jail">Jail</label>
           <select name="jail" id="guardian-jail" required>
@@ -188,7 +196,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.6.1</h2>
+    <h2>GitHub-Updater · v0.6.2</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -284,7 +292,7 @@ $action = static function ($name) use ($esc) {
         <tr><td><?= $esc($domain) ?></td>
         <td><?= $enabled ? (!empty($monitor['running']) ? $esc($monitor['state']) : 'Aktiviert, aber Prozess nicht erreichbar') : 'Aus' ?></td>
         <td><?= $enabled ? $esc($monitor['watch_count'] ?? 0) : '–' ?></td>
-        <td><form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'monitor'])) ?>">
+        <td><form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'monitor')) ?>">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
           <input type="hidden" name="domain" value="<?= $esc($domain) ?>" />
           <input type="hidden" name="mode" value="<?= $enabled ? 'off' : 'on' ?>" />
@@ -294,7 +302,7 @@ $action = static function ($name) use ($esc) {
     </tbody></table></div>
     <h3>E-Mail-Warnungen</h3>
     <p class="guardian-small">Optional bei ClamAV-Malwaremeldungen, mit Benachrichtigungslimit. Voraussetzung: lokaler sendmail-kompatibler Mail-Transport.</p>
-    <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'alerts'])) ?>">
+    <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'alerts')) ?>">
       <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
       <label for="guardian-alert-recipient">Empfaenger (E-Mail)</label>
       <input type="text" id="guardian-alert-recipient" name="recipient" maxlength="254" value="<?= $esc($this->alerts['recipient'] ?? '') ?>" placeholder="admin@example.com" />
@@ -305,14 +313,14 @@ $action = static function ($name) use ($esc) {
     </form>
     <p>Status: <strong><?= !empty($this->alerts['enabled']) ? 'E-Mail-Warnungen aktiviert' : 'Deaktiviert' ?></strong></p>
     <?php if (!empty($this->alerts['enabled'])): ?>
-      <form method="post" action="<?= $esc($this->url(['controller' => 'index', 'action' => 'alerts-test'])) ?>">
+      <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'alerts-test')) ?>">
         <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
         <button type="submit">Testmail an Mail-Transport uebergeben</button>
       </form>
     <?php endif; ?>
     <h3>Incident-Audit-Log</h3>
     <p>Nur Ereignis-Metadaten, keine HTTP-Bodies, keine Malware-Inhalte. Maximal 25 aktuelle Ereignisse in der Tabelle. Logs liegen root-privat auf dem Server.</p>
-    <p><a href="<?= $esc($this->url(['controller' => 'index', 'action' => 'incidents-export'])) ?>">Letzte 200 Ereignisse als JSON exportieren</a></p>
+    <p><a href="<?= $esc(pm_Context::getActionUrl('index', 'incidents-export')) ?>">Letzte 200 Ereignisse als JSON exportieren</a></p>
     <div class="guardian-scroll"><table><thead><tr><th>Zeit</th><th>Stufe</th><th>Typ</th><th>Domain / Pfad</th><th>Hinweis</th></tr></thead><tbody>
       <?php foreach ($this->incidents as $incident): ?>
         <tr><td><?= $esc($incident['time'] ?? '') ?></td><td><?= $esc($incident['severity'] ?? '') ?></td>
@@ -358,6 +366,6 @@ $action = static function ($name) use ($esc) {
     </div>
     <p class="guardian-small">Volumetrische DDoS-Abwehr muss beim Provider oder vorgelagerten DDoS-/CDN-Dienst erfolgen.</p>
   </section>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.6.1" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.6.2" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie oder automatische Bereinigung.</footer>
 </div>
