@@ -24,7 +24,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.22.0</span></h1>
+      <h1>Guardian Lite <span>v0.23.0</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -225,8 +225,8 @@ $action = static function ($name) use ($esc) {
       <?php else: ?><p>Kein aktives Fail2Ban-Jail gefunden.</p><?php endif; ?>
     </section>
     <section class="guardian-card">
-      <h2>Plesk-Firewall: Guardian-IP-Sperrliste</h2>
-      <p>Verwendet Plesks eigene Firewall-CLI. Vor jeder Sperre wird die aktuelle Admin-Verbindungs-IP geprueft. CIDR-Netze sind auf IPv4 /24 und IPv6 /64 begrenzt.</p>
+      <h2>Plesk-Firewall: Guardian-IP- und Portregeln</h2>
+      <p>Verwendet Plesks eigene Firewall-CLI und zeigt nur Guardian-Regeln. IP-Sperren begrenzen CIDR auf IPv4 /24 und IPv6 /64. Portregeln gelten nur fuer eine einzelne Quell-IP; eine Portfreigabe kann keine andere Plesk- oder Provider-Sperre ueberstimmen.</p>
       <?php if (empty($fw['installed'])): ?>
         <p class="guardian-alert">Plesk Firewall ist nicht installiert. Guardian installiert oder aktiviert sie nicht.</p>
       <?php elseif (empty($fw['plesk_firewall_active'])): ?>
@@ -234,12 +234,14 @@ $action = static function ($name) use ($esc) {
       <?php elseif (empty($fw['available'])): ?>
         <p class="guardian-alert">Die Plesk-Regelliste ist nicht lesbar; Aenderungen sind deaktiviert.</p>
       <?php else: ?>
-        <div class="guardian-scroll"><table><thead><tr><th>Regel</th><th>Netz</th><th>Ablauf</th><th>Aktion</th></tr></thead><tbody>
+        <div class="guardian-scroll"><table><thead><tr><th>Regel</th><th>Quelle</th><th>Port</th><th>Ablauf</th><th>Aktion</th></tr></thead><tbody>
         <?php foreach (isset($fw['rules']) && is_array($fw['rules']) ? $fw['rules'] : [] as $rule): ?>
-          <tr><td><?= $esc($rule['name'] ?? '') ?></td><td><?= $esc($rule['network'] ?? '') ?></td><td><?= !empty($rule['expires_at']) ? $esc($rule['expires_at']) . ' UTC' : 'Dauerhaft' ?></td><td>
-            <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese Guardian-Sperrregel entfernen? Die Aenderung wird erst nach Verbindungstest bestaetigt.');">
-              <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="unban" />
-              <input type="hidden" name="network" value="<?= $esc($rule['network'] ?? '') ?>" /><button class="guardian-small-button" type="submit">Entsperren</button>
+          <tr><td><?= $esc(($rule['kind'] ?? '') === 'port' ? (($rule['action'] ?? '') === 'allow' ? 'Portfreigabe' : 'Portsperre') : 'IP-Sperre') ?></td><td><?= $esc($rule['network'] ?? '') ?></td><td><?= $esc($rule['ports'] ?? 'Alle') ?></td><td><?= !empty($rule['expires_at']) ? $esc($rule['expires_at']) . ' UTC' : 'Dauerhaft' ?></td><td>
+            <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese Guardian-Firewallregel entfernen? Die Aenderung wird erst nach Verbindungstest bestaetigt.');">
+              <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+              <?php if (($rule['kind'] ?? '') === 'port'): ?><input type="hidden" name="operation" value="port-remove" /><input type="hidden" name="rule_id" value="<?= $esc($rule['id'] ?? '') ?>" />
+              <?php else: ?><input type="hidden" name="operation" value="unban" /><input type="hidden" name="network" value="<?= $esc($rule['network'] ?? '') ?>" /><?php endif; ?>
+              <button class="guardian-small-button" type="submit">Entfernen</button>
             </form>
           </td></tr>
         <?php endforeach; ?>
@@ -251,11 +253,17 @@ $action = static function ($name) use ($esc) {
           <label for="guardian-firewall-ttl">Sperrdauer</label>
           <div class="guardian-formline"><input id="guardian-firewall-network" name="network" type="text" maxlength="80" placeholder="203.0.113.25 oder 2001:db8::/64" required /><select id="guardian-firewall-ttl" name="ttl"><option value="0">Dauerhaft</option><option value="3600">1 Stunde</option><option value="86400">24 Stunden</option><option value="604800">7 Tage</option></select><button class="guardian-danger" type="submit">Sperrregel vorbereiten</button></div>
         </form>
+        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Plesk-Portregel vorbereiten? Vor der Bestaetigung muss der Zugriff aus einer getrennten Verbindung getestet werden.');">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+          <label for="guardian-firewall-port-network">Quell-IP (Freigaben nur fuer einzelne IPs)</label>
+          <div class="guardian-formline"><input id="guardian-firewall-port-network" name="network" type="text" maxlength="80" placeholder="198.51.100.25" required /><input id="guardian-firewall-port" name="port" type="number" min="1" max="65535" placeholder="2222" required /><select name="protocol" aria-label="Transportprotokoll"><option value="tcp">TCP</option><option value="udp">UDP</option></select><select name="operation" aria-label="Portaktion"><option value="port-allow">Port fuer Quell-IP erlauben</option><option value="port-deny">Port fuer Quellnetz sperren</option></select><button type="submit">Portregel vorbereiten</button></div>
+          <p class="guardian-small">Portfreigaben akzeptieren nur eine einzelne IP-Adresse. Plesk kann benutzerdefinierte Regeln je nach Systemrichtlinie anders auswerten; zuerst getrennt testen und nur danach bestaetigen.</p>
+        </form>
       <?php endif; ?>
       <?php $pendingFirewall = isset($fw['pending']) && is_array($fw['pending']) ? $fw['pending'] : []; ?>
       <?php if (($pendingFirewall['state'] ?? '') === 'awaiting_confirmation'): ?>
         <?php $pendingTtl = (int)($pendingFirewall['ttl_seconds'] ?? 0); $pendingTtlLabel = $pendingTtl === 3600 ? '1 Stunde' : ($pendingTtl === 86400 ? '24 Stunden' : ($pendingTtl === 604800 ? '7 Tage' : 'dauerhaft')); ?>
-        <div class="guardian-alert"><strong>Aenderung wartet auf Bestaetigung:</strong> <?= $esc($pendingFirewall['action'] ?? '') ?> <?= $esc($pendingFirewall['network'] ?? '') ?> · Sperrdauer: <?= $esc($pendingTtlLabel) ?>. Teste erst in einer unabhaengigen SSH- oder Admin-Verbindung, ob der Server erreichbar ist. Ohne Bestaetigung rollt Plesk nach 60 Sekunden zurueck.</div>
+        <div class="guardian-alert"><strong>Aenderung wartet auf Bestaetigung:</strong> <?= $esc($pendingFirewall['action'] ?? '') ?> <?= $esc($pendingFirewall['network'] ?? '') ?><?php if (!empty($pendingFirewall['port'])): ?> · <?= (int)$pendingFirewall['port'] ?>/<?= $esc($pendingFirewall['protocol'] ?? '') ?><?php endif; ?> · Sperrdauer: <?= $esc($pendingTtlLabel) ?>. Teste erst in einer unabhaengigen SSH- oder Admin-Verbindung, ob der Server erreichbar ist. Ohne Bestaetigung rollt Plesk nach 60 Sekunden zurueck.</div>
         <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Hast du eine unabhaengige Verbindung zum Server getestet?');">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="confirm" />
           <label><input type="checkbox" name="tested" value="1" required /> Unabhaengige SSH- oder Admin-Verbindung erfolgreich getestet</label><button type="submit">Plesk-Aenderung bestaetigen</button>
@@ -270,7 +278,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.22.0</h2>
+    <h2>GitHub-Updater · v0.23.0</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -445,6 +453,6 @@ $action = static function ($name) use ($esc) {
     <p class="guardian-small">Volumetrische DDoS-Abwehr muss beim Provider oder vorgelagerten DDoS-/CDN-Dienst erfolgen.</p>
   </section>
   <?php include __DIR__ . '/management.phtml'; ?>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.22.0" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.23.0" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

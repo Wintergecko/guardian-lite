@@ -1,4 +1,11 @@
-# Guardian Lite v0.22.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.23.0 – Sicherheitsmodell und Grenzen
+
+## 0.23.0 – Plesk-Portregeln
+
+- Portregeln schreiben ausschliesslich eingehende Guardian-eigene Regeln ueber `plesk ext firewall`; Port-Allow ist auf eine einzelne Quell-IP begrenzt, Port-Deny auf die bestehende CIDR-Obergrenze.
+- Port-Deny lehnt ein Quellnetz ab, das die aktuelle Admin-Verbindungs-IP enthaelt. Plesk-Regelauswertung kann globale Systemrichtlinien nicht zwingend ueberstimmen.
+- Aenderungen erfordern Plesks 60-Sekunden-Bestaetigungsablauf und getrennten Verbindungstest. Die UI entfernt Portregeln nur per numerischer Guardian-Regel-ID. Kein automatisches Entfernen oder Aendern fremder Regeln.
+- Die Deinstallation wird blockiert, solange Guardian-Port-Allow-Regeln aktiv sind; diese muessen einzeln entfernt und mit Verbindungstest bestaetigt werden.
 
 ## 0.22.0 – Cronjob-ClamAV-Signaturscan
 
