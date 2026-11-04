@@ -1,5 +1,6 @@
 """Isolated management regression tests. No live Plesk/services or cloud calls."""
 import hashlib
+import io
 import importlib.machinery
 import importlib.util
 import json
@@ -9,6 +10,7 @@ import shlex
 import tempfile
 import time
 import unittest
+import zipfile
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -244,6 +246,100 @@ class ManagementTests(unittest.TestCase):
         result = self.fake_wp_cli(output, 1, 'plugins')
         self.assertEqual(result['status'], 'mismatch')
         self.assertEqual(result['findings'][0]['rule'], 'wordpress-plugin-checksum-mismatch')
+
+    def write_wp_theme(self, slug='sample-theme', version='1.2', content=b'<?php echo "theme";'):
+        self.write_site('wp-load.php', b'<?php // fixture')
+        self.write_site('wp-includes/version.php', b'<?php $wp_version = "6.8.1";')
+        theme = self.web / 'wp-content' / 'themes' / slug
+        theme.mkdir(parents=True)
+        os.chown(theme.parent.parent, 65534, 65534)
+        os.chown(theme.parent, 65534, 65534)
+        os.chown(theme, 65534, 65534)
+        (theme / 'style.css').write_text('/*\nTheme Name: Sample\nVersion: %s\n*/\n' % version)
+        os.chown(theme / 'style.css', 65534, 65534)
+        (theme / 'index.php').write_bytes(content)
+        os.chown(theme / 'index.php', 65534, 65534)
+        return theme
+
+    def wp_theme_archive(self, slug='sample-theme', version='1.2', content=b'<?php echo "theme";'):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(slug + '/style.css', '/*\nTheme Name: Sample\nVersion: %s\n*/\n' % version)
+            archive.writestr(slug + '/index.php', content)
+        return output.getvalue()
+
+    def run_wp_theme_audit(self, archive):
+        with mock.patch.object(m.h, 'binary', side_effect=AssertionError('Theme check must not require WP-CLI')), \
+                mock.patch.object(m, 'wordpress_theme_archive', return_value=archive):
+            return m.wordpress_theme_checksum_audit('example.com')
+
+    def test_wordpress_org_theme_checksum_matches_exact_version_archive(self):
+        self.write_wp_theme()
+        report = self.run_wp_theme_audit(self.wp_theme_archive())
+        self.assertEqual(report['status'], 'verified')
+        self.assertEqual(report['finding_count'], 0)
+        stored = m.public_status()['wordpress_theme_checksum']['example.com']
+        self.assertEqual(stored['themes'][0]['status'], 'verified')
+
+    def test_wordpress_org_theme_checksum_reports_changed_file_without_content(self):
+        self.write_wp_theme(content=b'<?php echo "local";')
+        report = self.run_wp_theme_audit(self.wp_theme_archive())
+        self.assertEqual(report['status'], 'mismatch')
+        self.assertEqual(report['finding_count'], 1)
+        self.assertEqual(report['themes'][0]['findings'], [{'path': 'index.php', 'rule': 'wordpress-theme-file-mismatch'}])
+        self.assertNotIn('local', json.dumps(report))
+        self.assertTrue(any(item['type'] == 'cms_checksum_mismatch' for item in m.h.incident_list()))
+
+    def test_wordpress_org_theme_checksum_rejects_archive_path_traversal(self):
+        self.write_wp_theme()
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, 'w') as archive:
+            archive.writestr('../escape.php', b'bad')
+        report = self.run_wp_theme_audit(output.getvalue())
+        self.assertEqual(report['status'], 'partial')
+        self.assertIn('unerwarteten Dateipfad', report['themes'][0]['note'])
+
+    def test_wordpress_theme_fetch_rejects_non_wordpress_hosts_before_network(self):
+        with mock.patch.object(m.urllib.request, 'urlopen') as open_url:
+            with self.assertRaisesRegex(ValueError, 'nur HTTPS von WordPress.org'):
+                m.wordpress_theme_fetch('https://example.net/theme.zip', 1024)
+        open_url.assert_not_called()
+
+    def test_wordpress_theme_archive_requests_the_installed_version(self):
+        class FakeResponse:
+            def __init__(self, body, url):
+                self.body = body
+                self.url = url
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def geturl(self):
+                return self.url
+            def read(self, size):
+                return self.body[:size]
+
+        api_data = json.dumps({'slug': 'sample-theme', 'version': '2.0',
+                               'versions': {'1.2': 'https://downloads.wordpress.org/theme/sample-theme.1.2.zip',
+                                            '2.0': 'https://downloads.wordpress.org/theme/sample-theme.2.0.zip'}}).encode()
+        archive_data = self.wp_theme_archive()
+        opener = mock.Mock()
+        opener.open.side_effect = [FakeResponse(api_data, 'https://api.wordpress.org/themes/info/1.2/'),
+                                   FakeResponse(archive_data, 'https://downloads.wordpress.org/theme/sample-theme.1.2.zip')]
+        with mock.patch.object(m.urllib.request, 'build_opener', return_value=opener):
+            result = m.wordpress_theme_archive('sample-theme', '1.2')
+        self.assertEqual(result, archive_data)
+        self.assertEqual(opener.open.call_count, 2)
+        self.assertIn('request%5Bslug%5D=sample-theme', opener.open.call_args_list[0].args[0].full_url)
+        self.assertTrue(opener.open.call_args_list[1].args[0].full_url.endswith('sample-theme.1.2.zip'))
+
+    def test_wordpress_org_theme_checksum_marks_unavailable_vendor_version_partial(self):
+        self.write_wp_theme(version='custom-3')
+        with mock.patch.object(m.h, 'binary', side_effect=AssertionError('Theme check must not require WP-CLI')), \
+                mock.patch.object(m, 'wordpress_theme_archive', side_effect=ValueError('keine Vendor-Version')):
+            report = m.wordpress_theme_checksum_audit('example.com')
+        self.assertEqual(report['status'], 'partial')
+        self.assertEqual(report['themes'][0]['status'], 'incomplete')
 
     def fake_wp_db_cli(self, candidate='42\tpost_content\tobfuscated-execution\n', fail_query=False):
         self.write_site('wp-load.php', b'<?php // fixture')

@@ -19,7 +19,7 @@ Imunify360 kombiniert einen serverweiten Netzwerk-Firewall-Agenten, dynamische I
 | Bereinigung und Wiederherstellung | Manuelle Quarantaene; opt-in Reparatur nur aus bestaetigter Baseline nach sauberem Vollscan; Storage-Ansicht, 512-MiB-Baseline- und 256-MiB-/200-Eintraege-Backup-Quota sowie bestaetigte manuelle Loeschung | Sichere Vorschlaege fuer unbekannte Funde, granularere Aufbewahrungsregeln, Backup-Import und Bulk-Aktionen |
 | Ignore List | SHA-256-Ignore-Liste je Domain; ignorierte Dateien bleiben sichtbar und werden weiter gescannt, aber nicht automatisch gemeldet/repariert | Globale serverweite Hash-Liste und kontrollierte Pfad-Ausnahmen mit Erklaerung/Audit |
 | Malware Database Scanner | Teilabdeckung: begrenzter read-only WordPress-SQL-Heuristikscan auf kombinierte Verschleierungs-/Ausfuehrungsmuster | Keine Hersteller-/MDS-Signaturen, Joomla/Magento-Abdeckung, Datenbankbereinigung, Backup oder Rollback |
-| Hersteller-Pruefsummen fuer CMS-Dateien | WordPress-Core und Plugins via WP-CLI gegen WordPress.org, als Website-UID; Plugins ohne verfuegbare Checksums werden als unvollstaendig angezeigt | Themes, Joomla/Magento, vollstaendige Good-File-Backups und signierte Pruefwerte fehlen; keine Reparatur |
+| Hersteller-Pruefsummen fuer CMS-Dateien | WordPress-Core und Plugins via WP-CLI; WordPress.org-Themes werden read-only mit dem HTTPS-Archiv der exakt installierten Version verglichen | Eigene/kommerzielle Theme-Versionen koennen ungeprueft bleiben; Theme-Archiv ist kein signierter Pruefwert; Joomla/Magento, vollstaendige Good-File-Backups und Reparatur fehlen |
 | PHP Proactive Defense | Snuffleupagus-Installation, feste Regeln zum Blockieren bestimmter Shell-Funktionen; kein Aufruf-/Verhaltensmonitor | Instrumentierung/Telemetrie je Handler, Log-only-Policy, reproduzierbare Test-Signaturen, Ereigniszuordnung und dann vorsichtige Blockierregeln. Das ist kein gleichwertiges ML-/Cloud-Modell. |
 | WAF / Managed ModSecurity | Loganzeige und eine Guardian-Regeldatei fuer begrenzte Host-/IP-Ratenlimits | Verwaltete, signierte Regelpakete mit sicherem Update/Rollback, Regel-Ausnahmen, Regeln pro Domain und strukturierte Incidents |
 | Netzwerk-Firewall / IP-Listen | Manuelle Guardian-Deny-Regeln in aktiver Plesk Firewall fuer IPv4/IPv6 und Netze bis /24 bzw. /64; Admin-IP-Schutz, 1h/24h/7d TTL und Plesk-60-Sekunden-Rollback. Stuendlicher Scheduler verarbeitet bis zu zehn Ablaufe pro Lauf; Rueckstaende werden protokolliert. | Allow-/Greylist, Kommentare, automatisierte Bedrohungsfeeds, Portregeln, provider-unabhaengige Firewall und vollstaendige Statusabdeckung |
@@ -40,7 +40,7 @@ Die Dokumentation enthaelt auch cPanel-, WHMCS- und DirectAdmin-Funktionen. Sie 
 
 ## Umsetzung in sicheren Abschnitten
 
-1. **Malware-Arbeitsablauf:** SHA-256-Ausnahmen je Domain, WordPress-Core-/Plugin-Pruefsummen, begrenzter WordPress-Datenbankindikator-Scan und lokaler dateimetadaten-/signaturgebundener RapidScan-Cache (implementiert); danach weitere CMS-Hersteller-Pruefsummen sowie ein signaturbasierter Datenbankscan mit Datenbankbackup/Rollback. Datenbankheuristiktreffer bleiben reine Hinweise; unbekannte Dateifunde bleiben bis zur Freigabe unveraendert.
+1. **Malware-Arbeitsablauf:** SHA-256-Ausnahmen je Domain, WordPress-Core-/Plugin-Pruefsummen, WordPress.org-Theme-Archivvergleich, begrenzter WordPress-Datenbankindikator-Scan und lokaler dateimetadaten-/signaturgebundener RapidScan-Cache (implementiert); danach Joomla/Magento-Herstellerquellen sowie ein signaturbasierter Datenbankscan mit Datenbankbackup/Rollback. Datenbankheuristiktreffer bleiben reine Hinweise; unbekannte Dateifunde bleiben bis zur Freigabe unveraendert.
 2. **Ereignisse und Abwehr:** Vereinheitlichte Incidents aus ClamAV, ModSecurity, Fail2Ban und PHP-Proben; filterbarer Verlauf; E-Mail-Warteschlange und sichere, feste Webhook/Hooks.
 3. **HTTP/WAF:** Signierte Regelquellen, klare Versions-/Regel-Ausnahmen, Testmodus, spezifische Pfad-/IP-Ratenlimits und Wiederherstellung bei fehlgeschlagenem Reload.
 4. **Netzwerk-IP-Schutz:** Guardian-Deny-Regeln verwenden Plesks native Firewall mit Rollback und begrenzten Ablaufzeiten; danach priorisierte Allow-/Notfalllisten, AbuseIPDB-Freigabeworkflow und CIDR-Tests auf dem separaten Plesk-VPS. Kein paralleler nftables-/iptables-Backendmix.
@@ -55,6 +55,8 @@ Alle systemweiten Aktionen bleiben standardmaessig aus und werden ausschliesslic
 
 - [Imunify360 overview](https://docs.imunify360.com/introduction/)
 - [Imunify360 feature configuration](https://docs.imunify360.com/features/)
+- [WP-CLI core checksum verification](https://developer.wordpress.org/cli/commands/core/verify-checksums/)
+- [WordPress.org Theme API](https://developer.wordpress.org/reference/functions/themes_api/)
 - [Admin interface: Malware Scanner, Proactive Defense, reputation and KernelCare](https://docs.imunify360.com/dashboard/)
 - [User interface: customer-facing WebShield](https://docs.imunify360.com/user_interface/)
 - [Installation requirements and panel compatibility](https://docs.imunify360.com/installation/)

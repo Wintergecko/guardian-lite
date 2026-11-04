@@ -1,4 +1,4 @@
-# Guardian Lite v0.18.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.19.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -12,6 +12,13 @@
 - `watch_changes` ist ein begrenzter periodischer Metadatenvergleich. Separat existiert eine opt-in inotify-Dateiwache mit gezielten ClamAV-Pruefungen, ohne automatische Quarantaene oder Ausfuehrungsblockade. Verschobene Teilbaeume werden vom alten Pfad getrennt; ein verschobener Document-Root beendet den Monitor.
 - Neue aktive Policies werden nur per expliziter Admin-Aktion aktiviert. Automatische Good-File-Reparatur erfordert zusaetzlich eine freigegebene Baseline und Opt-in pro Domain. Originale bleiben in Quarantaene; unbekannte Dateien werden nicht automatisch geloescht.
 - Kein externer Sicherheitsaudit; fuer Produktion Code Review und Test-VPS erforderlich.
+
+## 0.19.0 – WordPress.org-Themevergleich
+
+- Die manuelle Theme-Pruefung verwendet nur HTTPS zu `api.wordpress.org` und `downloads.wordpress.org`; Weiterleitungen auf andere Hosts werden vor dem Folgen abgelehnt.
+- Theme-Archive und entpackte Eintraege haben Groessen-/Dateilimits. Absolute Pfade, Traversal, doppelte Pfade, Symlinks und verschluesselte ZIP-Eintraege werden abgelehnt.
+- Lokale Theme-Dateien werden ohne Symlink-Following gelesen und waehrend der Pruefung auf Austausch/Veraenderung geprueft. Reports enthalten nur relative Pfade und feste Regeln, keinen Dateiinhalt.
+- Die Quelle ist das HTTPS-Verzeichnisarchiv, kein signierter Herstellerpruefwert. Eigene und kommerzielle Themes bleiben unbewertet; Abweichungen sind manuell zu klaeren und werden nie automatisch repariert.
 
 ## v0.4.0 policy boundaries
 
