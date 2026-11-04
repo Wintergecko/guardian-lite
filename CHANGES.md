@@ -1,3 +1,10 @@
+## 0.20.0 – WordPress-Datenbankscan mit ClamAV
+
+- Optionale separate Aktion exportiert die WordPress-Datenbank ueber WP-CLI und leitet den Inhalt ohne temporaere Dumpdatei durch lokale ClamAV-Signaturen.
+- Website-UID fuer Export und Scanner; feste Prozessargumente, begrenzte Laufzeit/CPU, maximale 512-MiB-Pipe, Prozessgruppen-Abbruch und begrenzte, bereinigte Trefferberichte.
+- Export-/Scannerfehler und Limits koennen keinen sauberen Befund erzeugen. Keine automatische Bereinigung oder Aenderung; MDS-Signaturen werden nicht nachgebildet.
+- Regressionstests sollen Clean-, Treffer-, Exportfehler- und Ueberlaufpfade mit echten isolierten Hilfsprozessen pruefen.
+
 ## 0.19.0 – WordPress.org-Themeintegritaet
 
 - Neue manuelle Read-only-Pruefung vergleicht installierte Theme-Dateien mit dem HTTPS-Archiv derselben Version aus dem WordPress.org-Verzeichnis.

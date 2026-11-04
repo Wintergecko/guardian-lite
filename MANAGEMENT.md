@@ -1,4 +1,4 @@
-# Guardian Lite 0.19.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.20.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -21,6 +21,7 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |
 | WordPress-Core-Pruefsummen | WP-CLI als root-eigene Datei unter `/usr/local/bin/wp`, `/usr/bin/wp` oder `/bin/wp`; systemweite PHP-CLI und ausgehender HTTPS-Zugriff auf WordPress.org. Guardian installiert WP-CLI nicht. |
 | WordPress.org-Themes | Root-Verwaltung, lesbarer WordPress-Docroot und HTTPS-Zugriff auf `api.wordpress.org` und `downloads.wordpress.org`; WP-CLI wird hier nicht benoetigt. Pro Domain maximal 40 Theme-Verzeichnisse, 128 MiB Theme-Archive und 512 MiB entpackte Daten je Pruefung. |
+| WordPress-Datenbank-Signaturscan | Root-eigene WP-CLI- und ClamAV-Binaries, aktuelle ClamAV-Signaturen und funktionierender `mysqldump` aus WP-CLI; der volle SQL-Export wird bis 512 MiB durch eine Pipe geleitet, nicht auf Platte geschrieben. |
 | AbuseIPDB | HTTPS-Ausgangsverbindung und eigener API-Key; kein Serverpaket. |
 
 ## Speicher, Quotas und Aufbewahrung
@@ -125,6 +126,10 @@ Eine zweite Aktion prueft Plugins mit `wp plugin verify-checksums --all`. WordPr
 ### WordPress-Datenbankindikatoren
 
 Die manuelle Aktion `WordPress-Datenbank pruefen` scannt `posts`, `postmeta`, `options` sowie vorhandene Kommentar-Tabellen. Sie verwendet WP-CLI `db prefix`, `db tables` und ausschliesslich begrenzte `SELECT`-Abfragen mit SQL-Identifiern aus einer festen Allowlist. Ausgefuehrt wird WP-CLI mit der Website-UID/GID, isoliertem HOME und ohne Plugins/Themes. Guardian erfasst nur Tabellenname, numerische Zeilen-ID, Spalte und feste Regelkennung; SQL-Inhalte, Zugangsdaten und Datenbankwerte werden nicht in Berichte geschrieben. Abfragen sind auf 101 Zeilen je Tabelle, 2 MiB Ausgabe und insgesamt 5 Minuten begrenzt.
+
+Die separate Aktion `WordPress-Datenbank mit ClamAV pruefen` exportiert alle Datenbanktabellen mit `wp db export -` unter der Website-UID/GID und leitet den Stream direkt in einen verifizierten ClamAV-Prozess. Es entsteht keine SQL-Dumpdatei. Export und Scanner sind auf 512 MiB, 5 Minuten und begrenzte Prozess-CPU beschraenkt. Fehlgeschlagener Export, Scannerfehler, Ausgabe-/Datenlimit und Timeout werden nie als sauber gewertet. Berichte enthalten nur die byte-Anzahl und bis zu 100 erlaubte ClamAV-Signaturnamen, keine SQL-Werte. Es wird nichts bereinigt oder veraendert. Der Scan nutzt lokale ClamAV-Signaturen und ersetzt nicht Imunifys MDS-Signaturen; grosse Datenbanken muessen separat geprueft werden, wenn das Limit erreicht wird.
+
+Referenzen: [WP-CLI `db export -` schreibt den Dump auf stdout](https://developer.wordpress.org/cli/commands/db/export/); [ClamAV akzeptiert `-` als Scan-Eingabe und begrenzt Dateigroesse/Scanumfang](https://docs.clamav.net/manual/Usage/Scanning.html).
 
 Die Heuristik sucht bekannte Kombinationen aus Kodierung/Verschleierung und dynamischer Ausfuehrung. Treffer sind manuell zu untersuchende Kandidaten, keine Malware-Klassifikation; falsch-positive und falsch-negative Ergebnisse sind moeglich. Fehlende Pflichttabellen, Abfragefehler und Grenzwerte ergeben einen Teilstatus. Das ist weder Imunify Malware Database Scanner noch ClamAV-Ersatz. Es gibt keine Datenbankbereinigung, kein Backup und keinen Rollback. [WP-CLI Datenbankabfragen](https://developer.wordpress.org/cli/commands/db/query/) · [Tabellenauflistung](https://developer.wordpress.org/cli/commands/db/tables/)
 

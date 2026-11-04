@@ -395,6 +395,59 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(result['status'], 'partial')
         self.assertEqual(result['findings'], [])
 
+    def fake_wp_database_stream(self, dump=b'CREATE TABLE wp_posts (id INT);', clam_hit=False, export_rc=0):
+        self.write_site('wp-load.php', b'<?php // fixture')
+        self.write_site('wp-includes/version.php', b'<?php $wp_version = "6.8.1";')
+        temporary = tempfile.TemporaryDirectory(prefix='guardian-wp-db-clam-test-', dir='/var/lib')
+        self.addCleanup(temporary.cleanup)
+        folder = pathlib.Path(temporary.name)
+        os.chmod(folder, 0o755)
+        wp = folder / 'wp'
+        wp.write_text('#!/bin/sh\ncase " $* " in *" db export - "*) ;; *) exit 41;; esac\n'
+                      '[ "$(id -u)" = "65534" ] || exit 42\n'
+                      'printf %s ' + shlex.quote(dump.decode('ascii')) + '\nexit ' + str(export_rc) + '\n')
+        os.chmod(wp, 0o755)
+        clam = folder / 'clamscan'
+        clam.write_text('#!/bin/sh\n[ "$(id -u)" = "65534" ] || exit 42\n'
+                        'payload=$(cat)\n' +
+                        ('case "$payload" in *MALWARE*) printf "stdin: Test.Database.Malware FOUND\\n"; exit 1;; esac\n'
+                         if clam_hit else '') + 'exit 0\n')
+        os.chmod(clam, 0o755)
+
+        def which(paths):
+            return str(wp if paths == m.WP_CLI_PATHS else clam)
+
+        with mock.patch.object(m.h, 'binary', side_effect=which):
+            return m.wordpress_database_clamav_audit('example.com')
+
+    def test_wordpress_database_clamav_stream_clean_export_without_dump_file(self):
+        payload = b'CREATE TABLE wp_posts (id INT);'
+        result = self.fake_wp_database_stream(payload)
+        self.assertEqual(result['status'], 'no_signatures')
+        self.assertEqual(result['bytes_scanned'], len(payload))
+        self.assertEqual(result['findings'], [])
+        self.assertNotIn('CREATE TABLE', json.dumps(result))
+
+    def test_wordpress_database_clamav_stream_reports_signature_only(self):
+        result = self.fake_wp_database_stream(b'INJECTED_MALWARE_ROW', clam_hit=True)
+        self.assertEqual(result['status'], 'found')
+        self.assertEqual(result['findings'], [{'signature': 'Test.Database.Malware',
+                                               'rule': 'clamav-database-signature'}])
+        self.assertNotIn('INJECTED', json.dumps(result))
+        self.assertTrue(any(item['type'] == 'cms_database_indicators' for item in m.h.incident_list()))
+
+    def test_wordpress_database_clamav_stream_limit_is_partial_not_clean(self):
+        with mock.patch.object(m, 'WP_DB_SIGNATURE_MAX_BYTES', 4):
+            result = self.fake_wp_database_stream(b'larger-than-limit')
+        self.assertEqual(result['status'], 'partial')
+        self.assertTrue(result['truncated'])
+        self.assertLessEqual(result['bytes_scanned'], 4)
+
+    def test_wordpress_database_clamav_export_failure_is_not_clean(self):
+        result = self.fake_wp_database_stream(b'', export_rc=5)
+        self.assertEqual(result['status'], 'partial')
+        self.assertIn('Export', result['error'])
+
     def test_repair_preserves_original_and_rollback_refuses_user_changes(self):
         self.write_site('index.php', b'GOOD')
         os.chmod(self.web / 'index.php', 0o600)

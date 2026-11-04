@@ -1,4 +1,4 @@
-# Weitere Features nach 0.19.0
+# Weitere Features nach 0.20.0
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
@@ -7,7 +7,7 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Prioritaet | Feature | Nutzen / konkrete Luecke |
 |---|---|---|
 | Hoch | Hersteller-Pruefsummen weiterer CMS | WordPress-Core, WordPress.org-Plugins und passende Theme-Archive geprueft; Joomla/Magento-Herstellerquellen und signierte Good-File-Pakete fehlen. Keine automatische Reparatur aus Pruefergebnissen |
-| Hoch | Signaturbasierter Datenbankscanner | WordPress hat einen begrenzten read-only SQL-Heuristikscan; Hersteller-/Malware-Signaturen sowie Joomla/Magento fehlen, Bereinigung/Backup/Rollback ist offen |
+| Hoch | CMS-Datenbankscanner fuer Joomla/Magento und sichere Wiederherstellung | WordPress hat SQL-Heuristik und einen gestreamten ClamAV-Signaturscan; MDS-Herstellersignaturen, Joomla/Magento-Erkennung und Datenbank-Backup/Rollback fehlen |
 | Hoch | Firewall-Allowlist und Notfall-Freischaltung | Plesk-Firewall-Deny-Regeln und begrenzte TTLs sind vorhanden; explizite priorisierte Admin-/Monitoring-Ausnahmen fehlen |
 | Hoch | Baseline-/Backup-Aufbewahrung und Speicheranzeige | Globale Speicheranzeige und manuelle Loeschung vorhanden; Quota pro Domain, Aufbewahrungsregeln, Backups ausserhalb der verwalteten PHP-/WAF-Metadaten und Reparaturquellenanzeige fehlen |
 | Hoch | Cronjob-Regelausbau und Verifikation | Aktueller read-only Heuristikcheck deckt nur gaengige Muster und feste Cron-Pfade ab; Malware-Signaturen und Distributionen-Faelle fehlen |
@@ -22,6 +22,6 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Niedrig | Benachrichtigungen/Webhooks | Ereignisse in vorhandene Betriebswerkzeuge integrieren; Geheimnisse und Zielhosts strikt begrenzen |
 | Niedrig | Admin-Tool-Erkennung ausbauen | Aktuell begrenzte Namens-/Markerpruefung fuer Adminer und TinyFileManager; kuratierte, gepruefte Markerlisten und weitere Admin-Werkzeuge fehlen |
 
-Lokaler signaturgebundener RapidScan-Cache ist umgesetzt. Naechster grosser Malware-Paritaetsschritt ist ein signaturbasierter CMS-Datenbankscanner mit sicheren, getesteten Backups und Rollback; ein proprietaerer AI-Bolit-Nachbau ist nicht vorgesehen. Cloud-Hash-Reputation benoetigt eine eigene Datenschutz-/Anbieterfreigabe. Eine Firewall-Allowlist benoetigt zuerst Plesk-Regelprioritaetstests, damit Freigaben Deny-Regeln sicher uebersteuern.
+Lokaler signaturgebundener RapidScan-Cache und gestreamter ClamAV-Scan eines WordPress-Datenbankexports sind umgesetzt. Naechster groesserer Malware-Paritaetsschritt ist Joomla/Magento-Datenbankabdeckung mit sicheren, getesteten Backups und Rollback; ein proprietaerer AI-Bolit-Nachbau ist nicht vorgesehen. Cloud-Hash-Reputation benoetigt eine eigene Datenschutz-/Anbieterfreigabe. Eine Firewall-Allowlist benoetigt zuerst Plesk-Regelprioritaetstests, damit Freigaben Deny-Regeln sicher uebersteuern.
 
 Technische Grundlage fuer Hersteller-Pruefsummen: [WP-CLI core verify-checksums](https://developer.wordpress.org/cli/commands/core/verify-checksums/) vergleicht WordPress-Core-Dateien mit WordPress.org-Pruefsummen, ohne WordPress dafuer zu laden. Der [WordPress.org Theme API](https://developer.wordpress.org/reference/functions/themes_api/) liefert Versionsinformationen und Download-Archive; Guardian vergleicht die passende Theme-Version und kennzeichnet sie ausdruecklich als nicht signierten Nachweis. Premium-Erweiterungen und angepasste Dateien benoetigen eigene Vertrauensquellen.

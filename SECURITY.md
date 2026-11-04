@@ -1,4 +1,4 @@
-# Guardian Lite v0.19.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.20.0 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -12,6 +12,13 @@
 - `watch_changes` ist ein begrenzter periodischer Metadatenvergleich. Separat existiert eine opt-in inotify-Dateiwache mit gezielten ClamAV-Pruefungen, ohne automatische Quarantaene oder Ausfuehrungsblockade. Verschobene Teilbaeume werden vom alten Pfad getrennt; ein verschobener Document-Root beendet den Monitor.
 - Neue aktive Policies werden nur per expliziter Admin-Aktion aktiviert. Automatische Good-File-Reparatur erfordert zusaetzlich eine freigegebene Baseline und Opt-in pro Domain. Originale bleiben in Quarantaene; unbekannte Dateien werden nicht automatisch geloescht.
 - Kein externer Sicherheitsaudit; fuer Produktion Code Review und Test-VPS erforderlich.
+
+## 0.20.0 – Gestreamter WordPress-Datenbankscan
+
+- WP-CLI exportiert die Datenbank als Website-Benutzer direkt auf stdout; der Inhalt wird ohne Dumpdatei in ClamAV eingespeist. Beide Prozesse verwenden feste Argumente, leere/isolierte Umgebungen, begrenzte CPU und getrennte Prozessgruppen.
+- Datenstrom ist auf 512 MiB und 5 Minuten begrenzt. Bei Ueberschreitung werden Prozesse beendet und der Befund als unvollstaendig markiert. ClamAV laeuft als Website-Benutzer und benoetigt dort lesbare lokale Signaturen.
+- Prozessausgaben werden nicht roh gespeichert. Berichte enthalten nur begrenzte Dateibytes und validierte ClamAV-Signaturnamen; keine Datenbankinhalte oder Zugangsdaten.
+- Der Scan ist read-only und nutzt ClamAV-Signaturen, nicht Imunifys MDS-Datenbank-Signaturen. Keine Bereinigung, Datenbank-Backup-/Rollback-Funktion oder vollstaendige Datenbankabdeckung bei ueberschrittenem Streamlimit.
 
 ## 0.19.0 – WordPress.org-Themevergleich
 
