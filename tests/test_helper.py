@@ -1,6 +1,7 @@
 """Unit tests that need no Plesk server and do not touch host service state."""
 import importlib.machinery
 import importlib.util
+import json
 import pathlib
 import subprocess
 import tempfile

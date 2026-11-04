@@ -307,7 +307,7 @@ def _firewall_action(operation, target='', remote_address=''):
         except ValueError:
             raise ValueError('Admin-Verbindungs-IP kann nicht sicher bestimmt werden; Sperre abgelehnt.')
         if client in ipaddress.ip_network(network):
-            raise ValueError('Die aktuelle Plesk-Admin-Verbindung liegt im zu sperrenden Netz.')
+            raise ValueError('Admin-Verbindungs-IP liegt im zu sperrenden Netz; Sperre abgelehnt.')
 
     pending = read_json(FIREWALL_PENDING, {})
     if pending and pending.get('state') == 'awaiting_confirmation':
