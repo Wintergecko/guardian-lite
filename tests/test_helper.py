@@ -200,6 +200,29 @@ class GuardianTests(unittest.TestCase):
             self.assertEqual(result['removed'], 1)
             self.assertEqual(calls, [('unban', expired), ('confirm', '')])
 
+    def test_guardian_firewall_expiry_scheduler_caps_backlog_at_ten(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            networks = ['203.0.113.%d/32' % host for host in range(1, 12)]
+            helper.write_json(root / 'firewall-expiries.json', {network: 100 for network in networks})
+            calls = []
+            def action(operation, target='', remote_address='', ttl_seconds=0):
+                calls.append((operation, target))
+                return {'state': 'awaiting_confirmation' if operation == 'unban' else 'confirmed'}
+            with mock.patch.object(helper, 'ROOT', root), \
+                 mock.patch.object(helper, 'FIREWALL_PENDING', root / 'firewall-pending.json'), \
+                 mock.patch.object(helper, 'FIREWALL_EXPIRIES', root / 'firewall-expiries.json'), \
+                 mock.patch.object(helper, 'firewall_rules', return_value={
+                     'available': True, 'limited': False,
+                     'rules': [{'network': network} for network in networks]}), \
+                 mock.patch.object(helper, 'firewall_action', side_effect=action), \
+                 mock.patch.object(helper.os, 'geteuid', return_value=0), \
+                 mock.patch.object(helper, 'incident_log'):
+                result = helper.firewall_expiry_tick()
+            self.assertEqual(result['removed'], 10)
+            self.assertEqual(result['remaining_due'], 1)
+            self.assertEqual(len(calls), 20)
+
     def test_guardian_firewall_rejects_admin_lockout_and_broad_cidr(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings = pathlib.Path(tmp) / 'settings'

@@ -1326,7 +1326,11 @@ def scheduled_tick():
         raise ValueError('Scheduler braucht Root-Rechte.')
     prepare_dir()
     try:
-        firewall_expiry_tick()
+        expiry_result = firewall_expiry_tick()
+        if expiry_result.get('remaining_due', 0):
+            incident_log('operator', 'warning', '',
+                         'Firewall-Ablaufwarteschlange: %d weitere abgelaufene Guardian-Regeln warten auf den naechsten Lauf.' %
+                         expiry_result['remaining_due'])
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         incident_log('operator', 'warning', '', 'Automatische Guardian-Firewall-Entsperrung fehlgeschlagen: ' + str(exc)[:180])
     config = schedules()

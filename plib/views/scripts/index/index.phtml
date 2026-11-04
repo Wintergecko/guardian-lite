@@ -244,7 +244,7 @@ $action = static function ($name) use ($esc) {
       <?php elseif (($pendingFirewall['state'] ?? '') === 'expired'): ?>
         <p class="guardian-alert">Das Bestaetigungsfenster ist abgelaufen. Nicht bestaetigte Regeln werden von Plesk zurueckgerollt. Lade die Seite in einigen Sekunden neu, bevor du eine weitere Firewall-Aktion startest.</p>
       <?php endif; ?>
-      <p class="guardian-small">Guardian aktiviert die Plesk-Firewall nicht automatisch und bearbeitet keine fremden Regeln. Zeitbegrenzte Sperren entfernt der vorhandene stündliche Plesk-Scheduler; die Entsperrung kann bis zu eine Stunde nach der Ablaufzeit erfolgen. Die Entsperrung nutzt Plesks Rollback-Ablauf.</p>
+      <p class="guardian-small">Guardian aktiviert die Plesk-Firewall nicht automatisch und bearbeitet keine fremden Regeln. Der stuendliche Plesk-Scheduler entfernt bis zu zehn abgelaufene Sperren je Lauf. Der Ablauf kann daher mehr als eine Stunde dauern, wenn viele Regeln gleichzeitig faellig sind; verbleibende Regeln werden im Incident-Protokoll gemeldet.</p>
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
