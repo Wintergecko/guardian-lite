@@ -227,3 +227,11 @@
 - Imunify360-Cron-Erkennung kann andere proprietaere Regeln verwenden; ClamAV-Treffer sind keine vollstaendige Cron-Malware-Bewertung.
 - Tests pruefen Trefferzuordnung und unveraenderte Quell-Dateien.
 
+## 0.23.0 – Plesk-Portregeln fuer ausgewaehlte Quell-IPs
+
+- Guardian kann einzelne TCP-/UDP-Ports fuer genau eine Quell-IP erlauben oder fuer ein begrenztes Quellnetz sperren.
+- Jede Aenderung nutzt Plesks eigene CLI, 60-Sekunden-Rollback und explizite Bestaetigung nach getrenntem Verbindungstest.
+- Die UI zeigt nur Guardian-eigene Regeln; Portfreigaben lassen sich ausschliesslich per gelisteter numerischer Regel-ID entfernen. Fremde Plesk-Regeln werden nicht veraendert.
+- Globale Port-Policies, globale IP-Allowlisten, Greylisting, Provider-Firewalls und zeitbegrenzte Portregeln bleiben offen. Eine Allow-Regel kann globale Plesk- oder Provider-Sperren nicht ueberstimmen.
+- Tests decken CLI-Argumente, Port-/Quellvalidierung, Admin-IP-Schutz, Listenfilterung, Loeschen eigener Regeln und Controller-Routing ab.
+

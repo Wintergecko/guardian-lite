@@ -103,14 +103,22 @@ class GuardianTests(unittest.TestCase):
              'action': 'deny', 'from': ['203.0.113.26'], 'ports': ''},
             {'id': 43, 'class': 'custom', 'name': 'Guardian Lite managed deny 203.0.113.0/24',
              'direction': 'input', 'action': 'allow', 'from': ['203.0.113.0/24'], 'ports': ''},
+            {'id': 44, 'class': 'custom', 'name': 'Guardian Lite managed port allow tcp 2222 203.0.113.25/32',
+             'direction': 'input', 'action': 'allow', 'from': ['203.0.113.25'], 'ports': '2222/tcp'},
+            {'id': 45, 'class': 'custom', 'name': 'Guardian Lite managed port deny udp 53 203.0.113.0/24',
+             'direction': 'input', 'action': 'deny', 'from': ['203.0.113.0/24'], 'ports': '53/udp'},
+            {'id': 46, 'class': 'custom', 'name': 'Guardian Lite managed port allow tcp 2222 203.0.113.25/32',
+             'direction': 'input', 'action': 'deny', 'from': ['203.0.113.25'], 'ports': '2222/tcp'},
         ]
         with mock.patch.object(helper, 'binary', return_value='/usr/bin/plesk'), \
              mock.patch.object(helper, 'execute', return_value=subprocess.CompletedProcess(
                  ['plesk'], 0, json.dumps(rows), '')):
             result = helper.firewall_rules()
         self.assertTrue(result['available'])
-        self.assertEqual([item['id'] for item in result['rules']], ['41'])
-        self.assertEqual(result['rules'][0]['network'], '203.0.113.25/32')
+        self.assertEqual([item['id'] for item in result['rules']], ['45', '41', '44'])
+        self.assertEqual(result['rules'][0]['network'], '203.0.113.0/24')
+        self.assertEqual(result['rules'][1]['kind'], 'ip_deny')
+        self.assertEqual(result['rules'][2]['ports'], '2222/tcp')
 
     def test_guardian_firewall_rules_displays_confirmed_expiry(self):
         row = {'id': 41, 'class': 'custom', 'name': 'Guardian Lite managed deny 203.0.113.25/32',
@@ -178,6 +186,65 @@ class GuardianTests(unittest.TestCase):
                 helper.firewall_action('confirm')
                 self.assertNotIn('203.0.113.25/32', helper.read_json(root / 'firewall-expiries.json', {}))
 
+    def test_guardian_port_firewall_rules_stage_and_remove_only_owned_rule(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root = base / 'guardian'
+            root.mkdir(mode=0o700)
+            settings = base / 'settings'
+            settings.touch()
+            calls = []
+            rows = [json.dumps([])]
+            def fake_execute(args, timeout=5):
+                calls.append(args)
+                if args[-1] == '--list-json':
+                    return subprocess.CompletedProcess(args, 0, rows[0], '')
+                return subprocess.CompletedProcess(args, 0, '', '')
+            with mock.patch.object(helper, 'ROOT', root), \
+                 mock.patch.object(helper, 'FIREWALL_PENDING', root / 'firewall-pending.json'), \
+                 mock.patch.object(helper, 'FIREWALL_EXPIRIES', root / 'firewall-expiries.json'), \
+                 mock.patch.object(helper, 'FIREWALL_SETTINGS', settings), \
+                 mock.patch.object(helper, 'PLESK_BINARIES', ('/usr/bin/plesk',)), \
+                 mock.patch.object(helper, 'SYSTEMCTL_PATHS', ()), \
+                 mock.patch.object(helper, 'firewall_status', return_value={'plesk_firewall_active': True}), \
+                 mock.patch.object(helper, 'binary', side_effect=lambda paths: paths[0] if paths else None), \
+                 mock.patch.object(helper, 'execute', side_effect=fake_execute), \
+                 mock.patch.object(helper, 'incident_log'):
+                result = helper.firewall_action('port-allow', '203.0.113.25', '198.51.100.8',
+                                                0, '2222', 'tcp')
+                self.assertEqual(result['state'], 'awaiting_confirmation')
+                set_call = next(call for call in calls if '--set-rule' in call)
+                self.assertIn('-action', set_call)
+                self.assertEqual(set_call[set_call.index('-action') + 1], 'allow')
+                self.assertEqual(set_call[set_call.index('-ports') + 1], '2222/tcp')
+                self.assertEqual(set_call[set_call.index('-remote-addresses') + 1], '203.0.113.25/32')
+                helper.firewall_action('confirm')
+                rows[0] = json.dumps([{
+                    'id': 77, 'class': 'custom',
+                    'name': 'Guardian Lite managed port allow tcp 2222 203.0.113.25/32',
+                    'direction': 'input', 'action': 'allow', 'from': ['203.0.113.25'], 'ports': '2222/tcp',
+                }])
+                removed = helper.firewall_action('port-remove', '77')
+                self.assertEqual(removed['state'], 'awaiting_confirmation')
+                self.assertTrue(any('--remove-rules' in call and '77' in call for call in calls))
+                helper.firewall_action('confirm')
+
+    def test_guardian_port_firewall_rejects_broad_allow_and_admin_lockout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = pathlib.Path(tmp) / 'settings'
+            settings.touch()
+            with mock.patch.object(helper, 'FIREWALL_SETTINGS', settings), \
+                 mock.patch.object(helper, 'PLESK_BINARIES', ('/usr/bin/plesk',)), \
+                 mock.patch.object(helper, 'SYSTEMCTL_PATHS', ()), \
+                 mock.patch.object(helper, 'binary', side_effect=lambda paths: paths[0] if paths else None), \
+                 mock.patch.object(helper, 'firewall_status', return_value={'plesk_firewall_active': True}):
+                with self.assertRaisesRegex(ValueError, 'einzelne IPv4- oder IPv6-Adresse'):
+                    helper._firewall_action('port-allow', '203.0.113.0/24', '', 0, '22', 'tcp')
+                with self.assertRaisesRegex(ValueError, 'Admin-Verbindungs-IP'):
+                    helper._firewall_action('port-deny', '198.51.100.8', '198.51.100.8', 0, '22', 'tcp')
+                with self.assertRaisesRegex(ValueError, 'Port oder Transportprotokoll'):
+                    helper._firewall_action('port-deny', '203.0.113.25', '198.51.100.8', 0, '70000', 'tcp')
+
     def test_guardian_firewall_expiry_scheduler_unbans_only_due_guardian_rules(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
@@ -243,6 +310,15 @@ class GuardianTests(unittest.TestCase):
         with mock.patch.object(helper, 'respond', return_value=1) as reply:
             self.assertEqual(helper.main(['shell', 'rm', '-rf', '/']), 1)
             self.assertFalse(reply.call_args.args[0]['ok'])
+
+    def test_firewall_port_cli_routes_only_fixed_operation_arguments(self):
+        with mock.patch.object(helper, 'firewall_action', return_value={'ok': True}) as action, \
+                mock.patch.object(helper, 'respond', return_value=0):
+            self.assertEqual(helper.main(['firewall-action', 'port-allow', '203.0.113.25',
+                                          '198.51.100.8', '2222', 'tcp']), 0)
+            action.assert_called_with('port-allow', '203.0.113.25', '198.51.100.8', 0, '2222', 'tcp')
+            self.assertEqual(helper.main(['firewall-action', 'port-remove', '77']), 0)
+            action.assert_called_with('port-remove', '77', '', 0, '', '')
 
 
 if __name__ == '__main__':

@@ -83,6 +83,24 @@ try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
 checkManagement(pm_ApiCli::$calls[3][1] === ['firewall-action', 'ban', '203.0.113.10', '198.51.100.4', '3600'],
     'Firewall TTL was not passed through the fixed helper interface');
 
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'port-allow',
+    'network' => '203.0.113.25', 'port' => '2222', 'protocol' => 'tcp'];
+try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
+checkManagement(pm_ApiCli::$calls[4][1] === ['firewall-action', 'port-allow', '203.0.113.25',
+    '198.51.100.4', '2222', 'tcp'], 'Port allow rule did not use the fixed helper interface');
+
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'port-remove', 'rule_id' => '77'];
+try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
+checkManagement(pm_ApiCli::$calls[5][1] === ['firewall-action', 'port-remove', '77'],
+    'Port rule removal did not pass only a numeric Guardian-owned rule identifier');
+
+$before = count(pm_ApiCli::$calls);
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'port-deny',
+    'network' => '203.0.113.25', 'port' => '70000', 'protocol' => 'tcp'];
+try { $controller->firewallAction(); throw new RuntimeException('Invalid firewall port was accepted'); }
+catch (pm_Exception $e) {}
+checkManagement(count(pm_ApiCli::$calls) === $before, 'Invalid firewall port reached privileged helper');
+
 $before = count(pm_ApiCli::$calls);
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'ban', 'network' => '203.0.113.11', 'ttl' => '999'];
 try { $controller->firewallAction(); throw new RuntimeException('Invalid firewall TTL was accepted'); }
@@ -97,7 +115,7 @@ checkManagement(count(pm_ApiCli::$calls) === $before, 'Firewall confirmation wit
 
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'confirm', 'tested' => '1'];
 try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
-checkManagement(pm_ApiCli::$calls[4][1] === ['firewall-action', 'confirm'], 'Firewall confirmation action not routed correctly');
+checkManagement(pm_ApiCli::$calls[6][1] === ['firewall-action', 'confirm'], 'Firewall confirmation action not routed correctly');
 
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'baseline-delete',
     'baseline_id' => str_repeat('a', 32), 'domain' => 'example.com'];

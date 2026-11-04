@@ -205,6 +205,18 @@ class ManagementTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Deinstallation abgebrochen'):
                 m.uninstall_cleanup()
 
+    def test_uninstall_requires_manual_removal_of_guardian_port_allow_rule(self):
+        firewall_settings = self.base / 'firewall-settings'
+        firewall_settings.touch()
+        with mock.patch.object(m.h, 'FIREWALL_SETTINGS', firewall_settings), \
+                mock.patch.object(m.h, 'firewall_rules', return_value={
+                    'available': True, 'limited': False, 'pending': {}, 'rules': [{
+                        'id': '77', 'kind': 'port', 'action': 'allow',
+                        'network': '203.0.113.25/32', 'ports': '2222/tcp'}]}), \
+                mock.patch.object(m.h, 'firewall_status', return_value={'plesk_firewall_active': True}):
+            with self.assertRaisesRegex(ValueError, 'koennte Adminzugriff sperren'):
+                m.uninstall_cleanup()
+
     def fake_wp_cli(self, message, exit_code, kind='core'):
         temporary = tempfile.TemporaryDirectory(prefix='guardian-wp-cli-test-', dir='/var/lib')
         self.addCleanup(temporary.cleanup)

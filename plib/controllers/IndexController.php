@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.22.0';
+    private const GUARDIAN_VERSION = '0.23.0';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -533,10 +533,10 @@ class IndexController extends pm_Controller_Action
         $this->verifyPost();
         $request = $this->getRequest();
         $operation = (string)$request->getPost('operation', '');
-        if (!in_array($operation, ['ban', 'unban', 'confirm', 'cancel'], true)) {
+        if (!in_array($operation, ['ban', 'unban', 'port-allow', 'port-deny', 'port-remove', 'confirm', 'cancel'], true)) {
             throw new pm_Exception('Ungueltige Plesk-Firewall-Aktion.');
         }
-        if (in_array($operation, ['ban', 'unban'], true)) {
+        if (in_array($operation, ['ban', 'unban', 'port-allow', 'port-deny'], true)) {
             $network = trim((string)$request->getPost('network', ''));
             if ($network === '' || strlen($network) > 80) {
                 throw new pm_Exception('IPv4-/IPv6-Adresse oder CIDR erforderlich.');
@@ -551,9 +551,27 @@ class IndexController extends pm_Controller_Action
                     throw new pm_Exception('Ungueltige Sperrdauer ausgewaehlt.');
                 }
                 $arguments[] = $ttl;
+            } elseif (in_array($operation, ['port-allow', 'port-deny'], true)) {
+                $port = (string)$request->getPost('port', '');
+                $protocol = (string)$request->getPost('protocol', '');
+                if (!preg_match('/^[1-9][0-9]{0,4}$/D', $port) || (int)$port > 65535 ||
+                    !in_array($protocol, ['tcp', 'udp'], true)) {
+                    throw new pm_Exception('Port oder Transportprotokoll ungueltig.');
+                }
+                $arguments[] = $port;
+                $arguments[] = $protocol;
             }
             $this->finishAction($arguments,
                 'Plesk-Firewall-Aenderung wurde gestartet.');
+            return;
+        }
+        if ($operation === 'port-remove') {
+            $ruleId = (string)$request->getPost('rule_id', '');
+            if (!preg_match('/^[0-9]{1,12}$/D', $ruleId)) {
+                throw new pm_Exception('Ungueltige Guardian-Firewall-Regel-ID.');
+            }
+            $this->finishAction(['firewall-action', 'port-remove', $ruleId],
+                'Plesk-Firewall-Portregel wird entfernt.');
             return;
         }
         if ($operation === 'confirm' && $request->getPost('tested', '') !== '1') {

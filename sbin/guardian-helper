@@ -36,6 +36,7 @@ FIREWALL_UNITS = ('plesk-firewall', 'psa-firewall')
 FIREWALL_PENDING = ROOT / 'firewall-pending.json'
 FIREWALL_EXPIRIES = ROOT / 'firewall-expiries.json'
 FIREWALL_RULE_PREFIX = 'Guardian Lite managed deny '
+FIREWALL_PORT_RULE_PREFIX = 'Guardian Lite managed port '
 FIREWALL_TTLS = (0, 3600, 86400, 604800)
 MAX_FIREWALL_EXPIRATIONS_PER_TICK = 10
 DOMAIN_LABEL = re.compile(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$', re.I)
@@ -207,7 +208,7 @@ def firewall_status():
 
 
 def firewall_rules():
-    """Read only Guardian-owned custom deny rules from Plesk Firewall."""
+    """Read only Guardian-owned custom IP and port rules from Plesk Firewall."""
     pending = read_json(FIREWALL_PENDING, {})
     if pending.get('state') == 'awaiting_confirmation':
         elapsed = max(0, time.time() - float(pending.get('started_epoch', 0)))
@@ -233,15 +234,9 @@ def firewall_rules():
             continue
         name = item.get('name')
         rule_id = item.get('id')
-        if (not isinstance(name, str) or not name.startswith(FIREWALL_RULE_PREFIX) or
-                not isinstance(rule_id, (str, int)) or not str(rule_id).isdigit() or
-                item.get('class') != 'custom' or item.get('direction') != 'input' or
-                item.get('action') != 'deny'):
-            continue
-        network = name[len(FIREWALL_RULE_PREFIX):]
-        try:
-            network = str(ipaddress.ip_network(network, strict=True))
-        except ValueError:
+        if (not isinstance(name, str) or not isinstance(rule_id, (str, int)) or
+                not str(rule_id).isdigit() or item.get('class') != 'custom' or
+                item.get('direction') != 'input'):
             continue
         addresses = item.get('from', item.get('remote-addresses', ''))
         if isinstance(addresses, list):
@@ -254,16 +249,42 @@ def firewall_rules():
                 normalized_sources.append(str(ipaddress.ip_network(source.strip(), strict=False)))
             except ValueError:
                 continue
-        if network not in normalized_sources:
+        if name.startswith(FIREWALL_RULE_PREFIX) and item.get('action') == 'deny':
+            network = name[len(FIREWALL_RULE_PREFIX):]
+            try:
+                network = str(ipaddress.ip_network(network, strict=True))
+            except ValueError:
+                continue
+            if network not in normalized_sources or str(item.get('ports', '')).strip():
+                continue
+            rule = {'id': str(rule_id), 'name': name, 'kind': 'ip_deny',
+                    'action': 'deny', 'network': network, 'ports': ''}
+            expires_epoch = expiry_data.get(network)
+            if (isinstance(expires_epoch, int) and not isinstance(expires_epoch, bool) and expires_epoch > 0 and
+                    expires_epoch <= int(time.time()) + max(FIREWALL_TTLS) + 60):
+                rule['expires_at'] = datetime.datetime.fromtimestamp(
+                    expires_epoch, datetime.timezone.utc).isoformat()
+                rule['expires_epoch'] = int(expires_epoch)
+        elif name.startswith(FIREWALL_PORT_RULE_PREFIX):
+            match = re.fullmatch(r'(allow|deny) (tcp|udp) ([1-9][0-9]{0,4}) ([^ ]{1,80})',
+                                 name[len(FIREWALL_PORT_RULE_PREFIX):])
+            if not match or item.get('action') != match.group(1):
+                continue
+            port = int(match.group(3))
+            if port > 65535 or str(item.get('ports', '')).replace(' ', '') != '%d/%s' % (port, match.group(2)):
+                continue
+            try:
+                network = str(ipaddress.ip_network(match.group(4), strict=True))
+            except ValueError:
+                continue
+            if network not in normalized_sources:
+                continue
+            rule = {'id': str(rule_id), 'name': name, 'kind': 'port',
+                    'action': match.group(1), 'network': network,
+                    'protocol': match.group(2), 'port': port,
+                    'ports': '%d/%s' % (port, match.group(2))}
+        else:
             continue
-        rule = {'id': str(rule_id), 'name': name, 'network': network,
-                'ports': str(item.get('ports', ''))[:100]}
-        expires_epoch = expiry_data.get(network)
-        if (isinstance(expires_epoch, int) and not isinstance(expires_epoch, bool) and expires_epoch > 0 and
-                expires_epoch <= int(time.time()) + max(FIREWALL_TTLS) + 60):
-            rule['expires_at'] = datetime.datetime.fromtimestamp(
-                expires_epoch, datetime.timezone.utc).isoformat()
-            rule['expires_epoch'] = int(expires_epoch)
         rules.append(rule)
     rules.sort(key=lambda row: (row['network'], row['id']))
     return {'available': True, 'limited': len(rules) > 100, 'rules': rules[:100],
@@ -287,8 +308,8 @@ def _firewall_target(value):
     return str(network)
 
 
-def _firewall_action(operation, target='', remote_address='', ttl_seconds=0):
-    """Stage one Plesk-native IP rule; Plesk rolls it back unless separately confirmed."""
+def _firewall_action(operation, target='', remote_address='', ttl_seconds=0, port='', protocol=''):
+    """Stage one Plesk-native IP/port rule; Plesk rolls it back unless confirmed."""
     if os.geteuid() != 0:
         raise ValueError('Root-Verwaltung erforderlich.')
     plesk = binary(PLESK_BINARIES)
@@ -342,13 +363,27 @@ def _firewall_action(operation, target='', remote_address='', ttl_seconds=0):
         return {'ok': True, 'state': 'confirmed' if operation == 'confirm' else 'cancelled',
                 'network': pending.get('network', '')}
 
-    if operation not in ('ban', 'unban'):
+    if operation not in ('ban', 'unban', 'port-allow', 'port-deny', 'port-remove'):
         raise ValueError('Ungueltige Guardian-Firewall-Aktion.')
-    network = _firewall_target(target)
+    if operation == 'port-remove':
+        if not isinstance(target, str) or not target.isdigit() or len(target) > 12:
+            raise ValueError('Ungueltige Guardian-Firewall-Regel-ID.')
+        network = ''
+    else:
+        network = _firewall_target(target)
+    is_port = operation in ('port-allow', 'port-deny')
+    if is_port:
+        if (not isinstance(port, str) or not port.isdigit() or len(port) > 5 or
+                not 1 <= int(port) <= 65535 or protocol not in ('tcp', 'udp')):
+            raise ValueError('Ungueltiger Port oder Transportprotokoll.')
+        if operation == 'port-allow' and ipaddress.ip_network(network).prefixlen != ipaddress.ip_network(network).max_prefixlen:
+            raise ValueError('Portfreigaben sind nur fuer eine einzelne IPv4- oder IPv6-Adresse erlaubt.')
+    elif port or protocol:
+        raise ValueError('Portangaben sind fuer diese Firewall-Aktion nicht zulaessig.')
     if (not isinstance(ttl_seconds, int) or isinstance(ttl_seconds, bool) or
             ttl_seconds not in FIREWALL_TTLS or (operation != 'ban' and ttl_seconds != 0)):
         raise ValueError('Ungueltige Sperrdauer. Erlaubt: dauerhaft, 1 Stunde, 24 Stunden oder 7 Tage.')
-    if operation == 'ban':
+    if operation in ('ban', 'port-deny'):
         try:
             client = ipaddress.ip_address(remote_address)
         except ValueError:
@@ -371,15 +406,38 @@ def _firewall_action(operation, target='', remote_address='', ttl_seconds=0):
     listing = firewall_rules()
     if not listing['available'] or listing.get('limited'):
         raise ValueError('Guardian kann die Plesk-Firewallregeln nicht sicher auflisten.')
-    matches = [row for row in listing['rules'] if row['network'] == network]
-    if operation == 'ban' and matches:
-        raise ValueError('Dieses Netz ist bereits in der Guardian-Sperrliste.')
-    if operation == 'unban' and not matches:
-        raise ValueError('Guardian-Sperrregel nicht gefunden.')
+    if operation == 'ban':
+        matches = [row for row in listing['rules'] if row['kind'] == 'ip_deny' and row['network'] == network]
+    elif operation in ('port-allow', 'port-deny'):
+        target_net = ipaddress.ip_network(network)
+        matches = [row for row in listing['rules'] if row['kind'] == 'port' and
+                   row['port'] == int(port) and row['protocol'] == protocol and
+                   ipaddress.ip_network(row['network']).version == target_net.version and
+                   target_net.overlaps(ipaddress.ip_network(row['network']))]
+        if operation == 'port-allow' and any(
+                row.get('kind') == 'ip_deny' and
+                ipaddress.ip_network(row['network']).version == target_net.version and
+                target_net.overlaps(ipaddress.ip_network(row['network']))
+                for row in listing['rules']):
+            raise ValueError('Portfreigabe kollidiert mit einer Guardian-IP-Sperre; zuerst die Sperre entfernen.')
+    elif operation == 'port-remove':
+        matches = [row for row in listing['rules'] if row['kind'] == 'port' and row['id'] == target]
+    else:
+        matches = [row for row in listing['rules'] if row['kind'] == 'ip_deny' and row['network'] == network]
+    if operation in ('ban', 'port-allow', 'port-deny') and matches:
+        raise ValueError('Eine Guardian-Regel fuer dieses Netz bzw. diesen Port existiert bereits.')
+    if operation in ('unban', 'port-remove') and not matches:
+        raise ValueError('Guardian-Firewallregel nicht gefunden.')
     if operation == 'ban':
         name = FIREWALL_RULE_PREFIX + network
         result = execute([plesk, 'ext', 'firewall', '--set-rule', '-name', name,
                           '-direction', 'input', '-action', 'deny',
+                          '-remote-addresses', network], timeout=12)
+    elif is_port:
+        name = FIREWALL_PORT_RULE_PREFIX + operation[5:] + ' ' + protocol + ' ' + str(int(port)) + ' ' + network
+        result = execute([plesk, 'ext', 'firewall', '--set-rule', '-name', name,
+                          '-direction', 'input', '-action', operation[5:],
+                          '-ports', '%d/%s' % (int(port), protocol),
                           '-remote-addresses', network], timeout=12)
     else:
         name = matches[0]['name']
@@ -396,18 +454,21 @@ def _firewall_action(operation, target='', remote_address='', ttl_seconds=0):
     now = time.time()
     write_json(FIREWALL_PENDING, {'state': 'awaiting_confirmation', 'action': operation,
                                   'network': network, 'rule_name': name,
+                                  'port': int(port) if is_port else 0,
+                                  'protocol': protocol if is_port else '',
                                   'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                                   'started_epoch': now, 'rollback_seconds': 60,
                                   'ttl_seconds': ttl_seconds})
-    incident_log('operator', 'warning', '', 'Plesk-Firewall-Regel fuer ' + network +
+    incident_log('operator', 'warning', '', 'Plesk-Firewall-Regel ' + name +
                  ' geaendert; wartet auf getrennten Verbindungstest und Bestaetigung.')
     return {'ok': True, 'state': 'awaiting_confirmation', 'action': operation,
             'network': network, 'rollback_seconds': 60,
+            'port': int(port) if is_port else 0, 'protocol': protocol if is_port else '',
             'ttl_seconds': ttl_seconds,
             'message': 'Regel angewendet. Verbindung jetzt in einer getrennten Sitzung testen und innerhalb von 60 Sekunden bestaetigen; ohne Bestaetigung rollt Plesk zurueck.'}
 
 
-def firewall_action(operation, target='', remote_address='', ttl_seconds=0):
+def firewall_action(operation, target='', remote_address='', ttl_seconds=0, port='', protocol=''):
     if os.geteuid() != 0:
         raise ValueError('Root-Verwaltung erforderlich.')
     prepare_dir()
@@ -415,7 +476,7 @@ def firewall_action(operation, target='', remote_address='', ttl_seconds=0):
                      getattr(os, 'O_NOFOLLOW', 0), 0o600)
     try:
         fcntl.flock(lockfd, fcntl.LOCK_EX)
-        return _firewall_action(operation, target, remote_address, ttl_seconds)
+        return _firewall_action(operation, target, remote_address, ttl_seconds, port, protocol)
     finally:
         os.close(lockfd)
 
@@ -1784,7 +1845,7 @@ def firewall_expiry_tick():
     listing = firewall_rules()
     if not listing.get('available') or listing.get('limited'):
         raise ValueError('Plesk-Firewallregeln fuer den Ablauf koennen nicht sicher gelesen werden.')
-    active = {item['network'] for item in listing.get('rules', [])}
+    active = {item['network'] for item in listing.get('rules', []) if item.get('kind', 'ip_deny') == 'ip_deny'}
     now = time.time()
     due = []
     due_count = 0
@@ -2092,16 +2153,25 @@ def main(argv):
             return respond(operation(argv[1], int(argv[2])))
         if len(argv) == 4 and argv[0] == 'ip-action':
             return respond(manual_ban(argv[1], argv[2], argv[3]))
-        if len(argv) in (2, 4, 5) and argv[0] == 'firewall-action':
+        if len(argv) in (2, 3, 4, 5, 6) and argv[0] == 'firewall-action':
             operation = argv[1]
             target = argv[2] if len(argv) >= 4 else ''
+            if len(argv) == 3 and operation != 'port-remove':
+                raise ValueError('Ungueltige Firewall-Aktion.')
+            if operation == 'port-remove' and len(argv) == 3:
+                target = argv[2]
             remote = argv[3] if len(argv) >= 4 else ''
             ttl = 0
+            port = protocol = ''
             if len(argv) == 5:
                 if operation != 'ban' or not argv[4].isdigit() or len(argv[4]) > 6:
                     raise ValueError('Ungueltige Firewall-Sperrdauer.')
                 ttl = int(argv[4])
-            return respond(firewall_action(operation, target, remote, ttl))
+            if len(argv) == 6:
+                if operation not in ('port-allow', 'port-deny'):
+                    raise ValueError('Ungueltige Port-Firewall-Aktion.')
+                port, protocol = argv[4], argv[5]
+            return respond(firewall_action(operation, target, remote, ttl, port, protocol))
         if len(argv) == 4 and argv[0] == 'worker':
             return scan_worker(argv[1], argv[2], int(argv[3]))
         return error('Ungueltige Aktion.')
