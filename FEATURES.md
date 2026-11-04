@@ -1,4 +1,4 @@
-# Weitere Features nach 0.8.0
+# Weitere Features nach 0.9.0
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
@@ -9,6 +9,7 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 | Hoch | Hersteller-verifizierte CMS-Dateien | WordPress-Core-Pruefsummen bzw. freigegebene signierte CMS-Pakete als unabhaengige Good-File-Quelle statt ausschliesslich Admin-Baseline |
 | Hoch | Granulare Allowlist und Notfall-Freischaltung | Eigene Admin-IP, Monitoring, XML-RPC/API-Clients und legitime Bots bei WAF/Turnstile gezielt ausnehmen; Schutz vor Selbstaussperrung |
 | Hoch | Baseline-/Backup-Aufbewahrung und Speicheranzeige | Alte/incomplete Snapshots sicher per GUI entfernen, Quota pro Domain, freien Speicher und benoetigte Reparaturquellen anzeigen |
+| Hoch | Cronjob-Regelausbau und Verifikation | Aktueller read-only Heuristikcheck deckt nur gaengige Muster und feste Cron-Pfade ab; Malware-Signaturen und Distributionen-Faelle fehlen |
 | Hoch | Echte Plesk-Testmatrix | Reproduzierbare VPS-Tests mit installierten Plesk-Versionen, Debian/Ubuntu/AlmaLinux und mehreren PHP-Handlern; aktuell nicht automatisiert nachgewiesen |
 | Hoch | Transaktionale Service-Rollouts | Aenderungen mit vorher/nachher Diff, FPM-/WAF-Gesundheitsprobe und zeitgesteuerter Ruecknahme, falls ein Betreiber den Rollout nicht bestaetigt |
 | Mittel | PHP-/FPM-Zuordnung pro Domain | Vor einer Handler-Aktivierung alle betroffenen Domains anzeigen und gezielte Handler-/TuxCare-Unterstuetzung ergaenzen |

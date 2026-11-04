@@ -123,6 +123,12 @@ $domainSelect = function () use ($esc) {
   <?php endif; endforeach; endif; ?>
 
   <h3>Auftraege</h3><pre><?= $esc(json_encode($management['jobs'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <h3>Cronjob-Sicherheitspruefung</h3>
+  <p>Prueft gaengige System- und Benutzer-Cronpfade nur lesend auf wenige klar verdaechtige Muster. Das ist eine heuristische Stichprobe, kein Malware-Vollscan; Guardian aendert oder loescht keine Cronjobs.</p>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cron-audit"><button>Cronjobs jetzt pruefen</button>
+  </form>
+  <pre><?= $esc(json_encode($management['cron_audit'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
   <h3>Diagnose fuer deinen Plesk-Test</h3>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="diagnostics"><?php $domainSelect(); ?>

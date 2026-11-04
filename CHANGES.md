@@ -1,3 +1,10 @@
+## 0.9.0 – Cronjob-Sicherheitspruefung
+
+- Neue read-only Admin-Pruefung ueblicher System- und Benutzer-Cronpfade auf ausgewaehlte verdächtige Befehlsmuster.
+- Ergebnis zeigt nur Quelle, Zeile, Regel und Schweregrad; Cronjob-Inhalte werden nicht exportiert und nichts wird automatisch geaendert oder geloescht.
+- Gepruefte Grenzen (Anzahl/Groesse), ausgelassene Quellen und heuristischer Charakter werden im Ergebnis ausgewiesen; Funde gehen in den Incident-Verlauf.
+- Regressionstest fuer Erkennung, Symlink-Ausschluss und Unveraendertheit der Cron-Dateien.
+
 ## 0.8.0 – Malware-Ignore-Liste und Imunify360-Abgleich
 
 - Plesk-Admin kann exakte Datei-SHA-256-Funde je Domain administrativ ignorieren und wieder freigeben. Treffer bleiben sichtbar/gescannt; Warnung und automatische Baseline-Reparatur werden fuer diesen Inhalt unterdrueckt.

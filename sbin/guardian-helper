@@ -275,7 +275,7 @@ def write_json(path, info):
 def incident_log(event_type, severity, domain='', detail='', relative=''):
     """Root-private bounded audit trail; never log file bodies or credentials."""
     prepare_dir()
-    if event_type not in ('file_change', 'malware_detected', 'scan_complete',
+    if event_type not in ('file_change', 'malware_detected', 'cron_suspicious', 'scan_complete',
                           'monitor_started', 'monitor_stopped', 'monitor_limit',
                           'monitor_overflow', 'operator', 'notification_error'):
         raise ValueError('Unbekannter Ereignistyp.')

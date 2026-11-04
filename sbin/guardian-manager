@@ -35,6 +35,17 @@ VERSION = re.compile(r'^8\.[0-5]$')
 HEX = re.compile(r'^[a-f0-9]{64}$')
 BEGIN = '; BEGIN GUARDIAN MANAGED\n'
 END = '; END GUARDIAN MANAGED\n'
+CRON_FILES = (pathlib.Path('/etc/crontab'),)
+CRON_DIRS = (pathlib.Path('/etc/cron.d'), pathlib.Path('/etc/cron.hourly'),
+             pathlib.Path('/etc/cron.daily'), pathlib.Path('/etc/cron.weekly'),
+             pathlib.Path('/etc/cron.monthly'), pathlib.Path('/var/spool/cron'),
+             pathlib.Path('/var/spool/cron/crontabs'))
+CRON_PATTERNS = (
+    ('remote-shell-pipe', re.compile(r'\b(?:curl|wget)\b[^\n|]{0,500}\|\s*(?:/bin/)?(?:ba)?sh\b', re.I)),
+    ('encoded-payload-pipe', re.compile(r'\bbase64\s+(?:-[A-Za-z]*d|--decode)\b[^\n|]{0,300}\|\s*(?:/bin/)?(?:ba)?sh\b', re.I)),
+    ('php-inline-eval', re.compile(r'\bphp(?:\d+(?:\.\d+)?)?\s+-r\s+[^\n]{0,1000}\b(?:eval|assert|base64_decode)\s*\(', re.I)),
+    ('temporary-executable', re.compile(r'(?:^|\s)(?:/tmp|/var/tmp|/dev/shm)/[^\s;|]+\s*(?:;|$)', re.I)),
+)
 
 
 def root():
@@ -892,6 +903,81 @@ def bots_set(domain, mode):
     return {'message': 'Bot-Schutz konfiguriert. PHP .user.ini-Cache kann bis zu 5 Minuten benoetigen; HTTPS-Anmeldung testen.'}
 
 
+def cron_audit():
+    """Read-only heuristic audit of common system and user cron locations."""
+    if os.geteuid() != 0:
+        raise ValueError('Cronjob-Pruefung erfordert Root-Leserechte.')
+    files = set(CRON_FILES)
+    skipped = 0
+    for directory in CRON_DIRS:
+        try:
+            dfd = os.open(str(directory), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            skipped += 1
+            continue
+        try:
+            for entry in os.scandir(dfd):
+                try:
+                    if entry.is_file(follow_symlinks=False) and re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', entry.name):
+                        files.add(directory / entry.name)
+                except OSError:
+                    skipped += 1
+        finally:
+            os.close(dfd)
+    if len(files) > 256:
+        files = set(sorted(files, key=str)[:256])
+        skipped += 1
+    findings = []
+    scanned = 0
+    total = 0
+    for path in sorted(files, key=str):
+        try:
+            fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, 'rb') as source:
+                info = os.fstat(source.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_size > 131072:
+                    skipped += 1
+                    continue
+                total += info.st_size
+                if total > 4 * 1024 * 1024:
+                    skipped += 1
+                    break
+                data = source.read(131073)
+                if len(data) > 131072:
+                    skipped += 1
+                    continue
+        except FileNotFoundError:
+            continue
+        except OSError:
+            skipped += 1
+            continue
+        scanned += 1
+        for number, raw in enumerate(data.decode('utf-8', 'replace').splitlines(), 1):
+            line = raw.strip()
+            if not line or line.startswith('#') or len(line) > 4096:
+                continue
+            for code, pattern in CRON_PATTERNS:
+                if pattern.search(line):
+                    findings.append({'source': str(path), 'line': number, 'rule': code,
+                                     'severity': 'warning'})
+                    break
+            if len(findings) >= 100:
+                skipped += 1
+                break
+        if len(findings) >= 100:
+            break
+    result = {'generated_at': h.utc_now(), 'scanned_sources': scanned,
+              'finding_count': len(findings), 'findings': findings,
+              'partial': skipped > 0, 'skipped_sources': skipped,
+              'note': 'Heuristische, nur lesende Pruefung ueblicher Cron-Pfade. Kein vollstaendiger Malware-Nachweis; Eintraege werden nicht veraendert.'}
+    h.write_json(root() / 'cron-audit.json', result)
+    if findings:
+        h.incident_log('cron_suspicious', 'warning', detail='%d verdaechtige Cron-Eintraege; manuelle Pruefung erforderlich.' % len(findings))
+    return result
+
+
 def diagnostics(domain='', http_probe=False):
     result = {'generated_at': h.utc_now(), 'checks': [], 'domain': domain,
               'note': 'Keine API-Schluessel, Dateiinhalte oder vollstaendigen Serverkonfigurationen enthalten.'}
@@ -974,6 +1060,7 @@ def public_status():
                               if h.valid_domain(domain) and isinstance(values, list)},
             'bots': {d: {'enabled': v.get('enabled', False)} for d, v in settings.get('bots', {}).items()},
             'diagnostics': h.read_json(root() / 'diagnostics.json', {}),
+            'cron_audit': h.read_json(root() / 'cron-audit.json', {}),
             'jobs': [h.read_json(p, {}) for p in sorted((root() / 'jobs').glob('*.json'),
                      key=lambda x: x.stat().st_mtime, reverse=True)[:10]],
             'reputation': list(h.read_json(root() / 'reputation.json', {}).values())[-20:]}
@@ -1112,6 +1199,8 @@ def dispatch(request):
             return bots_set(request.get('domain', ''), request.get('mode', ''))
         if action == 'diagnostics':
             return diagnostics(request.get('domain', ''), request.get('http_probe') is True)
+        if action == 'cron-audit':
+            return cron_audit()
         raise ValueError('Unbekannte Verwaltungsaktion.')
 
 
