@@ -1,3 +1,10 @@
+## 0.11.0 – WordPress.org-Pluginpruefsummen
+
+- Manuelle WP-CLI-Pruefung fuer installierte Plugins mit verfuegbaren WordPress.org-Pruefsummen.
+- Kommerzielle/eigene Plugins ohne oeffentliche Pruefsummen werden als nicht geprueft aufgelistet; der Status bleibt teilweise statt sauber.
+- Treffer laufen als Website-UID, werden getrennt vom Core-Bericht gespeichert und veraendern keine Dateien.
+- Regressionstests fuer Plugin-Abweichungen, ausgelassene kommerzielle Plugins, sicheren Aufruf und Statuskennzeichnung.
+
 ## 0.10.0 – WordPress-Core-Pruefsummen
 
 - Neue manuelle Pruefung vergleicht WordPress-Core-Dateien ueber WP-CLI mit WordPress.org-Pruefsummen.

@@ -130,11 +130,16 @@ $domainSelect = function () use ($esc) {
   </form>
   <pre><?= $esc(json_encode($management['cron_audit'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
   <h3>WordPress-Core-Pruefsummen</h3>
-  <p>Vergleicht WordPress-Core-Dateien mit WordPress.org-Pruefsummen ueber WP-CLI, laeuft als Website-Benutzer und aendert keine Dateien. Erfordert eine root-eigene WP-CLI-Installation sowie HTTPS-Ausgangszugriff. Plugins, Themes und eigene Dateien werden nicht verifiziert.</p>
+  <p>Vergleicht WordPress-Core-Dateien mit WordPress.org-Pruefsummen ueber WP-CLI, laeuft als Website-Benutzer und aendert keine Dateien. Erfordert eine root-eigene WP-CLI-Installation sowie HTTPS-Ausgangszugriff. Diese Core-Aktion prueft keine Plugins, Themes oder eigenen Dateien.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="wp-checksum-audit"><?php $domainSelect(); ?><button>WordPress-Core pruefen</button>
   </form>
   <pre><?= $esc(json_encode($management['wordpress_checksum'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="wp-plugin-checksum-audit"><?php $domainSelect(); ?><button>WordPress.org-Plugins pruefen</button>
+  </form>
+  <p>Plugins ohne WordPress.org-Pruefsummen (z. B. kommerzielle oder eigene Plugins) werden als nicht geprueft aufgelistet. Ein Teilstatus ist kein sauberer Gesamtbefund. Themes und Must-Use-Plugins sind nicht enthalten.</p>
+  <pre><?= $esc(json_encode($management['wordpress_plugin_checksum'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
   <h3>Diagnose fuer deinen Plesk-Test</h3>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="diagnostics"><?php $domainSelect(); ?>

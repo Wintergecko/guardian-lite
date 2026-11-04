@@ -1,4 +1,4 @@
-# Weitere Features nach 0.10.0
+# Weitere Features nach 0.11.0
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
@@ -6,7 +6,7 @@ Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits im
 
 | Prioritaet | Feature | Nutzen / konkrete Luecke |
 |---|---|---|
-| Hoch | CMS-Pruefsummen erweitern | WordPress-Core-Pruefung ist vorhanden; WordPress.org-Plugin-Pruefsummen und Joomla/Magento-Herstellerquellen fehlen. Keine automatische Reparatur aus MD5-Pruefergebnissen |
+| Hoch | Weitere CMS-Pruefsummen | WordPress-Core und WordPress.org-Plugins geprueft; Joomla/Magento-Herstellerquellen und sichere, signierte Good-File-Pakete fehlen. Keine automatische Reparatur aus Pruefergebnissen |
 | Hoch | Granulare Allowlist und Notfall-Freischaltung | Eigene Admin-IP, Monitoring, XML-RPC/API-Clients und legitime Bots bei WAF/Turnstile gezielt ausnehmen; Schutz vor Selbstaussperrung |
 | Hoch | Baseline-/Backup-Aufbewahrung und Speicheranzeige | Alte/incomplete Snapshots sicher per GUI entfernen, Quota pro Domain, freien Speicher und benoetigte Reparaturquellen anzeigen |
 | Hoch | Cronjob-Regelausbau und Verifikation | Aktueller read-only Heuristikcheck deckt nur gaengige Muster und feste Cron-Pfade ab; Malware-Signaturen und Distributionen-Faelle fehlen |

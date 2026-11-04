@@ -92,17 +92,22 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(source.read_bytes(), content)
         self.assertTrue(link.is_symlink())
 
-    def fake_wp_cli(self, message, exit_code):
+    def fake_wp_cli(self, message, exit_code, kind='core'):
         temporary = tempfile.TemporaryDirectory(prefix='guardian-wp-cli-test-', dir='/var/lib')
         self.addCleanup(temporary.cleanup)
         folder = pathlib.Path(temporary.name)
         os.chmod(folder, 0o755)
         path = folder / 'wp'
-        script = '#!/bin/sh\ncase "$*" in *--insecure*) exit 41;; esac\nprintf "%s\\n" ' + shlex.quote(message) + '\nexit ' + str(exit_code) + '\n'
+        required = 'core verify-checksums' if kind == 'core' else 'plugin verify-checksums --all'
+        script = ('#!/bin/sh\ncase "$*" in *--insecure*) exit 41;; esac\n'
+                  '[ "$(id -u)" = "65534" ] || exit 42\n'
+                  'for arg in --skip-plugins --skip-themes --skip-packages; do case " $* " in *" $arg "*) ;; *) exit 43;; esac; done\n'
+                  'case "$*" in *' + shlex.quote(required) + '*) ;; *) exit 44;; esac\n'
+                  'printf "%s\\n" ' + shlex.quote(message) + '\nexit ' + str(exit_code) + '\n')
         path.write_text(script)
         os.chmod(path, 0o755)
         with mock.patch.object(m, 'WP_CLI_PATHS', (str(path),)):
-            return m.wordpress_core_checksum_audit('example.com')
+            return m.wordpress_checksum_audit('example.com', kind)
 
     def test_wordpress_core_checksum_audit_uses_unprivileged_cli_without_mutation(self):
         self.write_site('wp-load.php', b'<?php // fixture')
@@ -133,6 +138,24 @@ class ManagementTests(unittest.TestCase):
         (self.web / 'wp-includes').symlink_to(actual, target_is_directory=True)
         with self.assertRaisesRegex(ValueError, 'Symlinks'):
             m.wordpress_core_checksum_audit('example.com')
+
+    def test_wordpress_plugin_checksum_audit_marks_missing_vendor_checksums_partial(self):
+        self.write_site('wp-load.php', b'<?php // fixture')
+        self.write_site('wp-includes/version.php', b'<?php $wp_version = "6.8.1";')
+        output = ('Warning: Could not retrieve the checksums for version 2.3.4 of plugin premium-addon, skipping.\n'
+                  'Success: Verified 4 of 5 plugins (1 skipped).')
+        result = self.fake_wp_cli(output, 0, 'plugins')
+        self.assertEqual(result['status'], 'partial')
+        self.assertEqual(result['unverified_plugins'], ['premium-addon'])
+        self.assertEqual(result['finding_count'], 0)
+
+    def test_wordpress_plugin_checksum_mismatch_is_reported_separately(self):
+        self.write_site('wp-load.php', b'<?php // fixture')
+        self.write_site('wp-includes/version.php', b'<?php $wp_version = "6.8.1";')
+        output = "Warning: File doesn't verify against checksum: wp-content/plugins/example/plugin.php"
+        result = self.fake_wp_cli(output, 1, 'plugins')
+        self.assertEqual(result['status'], 'mismatch')
+        self.assertEqual(result['findings'][0]['rule'], 'wordpress-plugin-checksum-mismatch')
 
     def test_repair_preserves_original_and_rollback_refuses_user_changes(self):
         self.write_site('index.php', b'GOOD')
