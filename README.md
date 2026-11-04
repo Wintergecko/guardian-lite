@@ -1,13 +1,17 @@
-# Guardian Lite v0.4.0 – Plesk Security (Linux)
+# Guardian Lite v0.6.4 – Plesk Security (Linux)
 
 Ein **experimenteller Open-Source-Baukasten** fuer Plesk Obsidian 18.x auf Linux mit Root-Zugriff. Keine offizielle Plesk-/Imunify360-Software, kein Ersatz fuer professionell getestete Malware-Abwehr. **Installation nur zuerst auf Test-VPS / Snapshot.** Fuer die aktuelle Version sind Python >=3.8 und eine Plesk-Umgebung mit Extension-API erforderlich.
+
+## Aktueller Stand 0.6.4
+
+Opt-in-Live-Dateiwache (inotify), Incident-Protokoll, JSON-Export und E-Mail-Warnungen sind implementiert. Die periodische Metadatenpruefung bleibt als separate Funktion erhalten. Plesk-Integration und Mailzustellung werden auf einem separaten Testserver geprueft.
 
 ## Was umgesetzt ist
 
 | Funktion | Stand |
 |---|---|
 | Admin-Dashboard, WAF-Modus, Firewall-, ClamAV- und Fail2Ban-Status | implementiert, nur beobachtend |
-| Malware-Scan pro Plesk-Standard-Domain mit ClamAV als Website-UID | implementiert, manuell |
+| Malware-Scan pro gehosteter Plesk-Domain mit ClamAV als Website-UID | implementiert, manuell |
 | Automatische Scans | implementiert, opt-in pro Domain, stuendliche Faelligkeitspruefung, maximal ein Scan pro Scheduler-Lauf, mind. 24h Abstand pro Domain |
 | Scan-Berichte/History | 30 zuletzt geaenderte Berichte angezeigt, bis 200 aktive oder bis 90 Tage aufbewahrt; Quarantaene-Berichte laenger |
 | Quarantaene / Wiederherstellung | **nur manuell**, Move nach Fingerprint-Kontrolle; Restore verweigert Ueberschreiben; keine automatische Malware-Reparatur |
@@ -15,12 +19,12 @@ Ein **experimenteller Open-Source-Baukasten** fuer Plesk Obsidian 18.x auf Linux
 | WAF-Ereignisse | letzte 512 KiB `/var/log/modsec_audit.log` auf Regeln/IPs reduziert; keine HTTP-Bodies |
 | IP sperren / entsperren | manuell ueber aktives Fail2Ban-Jail; keine automatische Bedrohungsbewertung |
 
-**Nicht integriert/automatisch aktiviert:** proaktive PHP-Laufzeitueberwachung (Snuffleupagus-Policy nur als Opt-in-Vorlage), ClamAV-On-Access, automatisierte Schadcode-Bereinigung, Bad-Bot-JavaScript-Challenges, DDoS-Schutz auf Netzwerkebene, IP-Reputation-/Cloud-Feeds, WAF-Regelbearbeitung, SQL-Datenbank-Scans, E-Mail-/Push-Benachrichtigungen, vollstaendige Benutzer-/Vhost-Unterstuetzung bei Custom-Document-Roots. ClamAV und ModSecurity muessen separat konfiguriert sein.
+**Nicht integriert/automatisch aktiviert:** proaktive PHP-Laufzeitueberwachung (Snuffleupagus-Policy nur als Opt-in-Vorlage), ClamAV-On-Access, automatisierte Schadcode-Bereinigung, Bad-Bot-JavaScript-Challenges, DDoS-Schutz auf Netzwerkebene, IP-Reputation-/Cloud-Feeds, WAF-Regelbearbeitung, SQL-Datenbank-Scans, Push-Benachrichtigungen. E-Mail-Warnungen und Document-Roots innerhalb des Plesk-Webspaces werden unterstuetzt. ClamAV und ModSecurity muessen separat konfiguriert sein.
 
 ## Vorbedingungen
 
 - Vollstaendigen VPS-Snapshot und externe Backups anlegen, SSH-Zugang pruefen.
-- Testdomain mit **Standard-Docroot** `/var/www/vhosts/DOMAIN/httpdocs` verwenden. Custom Docroots werden bewusst abgelehnt. Websites mit root-eigenem Document-Root werden nicht gescannt.
+- Testdomain mit Document-Root innerhalb ihres Plesk-Webspaces verwenden. Zusatzdomains und eigene Document-Roots werden aus der Plesk-Datenbank ermittelt. Websites mit root-eigenem Document-Root werden nicht gescannt.
 - Plesk 18 (Obsidian) + Linux, Python >=3.8, PHP fuer Plesk.
 - ClamAV samt aktueller Datenbank installieren; z.B. unter Debian/Ubuntu:
 
@@ -38,10 +42,10 @@ Paket auf den Server kopieren; vor dem Einspielen Inhalt und Quellcode pruefen. 
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.4.0.zip
+plesk bin extension -i /root/guardian-lite-0.6.4.zip
 
 # Upgrade einer vorhandenen guardian-lite 0.1.0 vom lokalen ZIP
-plesk bin extension -g /root/guardian-lite-0.4.0.zip
+plesk bin extension -g /root/guardian-lite-0.6.4.zip
 
 # Version/Status ansehen
 plesk bin extension -l | grep guardian-lite
@@ -74,7 +78,7 @@ Bei Update von v0.1.0 bleiben Legacy-Scandateien unter `/var/lib/guardian-lite/`
 ## Tests und Diagnose
 
 ```bash
-unzip -l guardian-lite-0.4.0.zip
+unzip -l guardian-lite-0.6.4.zip
 php -l plib/controllers/IndexController.php
 php -l plib/views/scripts/index/index.phtml
 python3 -m unittest discover -s tests -v
@@ -217,3 +221,10 @@ Ausfuehrung des geplanten Scans. Der geplante Scan erfordert weiterhin den Plesk
 ### Plesk-Document-Roots (ab 0.6.3)
 
 Der privilegierte Scanner liest fuer jede gehostete Domain den konfigurierten `hosting.www_root` sowie `sys_users.home` aus der lokalen Plesk-Datenbank (`plesk db -Ne`). Das unterstuetzt Zusatzdomains und geaenderte Document-Roots innerhalb einer Subscription. Es gibt keinen Fallback auf erratene Pfade. Vor dem Scan werden der kanonische Pfad, die Webspace-Grenze und ein nicht-root-Eigentuemer geprueft. Domain-Eingaben werden strikt validiert, die CLI wird ohne Shell aufgerufen. Auf Servern ohne lesbare Plesk-Hosting-Daten wird der Scan mit Fehlermeldung abgebrochen.
+
+
+### Korrekturen in 0.6.4
+
+- Die Scanplanung prueft alle aufbewahrten Berichte statt nur der 30 sichtbaren Eintraege. Viele manuelle Scans verkuerzen dadurch nicht mehr den 24-Stunden-Abstand geplanter Scans.
+- Bei verschobenen oder geloeschten Verzeichnissen entfernt die Live-Dateiwache die Watches des gesamten alten Teilbaums. Hineinverschobene Verzeichnisse werden unter ihrem neuen Pfad ueberwacht. Wird der Document-Root selbst verschoben oder geloescht, beendet sich der Monitor; der Scheduler kann ihn nach Wiederherstellung neu starten.
+- Feature-Liste und aktuelle Voraussetzungen wurden berichtigt.

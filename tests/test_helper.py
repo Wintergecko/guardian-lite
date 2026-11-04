@@ -34,8 +34,7 @@ class GuardianTests(unittest.TestCase):
             root = vhosts / 'example.com'
             root.mkdir(parents=True)
             (root / 'httpdocs').symlink_to('/etc')
-            with mock.patch.object(helper, 'VHOSTS', vhosts), \
-                     mock.patch.object(helper, 'plesk_hosting_path', return_value=(str(root / 'httpdocs'), str(root))):
+            with mock.patch.object(helper, 'VHOSTS', vhosts):
                 with self.assertRaisesRegex(ValueError, 'ausserhalb'):
                     helper.site_docroot('example.com')
 
@@ -45,8 +44,7 @@ class GuardianTests(unittest.TestCase):
             root = vhosts / 'example.com'
             (root / 'httpdocs').mkdir(parents=True)
             # In root containers, valid vhosts owned by root are refused.
-            with mock.patch.object(helper, 'VHOSTS', vhosts), \
-                     mock.patch.object(helper, 'plesk_hosting_path', return_value=(str(root / 'httpdocs'), str(root))):
+            with mock.patch.object(helper, 'VHOSTS', vhosts):
                 if (root / 'httpdocs').stat().st_uid == 0:
                     with self.assertRaisesRegex(ValueError, 'root-eigen'):
                         helper.site_docroot('example.com')

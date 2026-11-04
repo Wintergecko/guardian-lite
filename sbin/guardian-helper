@@ -473,6 +473,7 @@ def monitor_status():
 # Linux inotify: each subdirectory needs its own watch. Hard limit avoids a VPS DoS.
 IN_MODIFY = 0x00000002
 IN_CLOSE_WRITE = 0x00000008
+IN_MOVED_FROM = 0x00000040
 IN_MOVED_TO = 0x00000080
 IN_CREATE = 0x00000100
 IN_DELETE = 0x00000200
@@ -482,7 +483,7 @@ IN_Q_OVERFLOW = 0x00004000
 IN_IGNORED = 0x00008000
 IN_ISDIR = 0x40000000
 IN_DONT_FOLLOW = 0x02000000
-IN_MASK = IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE | IN_DELETE_SELF | IN_MOVE_SELF
+IN_MASK = IN_CLOSE_WRITE | IN_MOVED_FROM | IN_MOVED_TO | IN_CREATE | IN_DELETE | IN_DELETE_SELF | IN_MOVE_SELF
 IN_EVENT = struct.Struct('iIII')
 
 
@@ -495,6 +496,8 @@ def watch_worker(domain):
     libc.inotify_init1.restype = ctypes.c_int
     libc.inotify_add_watch.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32)
     libc.inotify_add_watch.restype = ctypes.c_int
+    libc.inotify_rm_watch.argtypes = (ctypes.c_int, ctypes.c_int)
+    libc.inotify_rm_watch.restype = ctypes.c_int
     fd = libc.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
     if fd < 0:
         raise OSError(ctypes.get_errno(), 'Linux inotify nicht verfuegbar')
@@ -564,6 +567,8 @@ def watch_worker(domain):
                 if mask & IN_IGNORED:
                     by_wd.pop(wd, None)
                     continue
+                if wd in by_wd and not by_wd[wd] and mask & (IN_DELETE_SELF | IN_MOVE_SELF):
+                    raise ValueError('Document-Root verschoben oder geloescht; Monitor beendet.')
                 if wd not in by_wd or not name or '/' in name or name in ('.', '..'):
                     continue
                 parent = by_wd[wd]
@@ -572,6 +577,15 @@ def watch_worker(domain):
                     continue
                 abs_path = root / rel
                 if mask & IN_ISDIR:
+                    if mask & (IN_MOVED_FROM | IN_DELETE):
+                        # inotify follows inodes even outside the document root.
+                        # Drop the entire old subtree before handling MOVED_TO.
+                        for old_wd, old_rel in list(by_wd.items()):
+                            if old_rel == rel or old_rel.startswith(rel + '/'):
+                                by_wd.pop(old_wd, None)
+                                libc.inotify_rm_watch(fd, old_wd)
+                        recent = {p: t for p, t in recent.items()
+                                  if p != rel and not p.startswith(rel + '/')}
                     if mask & (IN_CREATE | IN_MOVED_TO):
                         add_tree(abs_path, rel, rel.count('/') + 1)
                     continue
@@ -668,7 +682,7 @@ def read_scan(jobid=None, include_output=True):
     return scan
 
 
-def history():
+def history(limit=MAX_HISTORY):
     try:
         items = []
         for path in (ROOT / 'jobs').glob('*.json'):
@@ -677,7 +691,7 @@ def history():
                 items.append((st.st_mtime, path.stem))
         items.sort(reverse=True)
         records = []
-        for _, jobid in items[:MAX_HISTORY]:
+        for _, jobid in (items if limit is None else items[:limit]):
             entry = read_scan(jobid, include_output=False)
             if entry:
                 records.append({k: entry.get(k) for k in
@@ -1011,19 +1025,21 @@ def scheduled_tick():
         except (OSError, ValueError):
             pass
     latest_per_domain = {}
-    for item in history():
-        if item.get('domain') not in latest_per_domain and item.get('trigger') == 'schedule':
-            latest_per_domain[item['domain']] = item
+    # UI history is capped at 30; scheduling must inspect every retained report.
+    for item in history(limit=None):
+        if item.get('trigger') != 'schedule':
+            continue
+        try:
+            started = datetime.datetime.fromisoformat(item['started_at']).timestamp()
+            domain = item['domain']
+            latest_per_domain[domain] = max(started, latest_per_domain.get(domain, started))
+        except (ValueError, TypeError, KeyError):
+            continue
     # One domain per hour, to avoid a simultaneous scan storm on hosting servers.
     for domain in sorted(config):
         last = latest_per_domain.get(domain)
-        if last:
-            try:
-                old = datetime.datetime.fromisoformat(last['started_at']).timestamp()
-                if time.time() - old < 24 * 3600:
-                    continue
-            except (ValueError, TypeError, KeyError):
-                pass
+        if last is not None and time.time() - last < 24 * 3600:
+            continue
         try:
             site_docroot(domain)
             return scan_start(domain, 'schedule')

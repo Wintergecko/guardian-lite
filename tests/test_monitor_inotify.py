@@ -27,6 +27,8 @@ class InotifyIntegrationTests(unittest.TestCase):
                 helper.MONITOR_CONFIG = helper.ROOT/'realtime.json'
                 web = helper.VHOSTS/'example.com'/'httpdocs'
                 web.mkdir(parents=True)
+                subtree = web / 'old' / 'nested'
+                subtree.mkdir(parents=True)
                 os.chown(web, 65534, 65534)
                 helper.prepare_dir()
                 helper.write_json(helper.MONITOR_CONFIG, {'domains': {'example.com': True}})
@@ -54,6 +56,25 @@ class InotifyIntegrationTests(unittest.TestCase):
                 else:
                     self.fail('Live file event not recorded')
                 self.assertEqual(target.read_text(), data)
+                # Moving a watched subtree outside the site must detach its watches.
+                external = base / 'outside'
+                (web / 'old').rename(external)
+                time.sleep(.5)
+                (external / 'nested' / 'external.php').write_text(data)
+                time.sleep(.5)
+                self.assertFalse(any(x['path'] == 'old/nested/external.php'
+                                     for x in helper.incident_list()))
+                # Moving it back under a new name must restore nested monitoring.
+                external.rename(web / 'renamed')
+                time.sleep(.5)
+                (web / 'renamed' / 'nested' / 'inside.php').write_text(data)
+                for _ in range(80):
+                    if any(x['path'] == 'renamed/nested/inside.php'
+                           for x in helper.incident_list()):
+                        break
+                    time.sleep(.1)
+                else:
+                    self.fail('Moved-in subtree is not monitored under its new path')
                 helper.write_json(helper.MONITOR_CONFIG, {'domains': {}})
                 worker.join(timeout=6)
                 self.assertEqual(worker.exitcode, 0, 'Worker did not shut down after disabling')

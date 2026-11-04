@@ -1,4 +1,4 @@
-# Guardian Lite v0.3.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.6.4 – Sicherheitsmodell und Grenzen
 
 - Root-Helfer unter Plesk `sbin`; Panelzugriff nur Administrator, POST-CSRF fuer Mutationen.
 - Dateizugriffe validieren Domains, kanonische Docroots und nofollow-Pfade. Quarantaene nur bei unveraendertem SHA256/Metadaten-Fingerprint und eindeutiger regulaerer Datei. Race Conditions bei aktiv schreibenden Sites lassen sich ohne Isolation nicht vollstaendig ausschliessen.
@@ -8,7 +8,7 @@
 - Ein Scan/Quarantaene-Vorgang zur Zeit durch `flock`; Job-Reports atomar geschrieben. Plesk-Scheduler nur Opt-in.
 - Quarantaene speichert Dateien in privatem root-Verzeichnis, Restore ueberschreibt nie. Bei Crash im Status `pending` kann Restore die Dateiverschiebung rueckgaengig machen, wenn die Datei tatsaechlich in Quarantaene liegt.
 - WAF-Parser speichert keine unredigierten HTTP-Requests im Dashboard, nur Regel-ID und IP aus maximal 512 KiB Audit-Log. Das Betriebssystem bewahrt sein eigenes Audit-Log unabhaengig davon auf.
-- `watch_changes` ist ein begrenzter periodischer Metadatenvergleich, **nicht** inotify/fanotify oder Echtzeit-IPS.
+- `watch_changes` ist ein begrenzter periodischer Metadatenvergleich. Separat existiert eine opt-in inotify-Dateiwache mit gezielten ClamAV-Pruefungen, ohne automatische Quarantaene oder Ausfuehrungsblockade. Verschobene Teilbaeume werden vom alten Pfad getrennt; ein verschobener Document-Root beendet den Monitor.
 - Keine automatischen Firewall-Policy-Aenderungen, keine automatische Quarantaene und keine automatische Malware-Bereinigung.
 - Kein externer Sicherheitsaudit; fuer Produktion Code Review und Test-VPS erforderlich.
 

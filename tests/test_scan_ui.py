@@ -40,6 +40,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.6.3')
+        self.assertEqual(version, '0.6.4')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
-            self.assertIn('0.6.3', (ROOT / file).read_text())
+            self.assertIn('0.6.4', (ROOT / file).read_text())
