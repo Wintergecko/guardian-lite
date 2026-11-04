@@ -14,7 +14,7 @@ Imunify360 kombiniert einen serverweiten Netzwerk-Firewall-Agenten, dynamische I
 |---|---|---|
 | Malwaredatei-Scan, Bericht und Historie | Manuelle und geplante ClamAV-Scans pro Domain, Berichte, Historie, FIFO-Warteschlange bis 100 und strikt serielle Worker mit niedriger CPU-Prioritaet | Flexible Zeitplaene, gezielte globale Scan-Auftraege, sichtbare feinere Ressourcenbudgets und ressourcenschonendes Wiederholungsscanning |
 | RapidScan / Cloud-Scan | Lokaler Cache fuer unveraenderte, saubere Dateien; gebunden an Dateisystem-Metadaten, ClamAV-Binary und Signaturdatei-Metadaten; Cache ist begrenzt und invalidiert bei Aenderung | Kein Cloud-Hashabgleich/Whitelist-Feed und keine 5–20x-Leistungszusage; externe Reputations-/Hashquelle benoetigt Datenschutz-/Anbieterfreigabe |
-| System- und Benutzer-Cronjobs | Neue read-only Heuristikpruefung gaengiger System-/Benutzer-Cronpfade; zeigt Fundregel, Quelldatei und Zeilennummer, aendert nichts | Erweiterte Distributionenabdeckung, kuratierte Erkennungsregeln und validierte Testfixtures; keine vollstaendige Malware-Erkennung |
+| System- und Benutzer-Cronjobs | Read-only Heuristiken plus optional lokaler ClamAV-Signaturscan der erfassten Cron-Dateien; 4-MiB-/45-Sekunden-Grenzen, zeigt Regel/Pfad/Zeile oder Signaturname, aendert nichts | Erweiterte Distributionenabdeckung und kuratierte, mit echten Plesk-Distributionen validierte Erkennungsregeln; lokale ClamAV-Signaturen sind kein vollstaendiger Malware-Nachweis |
 | Live-Datei- und Upload-Scanning | Opt-in inotify-Wache mit gezielter ClamAV-Pruefung | fanotify-Abdeckung, FTP-/HTTP-Upload-Hooks, Dateiarchiv-Workflows, Overflow-/Wiederanlauf-Abdeckung und nachvollziehbare Vollstaendigkeit |
 | Bereinigung und Wiederherstellung | Manuelle Quarantaene; opt-in Reparatur nur aus bestaetigter Baseline nach sauberem Vollscan; Storage-Ansicht, 512-MiB-Baseline- und 256-MiB-/200-Eintraege-Backup-Quota sowie bestaetigte manuelle Loeschung | Sichere Vorschlaege fuer unbekannte Funde, granularere Aufbewahrungsregeln, Backup-Import und Bulk-Aktionen |
 | Ignore List | SHA-256-Ignore-Liste je Domain; ignorierte Dateien bleiben sichtbar und werden weiter gescannt, aber nicht automatisch gemeldet/repariert | Globale serverweite Hash-Liste und kontrollierte Pfad-Ausnahmen mit Erklaerung/Audit |
@@ -64,7 +64,7 @@ Die Doku-Hauptseite fuehrt Imunify AV/AV+, Imunify Email und Imunify Patch als s
 5. **PHP-Laufzeiterkennung:** Zunaechst messbarer Log-Modus mit Testfixtures und PHP-Handlermatrix; Blockieren bleibt Opt-in und wird nur fuer nachweislich abgedeckte Handler angeboten.
 6. **Datenbank und externe Dienste:** Read-only SQL-Scan und Anbieter-/Datenschutzentscheidung vor Bereinigung oder neuen Cloud-Reputationsquellen.
 7. **Optionale Betriebssystem-Patches:** KernelCare-Status/Integration separat; keine automatische Kernel-/Paketaktualisierung innerhalb der Guardian-Erweiterung.
-8. **Server-Integritaet:** Cronjob-Heuristiken um Distributionenpfade und Testfixtures erweitern; danach Systemdienst-/Konfigurationsauffaelligkeiten und weitere Admin-Tool-Marker erfassen. Nur lesend und mit manueller Bewertung.
+8. **Server-Integritaet:** Cronjob-Signaturpruefung und Heuristiken mit Distributionenpfaden und Testfixtures erweitern; danach Systemdienst-/Konfigurationsauffaelligkeiten und weitere Admin-Tool-Marker erfassen. Nur lesend und mit manueller Bewertung.
 
 Alle systemweiten Aktionen bleiben standardmaessig aus und werden ausschliesslich auf dem separaten Plesk-Testserver geprueft. Keine echte Plesk-Installation oder Firewall-Aktivierung wird durch CI vorgetaeuscht.
 
@@ -75,6 +75,8 @@ Alle systemweiten Aktionen bleiben standardmaessig aus und werden ausschliesslic
 - [Imunify360 admin dashboard, firewall, incidents, reputation and KernelCare](https://docs.imunify360.com/dashboard/)
 - [Imunify360 end-user files, history, ignore list and WebShield](https://docs.imunify360.com/user_interface/)
 - [Imunify360 installation, Plesk compatibility and conflicting firewall tooling](https://docs.imunify360.com/installation/)
+- [Plesk Firewall custom IP/port rules and separate-connection confirmation](https://support.plesk.com/hc/en-us/articles/12377519983511-How-to-manage-local-firewall-rules-using-Plesk-Firewall-in-Plesk-for-Linux)
+- [Plesk Firewall apply, confirmation and automatic rollback behavior](https://support.plesk.com/hc/en-us/articles/12376965151383-How-does-the-Plesk-Firewall-CLI-tool-update-and-restore-configuration)
 - [WP-CLI core checksum verification](https://developer.wordpress.org/cli/commands/core/verify-checksums/)
 - [WP-CLI database export to stdout](https://developer.wordpress.org/cli/commands/db/export/)
 - [ClamAV scan input modes and size limits](https://docs.clamav.net/manual/Usage/Scanning.html)

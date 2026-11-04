@@ -1,4 +1,4 @@
-# Guardian Lite 0.21.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.22.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -111,9 +111,9 @@ Referenzen: [AbuseIPDB CHECK](https://docs.abuseipdb.com/#check-endpoint), [Turn
 
 ## Cronjob-Sicherheitspruefung
 
-Unter **Verwaltung & Diagnose** kann ein Administrator die gaengigen System- und Benutzer-Cronpfade manuell pruefen lassen. Der Check ist read-only und sucht nach wenigen deutlichen Mustern wie Remote-Shell-Pipes, dekodierten Shell-Payloads, PHP-Inline-Eval und Ausfuehrung aus temporaeren Verzeichnissen. Treffer erscheinen im Ergebnis und im Incident-Verlauf. Angezeigt werden nur Datei, Zeilennummer und Regelkennung; der Befehlstext wird nicht kopiert. Guardian deaktiviert oder loescht keine Cronjobs.
+Unter **Verwaltung & Diagnose** kann ein Administrator die gaengigen System- und Benutzer-Cronpfade manuell pruefen lassen. Der read-only Check sucht nach deutlichen Mustern und prueft sicher gelesene Dateien zusaetzlich mit lokalen ClamAV-Signaturen, sofern ClamAV installiert ist. Fuer den Signaturscan kopiert Guardian die begrenzten Inhalte in ein privates temporaeres Verzeichnis (maximal 4 MiB insgesamt und 45 Sekunden); der Pfad und Signaturname erscheinen im Bericht. Treffer erscheinen auch im Incident-Verlauf. Bei heuristischen Treffern werden nur Datei, Zeilennummer und Regelkennung gezeigt, nicht der Befehlstext. Guardian deaktiviert oder loescht keine Cronjobs.
 
-Das ist eine begrenzte Heuristik, kein Malware-Vollscan. Ein sauberer Bericht beweist nicht, dass alle Cronjobs harmlos sind. Ungewoehnlich grosse Dateien, Symlinks und nicht lesbare Quellen werden ausgelassen; das Ergebnis markiert eine unvollstaendige Pruefung.
+Auch ClamAV ist nur ein lokaler Signaturnachweis und kein Malware-Vollscan oder Imunify-Cron-Erkennungsersatz. Ein sauberer Bericht beweist nicht, dass alle Cronjobs harmlos sind. Ungewoehnlich grosse Dateien, Symlinks und nicht lesbare Quellen werden ausgelassen; das Ergebnis markiert eine unvollstaendige Pruefung. Fehlt ClamAV, bleibt die Heuristikpruefung verfuegbar und der Signaturstatus wird als nicht ausgefuehrt angezeigt.
 
 ## WordPress-Core-Pruefsummen
 

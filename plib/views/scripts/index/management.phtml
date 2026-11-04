@@ -165,7 +165,7 @@ $domainSelect = function () use ($esc) {
 
   <h3>Auftraege</h3><pre><?= $esc(json_encode($management['jobs'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
   <h3>Cronjob-Sicherheitspruefung</h3>
-  <p>Prueft gaengige System- und Benutzer-Cronpfade nur lesend auf wenige klar verdaechtige Muster. Das ist eine heuristische Stichprobe, kein Malware-Vollscan; Guardian aendert oder loescht keine Cronjobs.</p>
+  <p>Prueft uebliche System- und Benutzer-Cronpfade read-only mit Heuristiken und, wenn ClamAV verfuegbar ist, zusaetzlich mit lokalen Malware-Signaturen. Dateien werden fuer den Scan in ein privates temporaeres Verzeichnis kopiert und danach entfernt. Kein vollstaendiger Malware-Nachweis; Guardian aendert oder loescht keine Cronjobs. Gesamtlimit: 4 MiB und 45 Sekunden.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cron-audit"><button>Cronjobs jetzt pruefen</button>
   </form>
