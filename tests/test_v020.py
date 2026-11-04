@@ -377,7 +377,9 @@ class NewFeatureTests(unittest.TestCase):
                     h.scan_worker('example.com', jobid, inherited)
                     reports.append(h.load_job(jobid))
 
-            self.assertEqual(len(calls), 2)
+            self.assertEqual([report.get('status') for report in reports], ['finished', 'finished', 'finished'],
+                             repr(reports))
+            self.assertEqual(len(calls), 2, repr(reports))
             self.assertEqual(reports[0]['rapid_scan']['files_scanned'], 1)
             self.assertTrue(reports[0]['rapid_scan']['cache_updated'])
             self.assertEqual(reports[1]['rapid_scan']['cached_clean'], 1)
