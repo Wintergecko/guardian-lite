@@ -34,7 +34,7 @@ def build(dest, tag=None):
     with zipfile.ZipFile(out, 'w') as z:
         for file in files:
             rel = file.relative_to(ROOT).as_posix()
-            mode = 0o755 if rel in ('sbin/guardian-helper', 'sbin/guardian-updater') else 0o644
+            mode = 0o755 if rel in ('sbin/guardian-helper', 'sbin/guardian-updater', 'sbin/guardian-manager') else 0o644
             info = zipfile.ZipInfo(rel, date_time=(2026, 1, 1, 0, 0, 0))
             info.create_system = 3
             info.external_attr = (stat.S_IFREG | mode) << 16

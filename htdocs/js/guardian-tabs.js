@@ -10,6 +10,7 @@
       {id: 'attacks', label: 'Angriffe & Schutz', sections: ['guardian-shield', 'guardian-network']},
       {id: 'updates', label: 'Updates', sections: ['guardian-updater']},
       {id: 'incidents', label: 'Incidents', sections: ['guardian-incidents']},
+      {id: 'management', label: 'Verwaltung & Diagnose', sections: ['guardian-management']},
       {id: 'roadmap', label: 'Feature-Liste', sections: ['guardian-roadmap']}
     ];
     if (sections.some(function (group) {

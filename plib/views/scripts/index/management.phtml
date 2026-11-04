@@ -1,0 +1,115 @@
+<?php
+$management = is_array($this->management) ? $this->management : [];
+$cloud = $management['cloud'] ?? [];
+$form = function ($operation, array $fields, $label, $confirmation = '') use ($esc) {
+    echo '<form method="post" action="' . $esc(pm_Context::getActionUrl('index', 'manage')) . '"';
+    if ($confirmation !== '') { echo ' onsubmit="return confirm(' . $esc(json_encode($confirmation)) . ');"'; }
+    echo '><input type="hidden" name="csrf" value="' . $esc($this->csrf) . '"><input type="hidden" name="operation" value="' . $esc($operation) . '">';
+    foreach ($fields as $name => $value) {
+        echo '<input type="hidden" name="' . $esc($name) . '" value="' . $esc($value) . '">';
+    }
+    echo '<button class="guardian-button" type="submit">' . $esc($label) . '</button></form>';
+};
+$domainSelect = function () use ($esc) {
+    echo '<select name="domain" required>';
+    foreach ($this->domains as $domain) { echo '<option value="' . $esc($domain) . '">' . $esc($domain) . '</option>'; }
+    echo '</select>';
+};
+?>
+<section class="guardian-card guardian-lower" id="guardian-management">
+  <h2>Schutzverwaltung und Diagnose</h2>
+  <p>Neue Funktionen sind standardmaessig aus. PHP-Handler gelten fuer alle Websites dieses Handlers. Aenderungen zuerst auf deinem Testserver pruefen.</p>
+  <?php if ($this->managementError): ?><div class="guardian-alert"><?= $esc($this->managementError) ?></div><?php endif; ?>
+  <?php if ($this->managementResult): ?>
+    <div class="guardian-alert"><strong><?= !empty($this->managementResult['ok']) ? 'Aktion bearbeitet' : 'Aktion fehlgeschlagen' ?></strong>
+      <pre><?= $esc(json_encode($this->managementResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+    </div>
+  <?php endif; ?>
+  <h3>PHP-Handler: Backup, Snuffleupagus und Rollback</h3>
+  <p>Installation baut Snuffleupagus 0.14.0 aus einem festgelegten Upstream-Commit als unprivilegierter Benutzer. Benoetigt passende Plesk-PHP-Entwicklungswerkzeuge, git, gcc, make und autoconf. Aktivierung sichert php.ini, prueft PHP/FPM und laedt FPM neu. Zuerst Simulation verwenden.</p>
+  <div class="guardian-scroll"><table><thead><tr><th>Handler</th><th>Modul</th><th>Aktionen</th></tr></thead><tbody>
+  <?php foreach ($management['handlers'] ?? [] as $handler): ?>
+    <tr><td>PHP <?= $esc($handler['version']) ?></td><td><?= !empty($handler['module']) ? 'Installiert' : 'Fehlt' ?> · <?= !empty($handler['managed']) ? 'Guardian konfiguriert' : 'Nicht konfiguriert' ?></td><td>
+      <?php $fields = ['version' => $handler['version'], 'sha256' => $handler['sha256']];
+        $form('php-backup', $fields, 'Backup erstellen');
+        if (empty($handler['module'])) { $form('runtime-install', $fields, 'Modul installieren', 'Snuffleupagus fuer diesen PHP-Handler herunterladen und bauen? Noch keine Aktivierung.'); }
+        else {
+          foreach (['simulate' => 'Simulation', 'enforce' => 'Blockieren', 'off' => 'Deaktivieren'] as $mode => $label) {
+            $form('runtime-set', $fields + ['mode' => $mode], $label, 'PHP-Konfiguration fuer ALLE Websites dieses Handlers aendern und FPM neu laden?');
+          }
+        }
+      ?>
+      <?php foreach ($management['backups'] ?? [] as $backup): if (($backup['kind'] ?? '') === 'php' && ($backup['identity'] ?? '') === $handler['version']): ?>
+        <?php $form('php-restore', $fields + ['backup' => $backup['id']], 'Rollback ' . $backup['created_at'], 'PHP-Konfiguration aus diesem Backup wiederherstellen und FPM neu laden?'); ?>
+      <?php endif; endforeach; ?>
+    </td></tr>
+  <?php endforeach; ?>
+  </tbody></table></div>
+
+  <h3>WAF und HTTP-Botlimits</h3>
+  <p>Verwaltet eine Guardian-Regeldatei fuer genau eine ausgewaehlte Domain. Bestehende Regeln bleiben erhalten. Benoetigt Apache ModSecurity v2 mit SecDataDir. Ein neues Ziel ersetzt das bisherige Guardian-Ziel. Hinter Proxies muss REMOTE_ADDR bereits die korrekte Besucher-IP enthalten.</p>
+  <p>Aktuell: <?= $esc(json_encode($management['waf'] ?? [], JSON_UNESCAPED_SLASHES)) ?></p>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="sha256" value="<?= $esc($management['waf_sha256'] ?? '') ?>">
+    <?php $domainSelect(); ?>
+    <select name="mode"><option value="detect">Nur protokollieren</option><option value="enforce">Mit HTTP 429 sperren</option><option value="off">Guardian-Regeln deaktivieren</option></select>
+    <label>Anfragen je IP / 60 Sekunden <input name="limit" type="number" min="10" max="10000" value="120" required></label>
+    <button name="operation" value="waf-preview">Vorschau</button>
+    <button name="operation" value="waf-set" onclick="return confirm('Guardian-Regeln installieren und Apache nach Syntaxpruefung neu laden?');">Anwenden</button>
+  </form>
+  <?php foreach ($management['backups'] ?? [] as $backup): if (($backup['kind'] ?? '') === 'waf') {
+      $form('waf-restore', ['backup' => $backup['id'], 'sha256' => $management['waf_sha256'] ?? ''], 'WAF-Rollback ' . $backup['created_at'], 'Guardian-WAF-Regeln aus diesem Backup wiederherstellen und Apache neu laden?');
+  } endforeach; ?>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Plesk-WAF-Modus dieser Domain aendern?');">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="waf-engine">
+    <?php $domainSelect(); ?><select name="mode"><option value="detection-only">WAF nur Erkennung</option><option value="on">WAF aktivieren</option><option value="off">WAF deaktivieren</option></select><button>WAF-Modus setzen</button>
+  </form>
+
+  <h3>AbuseIPDB und Cloudflare Turnstile</h3>
+  <p>AbuseIPDB: <?= !empty($cloud['abuseipdb_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?> · Turnstile: <?= !empty($cloud['turnstile_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?></p>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" autocomplete="off">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cloud-save">
+    <label>AbuseIPDB API-Key <input type="password" name="abuseipdb_key" maxlength="200" autocomplete="new-password"></label>
+    <label>Turnstile Site-Key <input type="text" name="turnstile_sitekey" maxlength="200"></label>
+    <label>Turnstile Secret <input type="password" name="turnstile_secret" maxlength="200" autocomplete="new-password"></label>
+    <p>Leere Schluesselfelder behalten gespeicherte Werte.</p>
+    <label><input type="checkbox" name="consent" value="1" <?= !empty($cloud['consent']) ? 'checked' : '' ?>> IP-Reputationsabfragen an AbuseIPDB und Browserpruefungen ueber Cloudflare erlauben</label>
+    <label><input type="checkbox" name="clear" value="1"> Gespeicherte Schluessel loeschen</label><button>Speichern</button>
+  </form>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="reputation"><label>Oeffentliche IP <input name="ip" maxlength="45" required></label><button>Reputation abfragen</button>
+  </form>
+  <p>Keine automatischen Meldungen oder IP-Sperren. Ergebnisse werden eine Stunde zwischengespeichert.</p>
+  <pre><?= $esc(json_encode($management['reputation'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('PHP-Anmeldeschutz via .user.ini aendern? Benoetigt HTTPS, PHP-cURL und passende Turnstile-Hostnamen. XML-RPC/API-Clients koennen dadurch blockiert werden.');">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="bots-set"><?php $domainSelect(); ?>
+    <select name="mode"><option value="on">Turnstile aktivieren</option><option value="off">Turnstile deaktivieren</option></select><button>PHP-Anmeldeschutz setzen</button>
+  </form>
+  <p>Schuetzt ausgewaehlte PHP-Anmeldepfade via auto_prepend_file. Statische Dateien und andere Endpunkte werden nicht abgedeckt. Aktivierung kann wegen PHP-INI-Cache bis zu 5 Minuten benoetigen.</p>
+  <pre><?= $esc(json_encode($management['bots'] ?? [], JSON_PRETTY_PRINT)) ?></pre>
+
+  <h3>Good-File-Baselines und automatische Reparatur</h3>
+  <p>Nur aus einer von dir als sauber freigegebenen Installation erstellen; ein ClamAV-Ergebnis allein beweist keine saubere Herkunft. Benoetigt einen fehlerfreien Vollscan ohne Funde, hoechstens eine Stunde alt. Speichert PHP-/Konfigurationsdateien bis 2 MiB je Datei, 5000 Dateien und 64 MiB insgesamt. Kein Hersteller-Abgleich. Neue oder unbekannte Malwaredateien werden nicht automatisch geloescht.</p>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="baseline-create"><?php $domainSelect(); ?>
+    <label><input type="checkbox" name="trusted" value="1" required> Ich habe die saubere Herkunft dieser Website geprueft</label><button>Baseline erstellen</button>
+  </form>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Automatische Wiederherstellung passender Malwarefunde aus der freigegebenen Baseline aendern? CMS-Updates koennen dadurch zurueckgesetzt werden.');">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="repair-set"><?php $domainSelect(); ?><select name="mode"><option value="off">Automatische Reparatur aus</option><option value="on">Automatische Reparatur an</option></select><button>Reparaturmodus setzen</button>
+  </form>
+  <pre><?= $esc(json_encode(['baselines' => $management['baselines'] ?? [], 'autorepair' => $management['autorepair'] ?? []], JSON_PRETTY_PRINT)) ?></pre>
+  <?php if (is_array($this->scan) && !empty($this->scan['findings'])): foreach ($this->scan['findings'] as $i => $finding): ?>
+    <p><?= $esc($finding['path']) ?> · <?= $esc($finding['state']) ?></p>
+    <?php if (($finding['state'] ?? '') === 'found') { $form('repair', ['jobid' => $this->scan['id'], 'index' => $i], 'Aus Baseline reparieren', 'Datei durch die freigegebene Baseline ersetzen? Original bleibt in Quarantaene.'); }
+      if (($finding['state'] ?? '') === 'repaired') { $form('repair-rollback', ['jobid' => $this->scan['id'], 'index' => $i], 'Reparatur zuruecknehmen', 'Infiziertes Original wiederherstellen? Malware kann danach wieder aktiv sein.'); } ?>
+  <?php endforeach; endif; ?>
+
+  <h3>Auftraege</h3><pre><?= $esc(json_encode($management['jobs'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <h3>Diagnose fuer deinen Plesk-Test</h3>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="diagnostics"><?php $domainSelect(); ?>
+    <label><input type="checkbox" name="http_probe" value="1"> Kurzzeitig eine zufaellig benannte PHP-Testdatei anlegen, per HTTPS abrufen und danach entfernen</label><button>Diagnose ausfuehren</button>
+  </form>
+  <p><a href="<?= $esc(pm_Context::getActionUrl('index', 'management-export')) ?>">Letztes Diagnoseergebnis als JSON herunterladen</a></p>
+  <pre><?= $esc(json_encode($management['diagnostics'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+</section>
