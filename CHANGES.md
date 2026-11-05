@@ -1,3 +1,8 @@
+## 0.28.22 – Navigation und Chevron-Ausrichtung
+- Behebt einen weißen Abstand über der Seitennavigation: das Menü sitzt jetzt bündig unter der grünen Kopfleiste.
+- Richtet die Chevrons der aufklappbaren Navigationsgruppen rechts aus; Beschriftungen stehen linksbündig.
+- Ändert nur die Darstellung per CSS; Markup, Formularziele und Aktionen bleiben unverändert.
+
 ## 0.28.21 – Imunify360-Dashboard-Layout
 - Gestaltet die Administrationsoberfläche nach dem Layout der Imunify360-Dashboard-Dokumentation: grüne Kopfleiste, helle Seitennavigation links mit aufklappbaren Gruppen und grünem Akzent für den aktiven Bereich.
 - Passt Inhaltsfläche, Abstände und Buttonfarben an; auf schmalen Bildschirmen (unter 900 px) stehen Navigation und Inhalt untereinander.

@@ -275,9 +275,9 @@
 @media(max-width:700px){.guardian-result-grid,.guardian-result-list{grid-template-columns:1fr}.guardian-result-grid>div{grid-template-columns:minmax(95px,.7fr) minmax(0,1.3fr)}}
 
 /* Imunify360 docs layout: green top bar, light left navigation with expandable groups, white content area. */
-.guardian{display:flow-root;max-width:none;margin:0;padding:0;background:#fff;border:1px solid #e2e7ed;border-radius:4px;min-height:600px;font-size:14px;color:#253447!important}
+.guardian{display:flow-root;position:relative;max-width:none;margin:0;padding:0;background:#fff;border:1px solid #e2e7ed;border-radius:4px;min-height:600px;font-size:14px;color:#253447!important}
 .guardian-shell{display:contents;margin:0}
-.guardian-menu{float:left;width:250px;box-sizing:border-box;position:sticky;top:0;display:flex;flex-direction:column;gap:0;padding:0;margin:0;background:#f6f8f7;border:0;border-right:1px solid #e2e7ed;border-radius:0;box-shadow:none;overflow:visible;min-height:100%;z-index:5}
+.guardian-menu{position:absolute;top:0;bottom:0;left:0;width:250px;box-sizing:border-box;display:flex;flex-direction:column;gap:0;padding:0;margin:0;background:#f6f8f7;border:0;border-right:1px solid #e2e7ed;border-radius:0;box-shadow:none;overflow:visible;z-index:5}
 .guardian-brand{box-sizing:border-box;height:66px;min-width:0;padding:0 18px;gap:10px;background:#6aa978;color:#fff;font-size:20px;font-weight:500}
 .guardian-mark{font-size:30px;color:#fff}
 .guardian-brand small{color:#e6f3e9}
@@ -293,6 +293,7 @@
 .guardian-menu-static a:not(.guardian-brand){padding:8px 18px 8px 40px;font-size:13px;color:#4b5a6a;border-radius:0}
 .guardian-menu-static a:not(.guardian-brand):hover{background:#eef5f0;color:#167e40}
 .guardian .guardian-tab{width:100%;min-height:0;justify-content:space-between;padding:13px 18px;border:0;border-left:3px solid transparent;border-radius:0;font-size:14px;font-weight:600;color:#2d3a48}
+.guardian .guardian-tab{text-align:left;flex-direction:row-reverse}
 .guardian .guardian-tab:hover{background:#fff;color:#188447}
 .guardian .guardian-menu-group.is-active>.guardian-tab{border-left-color:#4aa765;background:#fff;color:#1f2d3d}
 .guardian-submenu{position:static;min-width:0;margin:0;padding:2px 0 10px;background:transparent;border:0;border-radius:0;box-shadow:none}
