@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.14 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.15 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -80,7 +80,7 @@ Unter **PHP Runtime → Handler & Rollback** werden unterstuetzte Plesk-PHP-Hand
 
 1. **Backup erstellen** speichert php.ini root-privat mit SHA-256.
 2. **Modul installieren** startet einen Hintergrundauftrag. Voraussetzungen: die zum Handler passenden `phpize`/`php-config`, git, gcc, make und autoconf. Fehlende Pakete werden nicht ungefragt installiert. Der Build verwendet Snuffleupagus 0.14.0 mit festem Commit `1d8614af85a1baa52656f3adbd4684772df91288`. Build-Schritte laufen unter dem gesonderten Systembenutzer `guardian-build`; nur das fertige Modul wird als root installiert. Ein vorhandenes Modul wird nicht ueberschrieben.
-3. **Simulation** oder **Blockieren** prueft Modul/Regeln und eine harmlose PHP-CLI-Probe. Guardian ergaenzt einen markierten php.ini-Block, testet FPM und laedt nur den gewaehlten FPM-Dienst neu. Bei Fehler wird die vorherige Konfiguration zurueckgeschrieben. Fremde Snuffleupagus-Konfigurationen werden nicht uebernommen.
+3. **Simulation** oder **Blockieren** prueft Modul/Regeln und eine harmlose PHP-CLI-Probe. Guardian ergaenzt einen markierten php.ini-Block, testet FPM und laedt den gemeinsamen Plesk-FPM-Dienst sowie alle laufenden dedizierten Pools derselben Version neu. Bei Fehler wird die vorherige Konfiguration zurueckgeschrieben. Fremde Snuffleupagus-Konfigurationen werden nicht uebernommen.
 4. **Rollback** verweigert das Ueberschreiben einer seit dem Seitenaufruf geaenderten Konfiguration. Vor dem Rollback wird erneut ein Recovery-Backup erstellt.
 
 Die Policy betrifft `system`, `shell_exec`, `passthru`, `exec`, `proc_open` und `popen`. Blockieren kann legitime CMS-/Backup-Funktionen beeintraechtigen. CLI-Proben und FPM-Syntaxtests beweisen noch keine Wirksamkeit unter echten Webrequests. System-PHP, Apache-PHP und herstellerspezifische TuxCare-Handler werden nicht automatisch verwaltet. Fuer CGI-/FastCGI-Handler ohne passenden FPM-Dienst scheitert die Aktivierung und wird zurueckgenommen.
@@ -88,6 +88,12 @@ Die Policy betrifft `system`, `shell_exec`, `passthru`, `exec`, `proc_open` und 
 Fehlende Build-Werkzeuge werden je Handler in der Oberflaeche angezeigt. Beispiel fuer PHP 8.3 auf Debian/Ubuntu, vom Betreiber als root auszufuehren: `apt install plesk-php83-dev git gcc make autoconf`. Fuer andere Handler das passende Entwicklungs-Paket verwenden. [Plesk dokumentiert die handler-spezifischen Entwicklerpakete](https://support.plesk.com/hc/en-us/articles/12377651968023-How-to-install-uninstall-memcached-PHP-extension-for-Plesk-PHP-handlers).
 
 Referenzen: [Snuffleupagus-Installation](https://snuffleupagus.readthedocs.io/installation.html), [Konfiguration und Simulation](https://snuffleupagus.readthedocs.io/config.html).
+
+### Testserver-Ergebnis PHP 8.4 / 8.5
+
+Am 5. November 2026 wurde PHP 8.5 fuer `mc.gz590.eu` und PHP 8.4 fuer 13 Websites in Simulation gesetzt. Der gemeinsame PHP-8.4-Pool und alle sechs dedizierten PHP-8.4-Pools wurden neu geladen. Die sechs Plesk-generierten Domain-Konfigurationen referenzieren die Guardian-Simulationsregel; ein doppelter `extension`-Eintrag wurde entfernt. PHP-CLI-Proben mit jeder der sechs domainbezogenen INI-Dateien bestaetigten PHP 8.4.27, geladenes Snuffleupagus und den aktiven Regelpfad. Die harmlose `shell_exec`-Probe wurde im Simulationsmodus protokolliert und ausgefuehrt.
+
+Echte HTTPS-PHP-Proben bestaetigten die Funktion fuer `gz590.eu` und `wordpress.gz590.eu`. Vier weitere Hosts liefern 403/404/502 oder werden durch eine andere Anwendung bzw. einen Reverse Proxy bedient; dort ist der PHP-Aufruf ueber HTTP damit nicht bestaetigt. Die beteiligten FPM-Dienste blieben aktiv. Eine Simulation protokolliert Regelverletzungen und laesst sie weiterlaufen; sie blockiert keine Website-Funktionen.
 
 ## WAF und HTTP-Botlimits
 

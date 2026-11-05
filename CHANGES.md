@@ -1,3 +1,9 @@
+## 0.28.15 – PHP-Handler-Reload fuer dedizierte Pools
+
+Guardian laedt nach PHP-Runtime-Aenderungen und Rollbacks nun neben dem gemeinsamen Plesk-FPM-Dienst auch alle laufenden dedizierten FPM-Pools derselben PHP-Version neu. Damit erreichen Simulation, Aktivierung und Wiederherstellung auch Websites mit eigenen PHP-FPM-Diensten.
+
+Auf dem Testserver erfolgreich fuer PHP 8.4 geprueft: sechs dedizierte FPM-Dienste aktiv, Snuffleupagus geladen und Simulationsregel pro Domain gesetzt. shell_exec wurde im Simulationsmodus protokolliert und weiterhin ausgefuehrt. HTTP-Proben waren fuer zwei Sites moeglich; vier weitere beantworten Requests mit 403/404/502 oder werden von Anwendungs-Proxys bedient, daher ist deren Live-PHP-Aufruf nicht bestaetigt.
+
 ## 0.28.14 – Bestaetigte Aufbewahrungsbereinigung
 - Ergaenzt eine Aufbewahrungsfrist mit Vorschau fuer alte PHP-/WAF-Backups und Good-File-Baselines.
 - Entfernt Wiederherstellungspunkte erst nach separater Admin-Bestaetigung; die Vorschau wird vor der Bereinigung erneut gegen den aktuellen Bestand geprueft.

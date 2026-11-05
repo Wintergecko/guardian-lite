@@ -56,6 +56,25 @@ class ManagementTests(unittest.TestCase):
         m.h.save_job(report)
         return report
 
+    def test_php_handler_reload_includes_running_plesk_dedicated_pools(self):
+        base = self.base / 'php84'
+        calls = []
+        def fake_run(args, timeout=None):
+            calls.append([str(item) for item in args])
+            if len(args) > 1 and str(args[1]) == 'list-units':
+                return ('plesk-php84-fpm.service loaded active running shared\n'
+                        'plesk-php84-fpm_wordpress.example.test_50.service loaded active running dedicated\n'
+                        'plesk-php83-fpm_other.example.test_2.service loaded active running unrelated\n'
+                        'plesk-php84-fpm_bad name.service loaded active running malformed\n')
+            return ''
+        with mock.patch.object(m, 'handler', return_value=base), \
+             mock.patch.object(m.h, 'binary', return_value='/bin/systemctl'), \
+             mock.patch.object(m, 'run', side_effect=fake_run):
+            m.reload_handler('8.4')
+        reloads = [call[2] for call in calls if len(call) > 2 and call[1] == 'reload']
+        self.assertEqual(reloads, ['plesk-php84-fpm.service',
+                                   'plesk-php84-fpm_wordpress.example.test_50.service'])
+
     def crs_archive(self, version='4.30.0', extra=None):
         buffer = io.BytesIO()
         with tarfile.open(fileobj=buffer, mode='w:gz') as archive:

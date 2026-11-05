@@ -1,6 +1,6 @@
-# Guardian Lite v0.28.14 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.15 – Sicherheitsmodell und Grenzen
 
-## 0.28.14 – Aufbewahrungsbereinigung
+## 0.28.15 – Aufbewahrungsbereinigung
 
 - Die Bereinigung ist ein manueller Einmalvorgang; es gibt keine zeitgesteuerte oder automatische Loeschung.
 - Der Admin sieht Alter und Umfang der Kandidaten vorab und bestaetigt per separater POST-/CSRF-geschuetzter Aktion.
