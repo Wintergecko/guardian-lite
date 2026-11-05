@@ -45,6 +45,7 @@ $domainSelect = function () use ($esc) {
       <?php endforeach; ?>
     </tbody></table></div></details>
   <?php endif; ?>
+  <section class="guardian-card guardian-subsection" id="guardian-settings-storage">
   <h3>Speicher und Wiederherstellungspunkte</h3>
   <p>Guardian-Verbrauch: <strong><?= $esc($formatBytes($storage['managed_bytes'] ?? 0)) ?></strong>
     · Baselines: <strong><?= $esc($formatBytes($storageAreas['baselines']['bytes'] ?? 0)) ?> / <?= $esc($formatBytes($storage['baseline_quota_bytes'] ?? 536870912)) ?></strong>
@@ -69,6 +70,8 @@ $domainSelect = function () use ($esc) {
     <?php endforeach; ?>
     </tbody></table></div>
   <?php else: ?><p>Keine Backups gespeichert.</p><?php endif; ?>
+  </section>
+  <section class="guardian-card guardian-subsection" id="guardian-php-config">
   <h3>PHP-Handler: Backup, Snuffleupagus und Rollback</h3>
   <p>Installation baut Snuffleupagus 0.14.0 aus einem festgelegten Upstream-Commit als unprivilegierter Benutzer. Benoetigt passende Plesk-PHP-Entwicklungswerkzeuge, git, gcc, make und autoconf. Aktivierung sichert php.ini, prueft PHP/FPM und laedt FPM neu. Zuerst Simulation verwenden.</p>
   <div class="guardian-scroll"><table><thead><tr><th>Handler</th><th>Modul</th><th>Aktionen</th></tr></thead><tbody>
@@ -90,6 +93,8 @@ $domainSelect = function () use ($esc) {
   <?php endforeach; ?>
   </tbody></table></div>
 
+  </section>
+  <section class="guardian-card guardian-subsection" id="guardian-webshield-config">
   <h3>WAF und HTTP-Botlimits</h3>
   <p>Verwaltet eine Guardian-Regeldatei fuer genau eine ausgewaehlte Domain. Bestehende Regeln bleiben erhalten. Benoetigt Apache ModSecurity v2 mit SecDataDir. Ein neues Ziel ersetzt das bisherige Guardian-Ziel. Hinter Proxies muss REMOTE_ADDR bereits die korrekte Besucher-IP enthalten.</p>
   <p>Aktuell: <?= $esc(json_encode($management['waf'] ?? [], JSON_UNESCAPED_SLASHES)) ?></p>
@@ -109,7 +114,9 @@ $domainSelect = function () use ($esc) {
     <?php $domainSelect(); ?><select name="mode"><option value="detection-only">WAF nur Erkennung</option><option value="on">WAF aktivieren</option><option value="off">WAF deaktivieren</option></select><button>WAF-Modus setzen</button>
   </form>
 
-  <h3>AbuseIPDB und Cloudflare Turnstile</h3>
+  </section>
+  <section class="guardian-card guardian-subsection" id="guardian-service-keys">
+  <h3>Cloud-Dienst-Schluessel</h3>
   <p>AbuseIPDB: <?= !empty($cloud['abuseipdb_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?> · Turnstile: <?= !empty($cloud['turnstile_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?></p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" autocomplete="off">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cloud-save">
@@ -120,11 +127,17 @@ $domainSelect = function () use ($esc) {
     <label><input type="checkbox" name="consent" value="1" <?= !empty($cloud['consent']) ? 'checked' : '' ?>> IP-Reputationsabfragen an AbuseIPDB und Browserpruefungen ueber Cloudflare erlauben</label>
     <label><input type="checkbox" name="clear" value="1"> Gespeicherte Schluessel loeschen</label><button>Speichern</button>
   </form>
+  </section>
+  <section class="guardian-card guardian-subsection" id="guardian-reputation">
+  <h3>Reputation manuell pruefen</h3>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="reputation"><label>Oeffentliche IP <input name="ip" maxlength="45" required></label><button>Reputation abfragen</button>
   </form>
   <p>Keine automatischen Meldungen oder IP-Sperren. Ergebnisse werden eine Stunde zwischengespeichert.</p>
   <pre><?= $esc(json_encode($management['reputation'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  </section>
+  <section class="guardian-card guardian-subsection" id="guardian-turnstile">
+  <h3>PHP-Anmeldeschutz mit Turnstile</h3>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('PHP-Anmeldeschutz via .user.ini aendern? Benoetigt HTTPS, PHP-cURL und passende Turnstile-Hostnamen. XML-RPC/API-Clients koennen dadurch blockiert werden.');">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="bots-set"><?php $domainSelect(); ?>
     <select name="mode"><option value="on">Turnstile aktivieren</option><option value="off">Turnstile deaktivieren</option></select><button>PHP-Anmeldeschutz setzen</button>
@@ -132,6 +145,8 @@ $domainSelect = function () use ($esc) {
   <p>Schuetzt ausgewaehlte PHP-Anmeldepfade via auto_prepend_file. Statische Dateien und andere Endpunkte werden nicht abgedeckt. Aktivierung kann wegen PHP-INI-Cache bis zu 5 Minuten benoetigen.</p>
   <pre><?= $esc(json_encode($management['bots'] ?? [], JSON_PRETTY_PRINT)) ?></pre>
 
+  </section>
+  <section class="guardian-card guardian-subsection" id="guardian-malware-repair">
   <h3>Good-File-Baselines und automatische Reparatur</h3>
   <p>Nur aus einer von dir als sauber freigegebenen Installation erstellen; ein ClamAV-Ergebnis allein beweist keine saubere Herkunft. Benoetigt einen fehlerfreien Vollscan ohne Funde, hoechstens eine Stunde alt. Speichert PHP-/Konfigurationsdateien bis 2 MiB je Datei, 5000 Dateien und 64 MiB je Baseline; insgesamt gelten 512 MiB. Kein Hersteller-Abgleich. Neue oder unbekannte Malwaredateien werden nicht automatisch geloescht.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
@@ -167,6 +182,8 @@ $domainSelect = function () use ($esc) {
       if (($finding['state'] ?? '') === 'repaired') { $form('repair-rollback', ['jobid' => $this->scan['id'], 'index' => $i], 'Reparatur zuruecknehmen', 'Infiziertes Original wiederherstellen? Malware kann danach wieder aktiv sein.'); } ?>
   <?php endforeach; endif; ?>
 
+  </section>
+  <section class="guardian-card guardian-subsection" id="guardian-malware-ignore">
   <h3>Malware-Ignore-Listen (SHA-256)</h3>
   <p>Domain-Eintraege gelten fuer exakt denselben Dateiinhalt auf dieser Domain; globale Eintraege gelten fuer alle gehosteten Domains. Guardian scannt die Datei weiterhin und zeigt den Treffer als ignoriert, loest aber keine automatische Reparatur oder Malwarewarnung aus. Globale Ausnahmen koennen echte Malware auf allen Websites verbergen; nur nach sorgfaeltiger manueller Pruefung verwenden.</p>
   <?php foreach (($management['ignore_hashes'] ?? []) as $ignoredDomain => $hashes): foreach ($hashes as $hash): ?>
@@ -188,6 +205,8 @@ $domainSelect = function () use ($esc) {
         </p>
   <?php endif; endforeach; endif; ?>
 
+  </section>
+  <section class="guardian-card guardian-subsection" id="guardian-cms-integrity">
   <h3>Auftraege</h3><pre><?= $esc(json_encode($management['jobs'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
   <h3>Cronjob-Sicherheitspruefung</h3>
   <p>Prueft uebliche System- und Benutzer-Cronpfade read-only mit Heuristiken und, wenn ClamAV verfuegbar ist, zusaetzlich mit lokalen Malware-Signaturen. Dateien werden fuer den Scan in ein privates temporaeres Verzeichnis kopiert und danach entfernt. Kein vollstaendiger Malware-Nachweis; Guardian aendert oder loescht keine Cronjobs. Gesamtlimit: 4 MiB und 45 Sekunden.</p>
@@ -222,6 +241,8 @@ $domainSelect = function () use ($esc) {
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cms-db-clamav-scan"><?php $domainSelect(); ?><button>CMS-Datenbank mit ClamAV pruefen</button>
   </form>
   <pre><?= $esc(json_encode($management['cms_db_clamav_scans'] ?? $management['wordpress_db_clamav_scans'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  </section>
+  <section class="guardian-card guardian-subsection" id="guardian-management-diagnostics">
   <h3>Diagnose fuer deinen Plesk-Test</h3>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="diagnostics"><?php $domainSelect(); ?>
@@ -229,4 +250,5 @@ $domainSelect = function () use ($esc) {
   </form>
   <p><a href="<?= $esc(pm_Context::getActionUrl('index', 'management-export')) ?>">Letztes Diagnoseergebnis als JSON herunterladen</a></p>
   <pre><?= $esc(json_encode($management['diagnostics'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  </section>
 </section>

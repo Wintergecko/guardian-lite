@@ -1,4 +1,10 @@
-# Guardian Lite v0.27.1 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.0 – Sicherheitsmodell und Grenzen
+
+## 0.28.0 – Menue-Neuordnung
+
+- Die Navigation nutzt statische, HTML-escaped Beschriftungen und IDs aus dem Template; keine nutzerkontrollierten HTML-Fragmente oder dynamischen `innerHTML`-Inhalte.
+- Inhaltsbereiche werden clientseitig nur in Menuepanels verschoben. Ohne JavaScript bleiben alle bereits serverseitig gerenderten Bereiche sichtbar.
+- Gruppen und Untermenuepunkte verlinken nur Guardian-Funktionen. PHP-Handler-Schutz, WebShield, Reputation und CMS-Pruefungen sind entsprechend ihrem tatsaechlichen Teil-/Manuellstatus markiert.
 
 ## 0.27.1 – Diagnose-Schalter in der Schutzverwaltung
 

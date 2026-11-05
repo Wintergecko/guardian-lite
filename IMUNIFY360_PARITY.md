@@ -32,7 +32,7 @@ Imunify360 kombiniert einen serverweiten Netzwerk-Firewall-Agenten, dynamische I
 | Admin-Tools-Erkennung | Begrenzte read-only Kandidatenpruefung fuer Adminer/TinyFileManager nach Dateiname und Quelltextmarker; getrennte Warnung mit SHA-256, keine Dateiaktion | Breitere, gepflegte Tool-/Versionsmarker und weitere Testfixtures. Imunify kann solche Dateien automatisch leeren; Guardian fordert manuelle Bewertung und Aktion |
 | Low-Resource-Modus | Kein globaler Ressourcenmodus; einzelne Scanner/Waechter sind begrenzt | Sichtbare CPU-/RAM- und Zeitbudgets mit pausierbaren Hintergrundaufgaben. Schutzmodule duerfen dabei nicht stillschweigend abgeschaltet werden |
 | KernelCare / Patch Management | Nicht umgesetzt | Status-/Lizenzintegration mit KernelCare. Rebootlose Kernel-Patches sind ein separater, lizenzierter Dienst und werden nicht von Guardian selbst entwickelt. |
-| Dashboard, Advisor, Nutzerfunktionen | Plesk-Statuskarten, JSON-Diagnose, Admin-Aktionen | Zeitreihen/Heatmaps, Sicherheits-Advisor, rollen-/kundenbezogene Freigaben und Feature-Steuerung pro Subscription |
+| Dashboard, Advisor, Nutzerfunktionen | Neu geordnetes Seitenmenue nach Dashboard, Malware Scanner, Incidents, Firewall, WebShield, PHP Runtime, Reputation Management und Einstellungen; Guardian-Inhalte sind ihren vorhandenen Funktionen zugeordnet | Zeitreihen/Heatmaps, Sicherheits-Advisor, rollen-/kundenbezogene Freigaben und Feature-Steuerung pro Subscription |
 
 ## Plesk-Geltungsbereich
 

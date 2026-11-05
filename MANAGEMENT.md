@@ -1,4 +1,8 @@
-# Guardian Lite 0.27.1 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.0 – Schutzverwaltung und Plesk-Praxistest
+
+## Navigation
+
+Die Guardian-Oberflaeche ist an die Hauptbereiche im Imunify360-Dashboard angelehnt. **Dashboard**, **Malware Scanner**, **Incidents**, **Firewall**, **WebShield**, **PHP Runtime**, **Reputation Management** und **Einstellungen** enthalten nur Guardian-Funktionen. Unterpunkte fuehren direkt zu den passenden Scans, Ereignissen und Verwaltungsschritten. WebShield, PHP Runtime und Reputation sind in Guardian Teil-/Manuell-Integrationen, keine Imunify360-Paritaet.
 
 ## Voraussetzungen und Reichweite
 
@@ -30,7 +34,7 @@ Die kommentierte Guardian-IP-Ausnahmeliste verhindert nur kuenftige Guardian-eig
 
 ## Speicher, Quotas und Aufbewahrung
 
-Im Tab **Verwaltung & Diagnose** zeigt Guardian pro Bereich die belegten Bytes und Dateien sowie den freien Speicher des Dateisystems an. Die gemessenen Bereiche sind PHP-/WAF-Backups, Good-File-Baselines, Reparaturprotokolle und Scan-Berichte. Eine unvollstaendige Dateisystemmessung wird markiert.
+Unter **Einstellungen → Speicher & Backups** zeigt Guardian pro Bereich die belegten Bytes und Dateien sowie den freien Speicher des Dateisystems an. Die gemessenen Bereiche sind PHP-/WAF-Backups, Good-File-Baselines, Reparaturprotokolle und Scan-Berichte. Eine unvollstaendige Dateisystemmessung wird markiert.
 
 Baselines sind auf 20 Verzeichnisse, 512 MiB Gesamtspeicher, 64 MiB und 5000 Dateien pro Baseline begrenzt. PHP-/WAF-Backups sind auf 200 Eintraege und 256 MiB begrenzt. Bei voller Quote wird eine neue Sicherung vor einer Aenderung abgelehnt. Guardian loescht alte Sicherungen nie automatisch. Nicht mehr benoetigte Baselines und verwaltete Backups koennen einzeln nach ausdruecklicher Bestaetigung geloescht werden. Baselines, die fuer automatische Reparatur ausgewaehlt sind, und das aktuelle WAF-Rollback-Backup koennen erst nach Deaktivierung beziehungsweise Ablosung entfernt werden. Vor jeder Bereinigung VPS-Snapshot und externe Sicherung pruefen.
 
@@ -70,7 +74,7 @@ Plesk warnt vor gleichzeitig aktivem `firewalld`, weil beide Dienste dieselben F
 
 ## PHP-Handler und Snuffleupagus
 
-Unter **Verwaltung & Diagnose** werden unterstuetzte Plesk-PHP-Handler 8.0–8.5 angezeigt. Ein Handler gilt fuer alle ihm zugeordneten Websites. Keine automatische Umschaltung von Domains auf andere Handler.
+Unter **PHP Runtime → Handler & Rollback** werden unterstuetzte Plesk-PHP-Handler 8.0–8.5 angezeigt. Ein Handler gilt fuer alle ihm zugeordneten Websites. Keine automatische Umschaltung von Domains auf andere Handler.
 
 1. **Backup erstellen** speichert php.ini root-privat mit SHA-256.
 2. **Modul installieren** startet einen Hintergrundauftrag. Voraussetzungen: die zum Handler passenden `phpize`/`php-config`, git, gcc, make und autoconf. Fehlende Pakete werden nicht ungefragt installiert. Der Build verwendet Snuffleupagus 0.14.0 mit festem Commit `1d8614af85a1baa52656f3adbd4684772df91288`. Build-Schritte laufen unter dem gesonderten Systembenutzer `guardian-build`; nur das fertige Modul wird als root installiert. Ein vorhandenes Modul wird nicht ueberschrieben.
@@ -101,7 +105,7 @@ Referenzen: [Plesk Custom Rules](https://support.plesk.com/hc/en-us/articles/123
 
 ## AbuseIPDB und Turnstile
 
-Schluessel im Tab **Verwaltung & Diagnose** eingeben und Uebermittlung ausdruecklich erlauben. Die private Datei `/var/lib/guardian-lite/management/config.json` hat Modus 0600; Status und Diagnose geben keine Schluessel aus. Leere Formularfelder behalten gespeicherte Werte.
+Schluessel unter **Einstellungen → Dienst-Schluessel** eingeben und Uebermittlung ausdruecklich erlauben. Die private Datei `/var/lib/guardian-lite/management/config.json` hat Modus 0600; Status und Diagnose geben keine Schluessel aus. Leere Formularfelder behalten gespeicherte Werte.
 
 AbuseIPDB fragt nur oeffentliche IPs ueber den festen CHECK-Endpunkt ab und prueft IP sowie Score der Antwort. Ergebnisse werden eine Stunde zwischengespeichert. Keine automatischen Meldungen, Reports oder IP-Sperren. API-Limits/Verbindungsfehler erzeugen einen Fehler, keinen vermeintlich sicheren Score.
 
@@ -121,13 +125,13 @@ Referenzen: [AbuseIPDB CHECK](https://docs.abuseipdb.com/#check-endpoint), [Turn
 
 ## Cronjob-Sicherheitspruefung
 
-Unter **Verwaltung & Diagnose** kann ein Administrator die gaengigen System- und Benutzer-Cronpfade manuell pruefen lassen. Der read-only Check sucht nach deutlichen Mustern und prueft sicher gelesene Dateien zusaetzlich mit lokalen ClamAV-Signaturen, sofern ClamAV installiert ist. Fuer den Signaturscan kopiert Guardian die begrenzten Inhalte in ein privates temporaeres Verzeichnis (maximal 4 MiB insgesamt und 45 Sekunden); der Pfad und Signaturname erscheinen im Bericht. Treffer erscheinen auch im Incident-Verlauf. Bei heuristischen Treffern werden nur Datei, Zeilennummer und Regelkennung gezeigt, nicht der Befehlstext. Guardian deaktiviert oder loescht keine Cronjobs.
+Unter **Malware Scanner → CMS- & Cron-Pruefung** kann ein Administrator die gaengigen System- und Benutzer-Cronpfade manuell pruefen lassen. Der read-only Check sucht nach deutlichen Mustern und prueft sicher gelesene Dateien zusaetzlich mit lokalen ClamAV-Signaturen, sofern ClamAV installiert ist. Fuer den Signaturscan kopiert Guardian die begrenzten Inhalte in ein privates temporaeres Verzeichnis (maximal 4 MiB insgesamt und 45 Sekunden); der Pfad und Signaturname erscheinen im Bericht. Treffer erscheinen auch im Incident-Verlauf. Bei heuristischen Treffern werden nur Datei, Zeilennummer und Regelkennung gezeigt, nicht der Befehlstext. Guardian deaktiviert oder loescht keine Cronjobs.
 
 Auch ClamAV ist nur ein lokaler Signaturnachweis und kein Malware-Vollscan oder Imunify-Cron-Erkennungsersatz. Ein sauberer Bericht beweist nicht, dass alle Cronjobs harmlos sind. Ungewoehnlich grosse Dateien, Symlinks und nicht lesbare Quellen werden ausgelassen; das Ergebnis markiert eine unvollstaendige Pruefung. Fehlt ClamAV, bleibt die Heuristikpruefung verfuegbar und der Signaturstatus wird als nicht ausgefuehrt angezeigt.
 
 ## Globale Malware-Ignore-Liste
 
-Unter **Verwaltung & Diagnose** kann ein Administrator einen geprueften SHA-256-Inhalt domainuebergreifend ignorieren. Der Dateiinhalt wird weiterhin von ClamAV gescannt und Treffer bleiben im Bericht sichtbar; Guardian unterdrueckt aber Malwarewarnung und automatische Reparatur fuer genau diesen Hash auf allen gehosteten Domains. Eine globale Ausnahme kann echte Malware auf mehreren Websites verdecken. Globale Hashes sind auf 2.000 Eintraege begrenzt und koennen einzeln entfernt werden.
+Unter **Malware Scanner → Ignore List** kann ein Administrator einen geprueften SHA-256-Inhalt domainuebergreifend ignorieren. Der Dateiinhalt wird weiterhin von ClamAV gescannt und Treffer bleiben im Bericht sichtbar; Guardian unterdrueckt aber Malwarewarnung und automatische Reparatur fuer genau diesen Hash auf allen gehosteten Domains. Eine globale Ausnahme kann echte Malware auf mehreren Websites verdecken. Globale Hashes sind auf 2.000 Eintraege begrenzt und koennen einzeln entfernt werden.
 
 ## WordPress-Core-Pruefsummen
 
@@ -168,7 +172,7 @@ Nach CMS-Updates eine neue saubere Baseline erstellen. Eine neue Baseline deakti
 
 ## Diagnose und Testreihenfolge in Plesk
 
-1. ZIP installieren/aktualisieren und Guardian als direkter Administrator oeffnen. **Verwaltung & Diagnose** muss ohne Helferfehler laden.
+1. ZIP installieren/aktualisieren und Guardian als direkter Administrator oeffnen. **Einstellungen → Diagnose** muss ohne Helferfehler laden.
 2. Fuer eine Testdomain **Diagnose ausfuehren**. Optional HTTPS-PHP-Probe aktivieren: Guardian legt kurz eine zufaellig benannte PHP-Datei an, ruft sie mit TLS-Pruefung ab und entfernt sie im Abschlussblock. Der Bericht prueft PHP-Version, geladenes Snuffleupagus, PHP-cURL und Prepend-Anzeige. Abstuerze/harte Prozessabbrueche koennen eine Testdatei zuruecklassen; sie enthaelt keine Geheimnisse.
 3. **Letztes Diagnoseergebnis als JSON herunterladen** und zur Auswertung weitergeben. Der Export enthaelt Domainnamen und Betriebsstatus, keine API-Schluessel oder vollstaendigen Konfigurationen.
 4. PHP-Backup → Installation → Simulation → echte Website-Requests → Blockieren → legitime Requests/absichtlich blockierte harmlose Testfunktion → Rollback testen.
