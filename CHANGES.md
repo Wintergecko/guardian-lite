@@ -1,3 +1,11 @@
+## 0.28.0 – Menue-Neuordnung nach Imunify360-Dashboard
+
+- Ersetzt die bisherigen Sammel-Tabs durch ein Seitenmenue fuer Dashboard, Malware Scanner, Incidents, Firewall, WebShield, PHP Runtime, Reputation Management und Einstellungen.
+- Verschiebt funktionierende Scan-, Historien-, Ignorierlisten-, Reparatur-, Firewall-, Fail2Ban-, WAF-, Reputation-, Runtime- und Updatebereiche in passende Menues mit Unterpunkten.
+- Kennzeichnet manuelle bzw. partielle Integrationen; nicht vorhandene Imunify-Dienste wie KernelCare oder Cloud-Proactive-Defense erscheinen nicht als Guardian-Funktionen.
+- Ohne JavaScript bleiben Inhalte sichtbar; alte Tab-Links werden auf passende Menues abgebildet.
+- Tests fuer Menuezuordnung, Bereiche, PHP-Templates und Versionskonsistenz.
+
 ## 0.27.1 – Diagnose-Schalter in der Schutzverwaltung
 
 - Der Firewall-Debugstatus kann zusaetzlich im Tab „Schutzverwaltung und Diagnose“ ein- und ausgeschaltet werden.
