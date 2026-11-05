@@ -773,11 +773,22 @@ def firewall_action(operation, target='', remote_address='', ttl_seconds=0, port
 def parse_waf_lines(lines):
     """Return limited, sanitized WAF metadata; never expose request bodies/tokens."""
     events = []
+    timestamp = None
     for line in lines:
+        # Audit-log section A starts with "[dd/Mon/yyyy:HH:MM:SS +zzzz] <id> <ip> <port> ...".
+        stamp = re.match(r'\[(\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4})\]', line)
+        if stamp:
+            try:
+                parsed = datetime.datetime.strptime(stamp.group(1), '%d/%b/%Y:%H:%M:%S %z')
+                timestamp = {'ts': parsed.isoformat(), 'epoch': int(parsed.timestamp())}
+            except ValueError:
+                timestamp = None
+            continue
         if not (line.startswith('Message:') or 'ModSecurity:' in line):
             continue
         rule = re.search(r'\[id "(\d{1,12})"\]', line)
         address = re.search(r'\[client ([0-9a-fA-F:.]+)\]', line)
+        severity = re.search(r'\[severity "([A-Za-z]{1,20})"\]', line)
         if not rule and not address:
             continue
         ip = None
@@ -786,9 +797,13 @@ def parse_waf_lines(lines):
                 ip = str(ipaddress.ip_address(address.group(1)))
             except ValueError:
                 pass
-        events.append({'rule': rule.group(1) if rule else 'unbekannt', 'ip': ip,
-                       'blocked': 'Access denied' in line})
-    return events[-30:][::-1]
+        event = {'rule': rule.group(1) if rule else 'unbekannt', 'ip': ip,
+                 'blocked': 'Access denied' in line,
+                 'severity': severity.group(1).upper() if severity else ''}
+        if timestamp:
+            event.update(timestamp)
+        events.append(event)
+    return events[-200:][::-1]
 
 
 def waf_status():

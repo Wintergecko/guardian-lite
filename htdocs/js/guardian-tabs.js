@@ -33,7 +33,8 @@
         ['guardian-incidents', 'Meldungen & Audit-Log']]},
       {id: 'firewall', label: 'Firewall', items: [['guardian-fail2ban', 'Alle Listen'],
         ['guardian-firewall', 'Plesk-Regeln'], ['guardian-ip-rules', 'IP-Regeln'],
-        ['guardian-ports', 'Ports'], ['guardian-crowdsec', 'CrowdSec & Diagnose']]},
+        ['guardian-ports', 'Ports'], ['guardian-crowdsec', 'CrowdSec & Diagnose'],
+        ['guardian-management', 'Firewall-Debugausgabe']]},
       {id: 'malware', label: 'Malware Scanner', items: [['guardian-scan-start', 'Scan starten'],
         ['guardian-scan-report', 'Letzter Bericht'], ['guardian-changes', 'Dateiänderungen'],
         ['guardian-monitor', 'Live-Dateiwache'], ['guardian-history', 'Scan-Historie'],
@@ -43,10 +44,9 @@
         ['guardian-webshield-domains', 'Domains · Schutzaktionen'], ['guardian-webshield-config', 'WAF-Regeln'], ['guardian-turnstile', 'Login-Challenge'],
         ['guardian-runtime', 'PHP Runtime · Schutzstatus'], ['guardian-php-config', 'Handler & Rollback'],
         ['guardian-reputation', 'IP-Reputation']]},
-      {id: 'settings', label: 'Verwaltung', items: [['guardian-management', 'Firewall-Debugausgabe'],
+      {id: 'settings', label: 'Verwaltung', items: [
         ['guardian-settings-storage', 'Speicher & Backups'], ['guardian-service-keys', 'Dienst-Schlüssel'],
-        ['guardian-updater', 'Updates'], ['guardian-management-diagnostics', 'Diagnose'],
-        ['guardian-roadmap', 'Funktionsumfang']]}
+        ['guardian-updater', 'Updates'], ['guardian-management-diagnostics', 'Diagnose']]}
     ];
     sections = sections.map(function (group) {
       group.items = (group.items || []).filter(function (entry) { return !!document.getElementById(entry[0]); });
@@ -313,7 +313,78 @@
       firewallFilter.addEventListener('change', filterFirewallRules);
       filterFirewallRules();
     }
-    var incidentDashboard = root.querySelector('[data-incident-dashboard]');
+    var eventTable = document.getElementById('guardian-events-table');
+    var eventSearch = document.getElementById('guardian-event-search');
+    var eventRange = document.getElementById('guardian-event-range');
+    var eventAuto = document.getElementById('guardian-event-autorefresh');
+    var eventResults = document.getElementById('guardian-events-results');
+    if (eventTable && eventSearch && eventRange) {
+      var eventRows = Array.prototype.slice.call(eventTable.querySelectorAll('tbody tr'));
+      var eventStore = window.sessionStorage;
+      if (eventStore) {
+        eventSearch.value = eventStore.getItem('guardianEventQuery') || '';
+        eventRange.value = eventStore.getItem('guardianEventRange') || '0';
+        if (eventAuto) { eventAuto.checked = eventStore.getItem('guardianEventAuto') === '1'; }
+      }
+      function filterEvents() {
+        var query = eventSearch.value.trim().toLocaleLowerCase();
+        var seconds = parseInt(eventRange.value, 10) || 0;
+        var cutoff = seconds > 0 ? Math.floor(Date.now() / 1000) - seconds : 0;
+        var shown = 0;
+        eventRows.forEach(function (row) {
+          var epoch = parseInt(row.getAttribute('data-event-epoch'), 10) || 0;
+          var inRange = !cutoff || (epoch > 0 && epoch >= cutoff);
+          var matches = inRange && (!query || row.textContent.toLocaleLowerCase().indexOf(query) !== -1);
+          row.hidden = !matches;
+          if (matches) shown += 1;
+        });
+        if (eventStore) {
+          eventStore.setItem('guardianEventQuery', eventSearch.value);
+          eventStore.setItem('guardianEventRange', eventRange.value);
+        }
+        if (eventResults) eventResults.textContent = shown + ' von ' + eventRows.length + ' angezeigt';
+      }
+      eventSearch.addEventListener('input', filterEvents);
+      eventRange.addEventListener('change', filterEvents);
+      if (eventAuto) {
+        eventAuto.addEventListener('change', function () {
+          if (eventStore) { eventStore.setItem('guardianEventAuto', eventAuto.checked ? '1' : '0'); }
+        });
+        // Reload only while the Events section is visible, so other tabs are not disturbed.
+        window.setInterval(function () {
+          if (eventAuto.checked && eventTable.offsetParent !== null) { window.location.reload(); }
+        }, 30000);
+      }
+      filterEvents();
+    }
+    var periodButtons = Array.prototype.slice.call(root.querySelectorAll('[data-dashboard-period]'));
+    var periodCharts = Array.prototype.slice.call(root.querySelectorAll('[data-dashboard-chart]'));
+    var periodLabel = root.querySelector('[data-dashboard-period-label]');
+    periodButtons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var key = button.getAttribute('data-dashboard-period');
+        periodButtons.forEach(function (item) {
+          item.setAttribute('aria-pressed', item === button ? 'true' : 'false');
+        });
+        periodCharts.forEach(function (chart) {
+          chart.hidden = chart.getAttribute('data-dashboard-chart') !== key;
+        });
+        if (periodLabel) periodLabel.textContent = button.textContent;
+      });
+    });
+    var recommendationStore = window.sessionStorage;
+    var rejected = [];
+    try { rejected = JSON.parse(recommendationStore.getItem('guardian_rejected_recommendations') || '[]'); } catch (e) { rejected = []; }
+    root.querySelectorAll('[data-recommendation-reject]').forEach(function (button) {
+      var id = button.getAttribute('data-recommendation-reject');
+      var row = root.querySelector('[data-recommendation="' + id + '"]');
+      if (rejected.indexOf(id) !== -1 && row) row.hidden = true;
+      button.addEventListener('click', function () {
+        if (row) row.hidden = true;
+        if (rejected.indexOf(id) === -1) rejected.push(id);
+        try { recommendationStore.setItem('guardian_rejected_recommendations', JSON.stringify(rejected)); } catch (e) { /* storage optional */ }
+      });
+    });
     var incidentTable = document.getElementById('guardian-incidents-table');
     var incidentSearch = document.getElementById('guardian-incident-search');
     var incidentSeverity = document.getElementById('guardian-incident-severity');

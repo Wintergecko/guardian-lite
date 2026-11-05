@@ -147,7 +147,8 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn("['guardian-reputation', 'IP-Reputation']", js)
         self.assertIn("label: 'Webschutz & PHP'", js)
         self.assertIn("['guardian-updater', 'Updates']", js)
-        self.assertIn("['guardian-roadmap', 'Funktionsumfang']", js)
+        self.assertIn("['guardian-management', 'Firewall-Debugausgabe']", js)
+        self.assertNotIn("['guardian-roadmap', 'Funktionsumfang']", js)
 
     def test_alert_delivery_queue_is_visible_and_admin_retry_is_csrf_protected(self):
         view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
@@ -170,6 +171,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.31')
+        self.assertEqual(version, '0.28.32')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())

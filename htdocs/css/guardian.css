@@ -216,6 +216,19 @@
 .guardian .guardian-list-badge.is-white{background:#fff;color:#1d2b3a;border:1px solid #c9d2dc}
 .guardian .guardian-list-badge.is-black{background:#1d2b3a;color:#fff}
 .guardian .guardian-list-counts{margin:0 0 10px}
+.guardian .guardian-event-controls{align-items:center;margin:0 0 8px}
+.guardian .guardian-inline-check{display:inline-flex;align-items:center;gap:6px;font-weight:normal}
+.guardian .guardian-ip-tag{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;color:#fff;vertical-align:middle}
+.guardian .guardian-ip-tag.is-white{background:#2e8b57}
+.guardian .guardian-ip-tag.is-black{background:#3b4450}
+.guardian .guardian-period-switch{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap}
+.guardian .guardian-period-switch button[aria-pressed="true"]{background:#2f6fd6;color:#fff;border-color:#2f6fd6}
+.guardian .guardian-recommendations{margin-top:16px;border-top:1px solid #e3e8f0;padding-top:12px}
+.guardian .guardian-recommendations h3{margin:0 0 8px}
+.guardian .guardian-recommendation{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #eef1f6}
+.guardian .guardian-recommendation[hidden]{display:none}
+.guardian .guardian-recommendation>span{flex:1 1 280px}
+.guardian .guardian-dashboard-chart[hidden]{display:none}
 .guardian-firewall-sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 14px}
 .guardian-firewall-source{display:grid;gap:3px;padding:12px 14px;border:1px solid #e1e8ee;border-left:3px solid #2f7de1;border-radius:10px;background:#fff}
 .guardian-firewall-source span{color:#82909c;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}

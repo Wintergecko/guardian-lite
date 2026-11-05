@@ -21,12 +21,12 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.31" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.32" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sicherheitsübersicht <span>v0.28.31</span></h1>
+      <h1>Sicherheitsübersicht <span>v0.28.32</span></h1>
       <p>Malware-Scans · Firewall · Incidents · Webschutz</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -42,7 +42,7 @@ $action = static function ($name) use ($esc) {
       <div class="guardian-menu-group"><details><summary>Incidents</summary><ul>
         <li><a href="#guardian-waf-events">Events</a></li><li><a href="#guardian-incidents">Meldungen &amp; Audit-Log</a></li></ul></details></div>
       <div class="guardian-menu-group"><details><summary>Firewall</summary><ul>
-        <li><a href="#guardian-fail2ban">Alle Listen</a></li><li><a href="#guardian-firewall">Plesk-Regeln</a></li><li><a href="#guardian-ip-rules">IP-Regeln</a></li><li><a href="#guardian-ports">Ports</a></li><li><a href="#guardian-crowdsec">CrowdSec &amp; Diagnose</a></li></ul></details></div>
+        <li><a href="#guardian-fail2ban">Alle Listen</a></li><li><a href="#guardian-firewall">Plesk-Regeln</a></li><li><a href="#guardian-ip-rules">IP-Regeln</a></li><li><a href="#guardian-ports">Ports</a></li><li><a href="#guardian-crowdsec">CrowdSec &amp; Diagnose</a></li><li><a href="#guardian-management">Firewall-Debugausgabe</a></li></ul></details></div>
       <div class="guardian-menu-group"><details><summary>Malware Scanner</summary><ul>
         <li><a href="#guardian-scan-start">Scan starten</a></li><li><a href="#guardian-scan-report">Letzter Bericht</a></li>
         <li><a href="#guardian-changes">Dateiaenderungen</a></li>
@@ -54,9 +54,9 @@ $action = static function ($name) use ($esc) {
         <li><a href="#guardian-turnstile">WebShield · Login-Challenge</a></li><li><a href="#guardian-runtime">PHP Runtime · Schutzstatus</a></li>
         <li><a href="#guardian-php-config">PHP Runtime · Handler &amp; Rollback</a></li><li><a href="#guardian-reputation">Reputation · IP-Abfrage</a></li></ul></details></div>
       <div class="guardian-menu-group guardian-menu-settings"><details><summary>⚙ Verwaltung</summary><ul>
-        <li><a href="#guardian-management">Guardian-Debugging (global)</a></li><li><a href="#guardian-settings-storage">Speicher &amp; Backups</a></li>
+        <li><a href="#guardian-settings-storage">Speicher &amp; Backups</a></li>
         <li><a href="#guardian-service-keys">Dienst-Schluessel</a></li><li><a href="#guardian-updater">Updates</a></li>
-        <li><a href="#guardian-management-diagnostics">Diagnose</a></li><li><a href="#guardian-roadmap">Funktionsumfang</a></li></ul></details></div>
+        <li><a href="#guardian-management-diagnostics">Diagnose</a></li></ul></details></div>
     </nav>
     <main class="guardian-pages">
   <?php
@@ -70,20 +70,46 @@ $action = static function ($name) use ($esc) {
     $protectionActive = count(array_filter($protectionParts));
     $protectionPercent = (int)round(($protectionActive / count($protectionParts)) * 100);
     $dashboardNow = time();
-    $dashboardFrom = $dashboardNow - (30 * 86400);
-    $dashboardTrend = array_fill(0, 15, 0);
+    $dashboardSeries = [
+        '24h' => ['label' => '24 Stunden', 'buckets' => 24, 'size' => 3600, 'from' => $dashboardNow - 86400, 'format' => 'H:i'],
+        '7d' => ['label' => '7 Tage', 'buckets' => 7, 'size' => 86400, 'from' => $dashboardNow - 7 * 86400, 'format' => 'd.m.'],
+        '30d' => ['label' => '30 Tage', 'buckets' => 15, 'size' => 2 * 86400, 'from' => $dashboardNow - 30 * 86400, 'format' => 'd.m.'],
+    ];
     $dashboardIncidentRows = is_array($this->incidents) ? $this->incidents : [];
+    foreach ($dashboardSeries as $seriesKey => $series) {
+        $dashboardSeries[$seriesKey]['counts'] = array_fill(0, $series['buckets'], 0);
+    }
     foreach ($dashboardIncidentRows as $dashboardIncident) {
         $dashboardIncidentTime = strtotime((string)($dashboardIncident['time'] ?? ''));
-        if ($dashboardIncidentTime === false || $dashboardIncidentTime < $dashboardFrom || $dashboardIncidentTime > $dashboardNow) {
+        if ($dashboardIncidentTime === false) {
             continue;
         }
-        $dashboardBucket = min(14, (int)floor(($dashboardIncidentTime - $dashboardFrom) / (2 * 86400)));
-        $dashboardTrend[$dashboardBucket]++;
+        foreach ($dashboardSeries as $seriesKey => $series) {
+            if ($dashboardIncidentTime < $series['from'] || $dashboardIncidentTime > $dashboardNow) {
+                continue;
+            }
+            $dashboardBucket = min($series['buckets'] - 1, (int)floor(($dashboardIncidentTime - $series['from']) / $series['size']));
+            $dashboardSeries[$seriesKey]['counts'][$dashboardBucket]++;
+        }
     }
-    $dashboardTrendMax = max(1, max($dashboardTrend));
+    foreach ($dashboardSeries as $seriesKey => $series) {
+        $dashboardSeries[$seriesKey]['max'] = max(1, max($series['counts']));
+    }
     $dashboardCritical = count(array_filter($dashboardIncidentRows, static function ($event) { return ($event['severity'] ?? '') === 'critical'; }));
     $dashboardWarnings = count(array_filter($dashboardIncidentRows, static function ($event) { return ($event['severity'] ?? '') === 'warning'; }));
+    $dashboardRecommendations = [];
+    if ($dashboardCritical > 0) {
+        $dashboardRecommendations[] = ['id' => 'critical', 'text' => $dashboardCritical . ' kritische Ereignisse gespeichert.', 'target' => 'guardian-incidents', 'action' => 'Incidents öffnen'];
+    }
+    if (empty($f2b['jails'])) {
+        $dashboardRecommendations[] = ['id' => 'fail2ban', 'text' => 'Kein aktives Fail2Ban-Jail gefunden; Brute-Force-Schutz ist nicht sichtbar.', 'target' => 'guardian-fail2ban', 'action' => 'Alle Listen öffnen'];
+    }
+    if (empty($fw['plesk_firewall_active'])) {
+        $dashboardRecommendations[] = ['id' => 'plesk-firewall', 'text' => 'Plesk-Firewall-Regelverwaltung ist nicht aktiv; Guardian-Sperren können nicht dauerhaft wirken.', 'target' => 'guardian-firewall', 'action' => 'Plesk-Regeln öffnen'];
+    }
+    if (empty($crowdsec['available'])) {
+        $dashboardRecommendations[] = ['id' => 'crowdsec', 'text' => 'CrowdSec ist nicht lesbar; die optionale Zusatzquelle fehlt.', 'target' => 'guardian-crowdsec', 'action' => 'CrowdSec öffnen'];
+    }
   ?>
   <section class="guardian-dashboard-top" id="guardian-dashboard-top" aria-label="Dashboard und blockierte IP-Adressen">
     <div class="guardian-protection-panel">
@@ -133,16 +159,36 @@ $action = static function ($name) use ($esc) {
       <p class="guardian-map-disclaimer"><?= $esc($blockedGeo['note'] ?? 'Laenderzuordnung ist ungefaehr; VPN, Proxy, Mobilfunk und Anycast koennen den Provider-Standort zeigen.') ?> <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">IP-Geolokalisierung: DB-IP</a> · Kartenmaterial: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener noreferrer">Natural Earth</a>.</p>
     </div>
     <div class="guardian-dashboard-trend">
-      <div class="guardian-panel-heading"><div><span class="guardian-eyebrow">INCIDENTS &amp; ALERTS</span><h2>Gespeicherte Ereignisse · letzte 30 Tage</h2></div><a class="guardian-dashboard-link" href="#guardian-incidents">Alle Vorfaelle anzeigen <span aria-hidden="true">→</span></a></div>
+      <div class="guardian-panel-heading"><div><span class="guardian-eyebrow">INCIDENTS &amp; ALERTS</span><h2>Gespeicherte Ereignisse · <span data-dashboard-period-label>30 Tage</span></h2></div><a class="guardian-dashboard-link" href="#guardian-incidents">Alle Vorfaelle anzeigen <span aria-hidden="true">→</span></a></div>
+      <div class="guardian-period-switch" role="group" aria-label="Zeitraum des Verlaufs">
+        <?php foreach ($dashboardSeries as $seriesKey => $series): ?>
+          <button type="button" class="guardian-small-button" data-dashboard-period="<?= $esc($seriesKey) ?>" aria-pressed="<?= $seriesKey === '30d' ? 'true' : 'false' ?>"><?= $esc($series['label']) ?></button>
+        <?php endforeach; ?>
+      </div>
       <div class="guardian-trend-summary">
         <div><span>Aufgezeichnet</span><strong><?= $esc(count($dashboardIncidentRows)) ?></strong></div>
         <div><span>Kritisch</span><strong><?= $esc($dashboardCritical) ?></strong></div>
         <div><span>Warnungen</span><strong><?= $esc($dashboardWarnings) ?></strong></div>
         <p>Der Verlauf basiert auf den zuletzt gespeicherten maximal 200 Incident-Metadaten, nicht auf einem vollstaendigen WAF-Zeitreihendienst.</p>
       </div>
-      <div class="guardian-dashboard-chart" role="img" aria-label="Gespeicherte Ereignisse in 15 Zwei-Tages-Zeitraeumen">
-        <?php foreach ($dashboardTrend as $index => $count): $bucketStart = $dashboardFrom + ($index * 2 * 86400); ?>
-          <div class="guardian-dashboard-chart-column"><span class="guardian-dashboard-bar" style="--bar-height: <?= $count ? max(5, (int)round(($count / $dashboardTrendMax) * 100)) : 0 ?>%" title="<?= $esc(date('d.m.', $bucketStart)) ?> · <?= $esc($count) ?> Ereignisse"></span><small><?= $esc(date('d.m.', $bucketStart)) ?></small></div>
+      <?php foreach ($dashboardSeries as $seriesKey => $series): ?>
+      <div class="guardian-dashboard-chart" data-dashboard-chart="<?= $esc($seriesKey) ?>" role="img" aria-label="Gespeicherte Ereignisse, <?= $esc($series['label']) ?>" <?= $seriesKey === '30d' ? '' : 'hidden' ?>>
+        <?php foreach ($series['counts'] as $index => $count): $bucketStart = $series['from'] + ($index * $series['size']); ?>
+          <div class="guardian-dashboard-chart-column"><span class="guardian-dashboard-bar" style="--bar-height: <?= $count ? max(5, (int)round(($count / $series['max']) * 100)) : 0 ?>%" title="<?= $esc(date($series['format'], $bucketStart)) ?> · <?= $esc($count) ?> Ereignisse"></span><small><?= $esc(date($series['format'], $bucketStart)) ?></small></div>
+        <?php endforeach; ?>
+      </div>
+      <?php endforeach; ?>
+      <div class="guardian-recommendations" id="guardian-recommendations" aria-label="Empfehlungen">
+        <h3>Empfehlungen</h3>
+        <?php if (empty($dashboardRecommendations)): ?>
+          <p class="guardian-small">Keine offenen Empfehlungen: die geprueften Quellen sind aktiv.</p>
+        <?php endif; ?>
+        <?php foreach ($dashboardRecommendations as $recommendation): ?>
+          <div class="guardian-recommendation" data-recommendation="<?= $esc($recommendation['id']) ?>">
+            <span><?= $esc($recommendation['text']) ?></span>
+            <a class="guardian-small-button" href="#<?= $esc($recommendation['target']) ?>"><?= $esc($recommendation['action']) ?></a>
+            <button type="button" class="guardian-small-button" data-recommendation-reject="<?= $esc($recommendation['id']) ?>">Ablehnen</button>
+          </div>
         <?php endforeach; ?>
       </div>
     </div>
@@ -331,9 +377,52 @@ $action = static function ($name) use ($esc) {
         arsort($guardianEventIps);
       ?>
       <p class="guardian-list-counts"><strong><?= count($guardianEvents) ?></strong> Ereignisse · <strong><?= $guardianEventsBlocked ?></strong> blockiert · <strong><?= count($guardianEventIps) ?></strong> Quell-IPs<?php if ($guardianEventIps): ?> · Häufigste Quellen: <?php $guardianTopIps = array_slice($guardianEventIps, 0, 5, true); $guardianIpParts = []; foreach ($guardianTopIps as $guardianIp => $guardianCount) { $guardianIpParts[] = '<code>' . $esc($guardianIp) . '</code> (' . (int)$guardianCount . ')'; } echo implode(', ', $guardianIpParts); ?><?php endif; ?></p>
-      <div class="guardian-scroll"><table><thead><tr><th>Regel</th><th>Quell-IP</th><th>Blockiert?</th></tr></thead><tbody>
-        <?php foreach ($guardianEvents as $event): ?>
-          <tr><td><?= $esc($event['rule']) ?></td><td><?= $esc(isset($event['ip']) ? $event['ip'] : '–') ?></td><td><?= !empty($event['blocked']) ? 'Ja' : 'Unbekannt' ?></td></tr>
+      <?php
+        $guardianWhiteIps = [];
+        $guardianBlackIps = [];
+        foreach ((isset($fw['rules']) && is_array($fw['rules']) ? $fw['rules'] : []) as $guardianRule) {
+            if (!is_array($guardianRule)) { continue; }
+            $guardianSources = preg_split('/[\s,;]+/', (string)($guardianRule['source'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            foreach ($guardianSources as $guardianSource) {
+                if (($guardianRule['action'] ?? '') === 'allow') { $guardianWhiteIps[$guardianSource] = true; }
+                else { $guardianBlackIps[$guardianSource] = true; }
+            }
+        }
+        foreach (($f2b['jails'] ?? []) as $guardianJail) {
+            foreach (($guardianJail['banned_ips'] ?? []) as $guardianBanned) { $guardianBlackIps[(string)$guardianBanned] = true; }
+        }
+        foreach (($crowdsec['decisions'] ?? []) as $guardianDecision) {
+            if (is_array($guardianDecision) && !empty($guardianDecision['ip'])) { $guardianBlackIps[(string)$guardianDecision['ip']] = true; }
+        }
+      ?>
+      <div class="guardian-formline guardian-event-controls">
+        <label for="guardian-event-search">Ereignisse suchen</label>
+        <input id="guardian-event-search" type="search" maxlength="120" placeholder="Regel, IP, Schwere …" />
+        <label for="guardian-event-range">Zeitraum</label>
+        <select id="guardian-event-range">
+          <option value="0">Alle im Log-Ausschnitt</option>
+          <option value="3600">Letzte Stunde</option>
+          <option value="86400">Letzte 24 h</option>
+          <option value="604800">Letzte 7 Tage</option>
+        </select>
+        <label class="guardian-inline-check"><input id="guardian-event-autorefresh" type="checkbox" /> Automatisch aktualisieren (30 s)</label>
+      </div>
+      <p class="guardian-small" id="guardian-events-results"></p>
+      <div class="guardian-scroll"><table id="guardian-events-table"><thead><tr><th>Zeit</th><th>Regel</th><th>Schwere</th><th>Quell-IP</th><th>Blockiert?</th></tr></thead><tbody>
+        <?php foreach ($guardianEvents as $event):
+          $guardianEventIp = isset($event['ip']) ? (string)$event['ip'] : '';
+          $guardianEpoch = isset($event['epoch']) ? (int)$event['epoch'] : 0;
+          $guardianTag = '';
+          if ($guardianEventIp !== '' && isset($guardianWhiteIps[$guardianEventIp])) { $guardianTag = 'white'; }
+          elseif ($guardianEventIp !== '' && isset($guardianBlackIps[$guardianEventIp])) { $guardianTag = 'black'; }
+        ?>
+          <tr data-event-epoch="<?= $guardianEpoch ?>">
+            <td><?= $guardianEpoch ? $esc(date('d.m.Y H:i:s', $guardianEpoch)) : '–' ?></td>
+            <td><?= $esc($event['rule']) ?></td>
+            <td><?= $esc(($event['severity'] ?? '') !== '' ? $event['severity'] : '–') ?></td>
+            <td><?= $esc($guardianEventIp !== '' ? $guardianEventIp : '–') ?><?php if ($guardianTag === 'white'): ?> <span class="guardian-ip-tag is-white">Weiß</span><?php elseif ($guardianTag === 'black'): ?> <span class="guardian-ip-tag is-black">Schwarz</span><?php endif; ?></td>
+            <td><?= !empty($event['blocked']) ? 'Ja' : 'Unbekannt' ?></td>
+          </tr>
         <?php endforeach; ?>
       </tbody></table></div>
       <?php if (empty($guardianEvents)): ?><p class="guardian-small">Keine auswertbaren Ereignisse im letzten Log-Ausschnitt.</p><?php endif; ?>
@@ -374,9 +463,17 @@ $action = static function ($name) use ($esc) {
       $hasBlocks = $listedBans > 0 || $guardianRuleCount > 0 || count($csDecisions) > 0;
       ?>
       <?php if ($hasBlocks): ?>
+        <?php if ($listedBans > 0): ?>
+        <form id="guardian-f2b-bulk" class="guardian-formline guardian-bulk-bar" method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'ip-bulk')) ?>" onsubmit="return confirm('Alle ausgewählten Fail2Ban-Sperren freigeben?');">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+          <label class="guardian-inline-check"><input type="checkbox" onchange="document.querySelectorAll('.guardian-f2b-check').forEach(function (c) { c.checked = this.checked; }, this)" /> Alle Fail2Ban-Sperren auswählen</label>
+          <button class="guardian-small-button" type="submit">Ausgewählte freigeben</button>
+          <span class="guardian-small">Freigaben wirken sofort über Fail2Ban; Plesk-Regeln bleiben einzeln änderbar.</span>
+        </form>
+        <?php endif; ?>
         <div class="guardian-scroll"><table id="guardian-block-table"><thead><tr><th>Liste · Quelle</th><th>Ziel</th><th>Details</th><th>Ablauf</th><th>Aktion</th></tr></thead><tbody>
         <?php foreach (($f2b['jails'] ?? []) as $jailInfo): foreach (($jailInfo['banned_ips'] ?? []) as $bannedIp): ?>
-          <tr><td><span class="guardian-list-badge is-black">Schwarz</span> Fail2Ban</td><td><code><?= $esc($bannedIp) ?></code></td><td>Jail <?= $esc($jailInfo['name']) ?></td><td>Jail-Laufzeit</td><td>
+          <tr><td><span class="guardian-list-badge is-black">Schwarz</span> Fail2Ban</td><td><label class="guardian-inline-check"><input type="checkbox" class="guardian-f2b-check" form="guardian-f2b-bulk" name="items[]" value="<?= $esc($jailInfo['name']) ?>|<?= $esc($bannedIp) ?>" /> <code><?= $esc($bannedIp) ?></code></label></td><td>Jail <?= $esc($jailInfo['name']) ?></td><td>Jail-Laufzeit</td><td>
             <div class="guardian-formline">
               <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'ip')) ?>" onsubmit="return confirm('Diese IP aus dem Fail2Ban-Jail freigeben?');">
                 <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="jail" value="<?= $esc($jailInfo['name']) ?>" /><input type="hidden" name="ip" value="<?= $esc($bannedIp) ?>" /><input type="hidden" name="operation" value="unban" /><button class="guardian-small-button" type="submit">Freigeben</button>
@@ -591,7 +688,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.31</h2>
+    <h2>GitHub-Updater · v0.28.32</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -760,7 +857,7 @@ $action = static function ($name) use ($esc) {
     </tbody></table></div>
     <?php if (empty($this->incidents)): ?><p class="guardian-small">Noch keine Ereignisse erfasst.</p><?php endif; ?>
   </section>
-  <section class="guardian-card guardian-lower" id="guardian-roadmap" aria-label="Feature-Liste">
+  <section class="guardian-card guardian-lower" id="guardian-roadmap" aria-label="Feature-Liste" hidden>
     <h2>Feature-Liste und Entwicklungsstand</h2>
     <p>Guardian Lite befindet sich in der Beta-Phase. Ein erkannter Dienst oder eine Regelvorlage ist noch kein aktivierter Schutz.</p>
     <div class="guardian-roadmap-grid">
@@ -803,6 +900,6 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.31" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.32" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Drittanbieter-Schutzprodukten verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

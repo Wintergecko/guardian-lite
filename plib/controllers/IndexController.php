@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.28.31';
+    private const GUARDIAN_VERSION = '0.28.32';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -577,6 +577,36 @@ class IndexController extends pm_Controller_Action
             return;
         }
         $this->finishAction(['ip-action', $jail, $ip, $operation], 'Fail2Ban-IP-Aktion bearbeitet.');
+    }
+
+    public function ipBulkAction()
+    {
+        $this->verifyPost();
+        $items = $this->getRequest()->getPost('items', []);
+        if (!is_array($items) || count($items) < 1 || count($items) > 50) {
+            throw new pm_Exception('Ungueltige Auswahl: 1 bis 50 Fail2Ban-Sperren.');
+        }
+        $released = 0;
+        $failed = 0;
+        foreach ($items as $item) {
+            if (!is_string($item) || !preg_match('/^([A-Za-z0-9_.-]{1,80})\|([0-9A-Fa-f:.]{2,45})$/', $item, $match) ||
+                !filter_var($match[2], FILTER_VALIDATE_IP)) {
+                $failed++;
+                continue;
+            }
+            try {
+                $this->helper(['ip-action', $match[1], $match[2], 'unban']);
+                $released++;
+            } catch (Exception $e) {
+                $failed++;
+            }
+        }
+        if ($failed > 0) {
+            $this->_status->addMessage('error', $released . ' Fail2Ban-Sperren freigegeben, ' . $failed . ' fehlgeschlagen.');
+        } else {
+            $this->_status->addMessage('info', $released . ' Fail2Ban-Sperren freigegeben.');
+        }
+        $this->redirect(pm_Context::getBaseUrl());
     }
 
     public function firewallAction()

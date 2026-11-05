@@ -1,3 +1,11 @@
+## 0.28.32 – Menü-Überarbeitung, Events und Dashboard
+
+- Der Tab „Events“ zeigt Zeit, Regel, Schwere, Quell-IP und Blockiert-Status, mit Suche, Zeitraum-Auswahl (1 h, 24 h, 7 Tage, alle) und Auto-Refresh.
+- „Alle Listen“: Fail2Ban-Sperren lassen sich gesammelt freigeben (bis 50 Einträge). Plesk-Regeln bleiben einzeln änderbar.
+- Das Dashboard hat einen Zeitraum-Umschalter (24 h, 7 Tage, 30 Tage) und Empfehlungen aus vorhandenen Daten. Empfehlungen lassen sich ablehnen; „Anwenden“ springt nur zum Bereich.
+- „Firewall-Debugausgabe“ steht im Firewall-Bereich. „Funktionsumfang“ ist aus dem Menü entfernt.
+- Offen: Standard-Richtlinie für Ports und Pfad-Begrenzung für HTTP-Bot-Schutz pro Domain sind noch nicht umgesetzt.
+
 ## 0.28.31 – Firewall in Tabs, Ports und Events
 
 - Die Firewall ist in Tabs aufgeteilt: Alle Listen, Plesk-Regeln, IP-Regeln, Ports sowie CrowdSec & Diagnose.
@@ -34,7 +42,7 @@
 ## 0.28.26 – Bereinigte Dokumentation
 
 - Rein textliche Bereinigung: verbleibende Verweise auf Fremdprodukte aus README, Änderungsprotokoll, Management-, Sicherheits- und Funktionsdokumentation, CSS-Kommentaren, Oberflächentexten und Tests entfernt.
-- Die Datei `IMUNIFY360_PARITY.md` heißt jetzt `FUNKTIONSUEBERSICHT.md`; Links in README und FEATURES wurden angepasst.
+- Die Vergleichsdatei `FUNKTIONSUEBERSICHT.md` ersetzt den alten Dateinamen mit Herstellerbezug; Links in README und FEATURES wurden angepasst.
 - Keine funktionalen Änderungen.
 
 ## 0.28.25 – Übersichtlicher Auftragsstatus

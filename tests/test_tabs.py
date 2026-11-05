@@ -12,9 +12,9 @@ class TabsTests(unittest.TestCase):
         ids = ['guardian-overview', 'guardian-dashboard-top', 'guardian-scan', 'guardian-shield',
                'guardian-scan-start', 'guardian-scan-report',
                'guardian-network', 'guardian-runtime', 'guardian-webshield',
-               'guardian-waf-events', 'guardian-fail2ban', 'guardian-firewall',
+               'guardian-waf-events', 'guardian-events-table', 'guardian-event-search', 'guardian-event-range', 'guardian-fail2ban', 'guardian-firewall',
                'guardian-updater', 'guardian-changes', 'guardian-monitor',
-               'guardian-history', 'guardian-incidents', 'guardian-roadmap']
+               'guardian-history', 'guardian-incidents', 'guardian-roadmap', 'guardian-f2b-bulk', 'guardian-recommendations']
         for name in ids:
             self.assertEqual(view.count('id="' + name + '"'), 1, name)
         management = (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
@@ -79,7 +79,7 @@ class TabsTests(unittest.TestCase):
 
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.31')
+        self.assertEqual(version, '0.28.32')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('<span>v' + version + '</span>',
