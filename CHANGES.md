@@ -1,3 +1,8 @@
+## 0.28.8 – Dropdowns im gesamten Modul
+- Vereinheitlicht Kontrast, Schriftgroesse, Hoehe und Breite aller nativen Auswahlfelder in Hauptansicht und Verwaltung.
+- Laesst Auswahlfelder in Aktionszeilen responsiv umbrechen und kuerzt lange Firewall-Aktionsnamen.
+- Behebt abgeschnittene Eintraege in Fail2Ban-, Firewall-, Domain-, WAF-, Turnstile- und Reparaturauswahlfeldern.
+
 ## 0.28.7 – Kompakte Firewall-Auswahl
 - Kuerzt die Fail2Ban-Aktionsnamen und setzt feste responsive Feldbreiten, damit Jail- und Aktionsauswahl nicht als abgeschnittene Punkte erscheinen.
 

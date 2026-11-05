@@ -15,7 +15,7 @@ $form = function ($operation, array $fields, $label, $confirmation = '') use ($e
     echo '<button class="guardian-button" type="submit">' . $esc($label) . '</button></form>';
 };
 $domainSelect = function () use ($esc) {
-    echo '<select name="domain" required>';
+    echo '<select name="domain" class="guardian-select" required>';
     foreach ($this->domains as $domain) { echo '<option value="' . $esc($domain) . '">' . $esc($domain) . '</option>'; }
     echo '</select>';
 };
@@ -101,7 +101,7 @@ $domainSelect = function () use ($esc) {
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="sha256" value="<?= $esc($management['waf_sha256'] ?? '') ?>">
     <?php $domainSelect(); ?>
-    <select name="mode"><option value="detect">Nur protokollieren</option><option value="enforce">Mit HTTP 429 sperren</option><option value="off">Guardian-Regeln deaktivieren</option></select>
+    <select name="mode"><option value="detect">Nur protokollieren</option><option value="enforce">429-Sperre aktiv</option><option value="off">Deaktiviert</option></select>
     <label>Anfragen je IP / 60 Sekunden <input name="limit" type="number" min="10" max="10000" value="120" required></label>
     <button name="operation" value="waf-preview">Vorschau</button>
     <button name="operation" value="waf-set" onclick="return confirm('Guardian-Regeln installieren und Apache nach Syntaxpruefung neu laden?');">Anwenden</button>
@@ -111,7 +111,7 @@ $domainSelect = function () use ($esc) {
   } endforeach; ?>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Plesk-WAF-Modus dieser Domain aendern?');">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="waf-engine">
-    <?php $domainSelect(); ?><select name="mode"><option value="detection-only">WAF nur Erkennung</option><option value="on">WAF aktivieren</option><option value="off">WAF deaktivieren</option></select><button>WAF-Modus setzen</button>
+    <?php $domainSelect(); ?><select name="mode"><option value="detection-only">Nur Erkennung</option><option value="on">WAF aktiv</option><option value="off">WAF aus</option></select><button>WAF-Modus setzen</button>
   </form>
 
   </section>
@@ -140,7 +140,7 @@ $domainSelect = function () use ($esc) {
   <h3>PHP-Anmeldeschutz mit Turnstile</h3>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('PHP-Anmeldeschutz via .user.ini aendern? Benoetigt HTTPS, PHP-cURL und passende Turnstile-Hostnamen. XML-RPC/API-Clients koennen dadurch blockiert werden.');">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="bots-set"><?php $domainSelect(); ?>
-    <select name="mode"><option value="on">Turnstile aktivieren</option><option value="off">Turnstile deaktivieren</option></select><button>PHP-Anmeldeschutz setzen</button>
+    <select name="mode"><option value="on">Aktivieren</option><option value="off">Deaktivieren</option></select><button>PHP-Anmeldeschutz setzen</button>
   </form>
   <p>Schuetzt ausgewaehlte PHP-Anmeldepfade via auto_prepend_file. Statische Dateien und andere Endpunkte werden nicht abgedeckt. Aktivierung kann wegen PHP-INI-Cache bis zu 5 Minuten benoetigen.</p>
   <pre><?= $esc(json_encode($management['bots'] ?? [], JSON_PRETTY_PRINT)) ?></pre>
@@ -154,7 +154,7 @@ $domainSelect = function () use ($esc) {
     <label><input type="checkbox" name="trusted" value="1" required> Ich habe die saubere Herkunft dieser Website geprueft</label><button>Baseline erstellen</button>
   </form>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Automatische Wiederherstellung passender Malwarefunde aus der freigegebenen Baseline aendern? CMS-Updates koennen dadurch zurueckgesetzt werden.');">
-    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="repair-set"><?php $domainSelect(); ?><select name="mode"><option value="off">Automatische Reparatur aus</option><option value="on">Automatische Reparatur an</option></select><button>Reparaturmodus setzen</button>
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="repair-set"><?php $domainSelect(); ?><select name="mode"><option value="off">Reparatur aus</option><option value="on">Reparatur an</option></select><button>Reparaturmodus setzen</button>
   </form>
   <?php $baselineInventory = $management['baseline_inventory'] ?? []; ?>
   <?php if (!empty($baselineInventory)): ?>
