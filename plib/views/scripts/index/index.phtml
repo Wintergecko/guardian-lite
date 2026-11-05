@@ -24,7 +24,7 @@ $action = static function ($name) use ($esc) {
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Guardian Lite <span>v0.25.0</span></h1>
+      <h1>Guardian Lite <span>v0.26.0</span></h1>
       <p>Malware-Scans · Quarantaene · Fail2Ban · WAF-Ereignisse</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -298,7 +298,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.25.0</h2>
+    <h2>GitHub-Updater · v0.26.0</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -403,7 +403,7 @@ $action = static function ($name) use ($esc) {
       <?php endforeach; ?>
     </tbody></table></div>
     <h3>E-Mail-Warnungen</h3>
-    <p class="guardian-small">Optional bei ClamAV-Malwaremeldungen, mit Benachrichtigungslimit. Voraussetzung: lokaler sendmail-kompatibler Mail-Transport.</p>
+    <p class="guardian-small">Optional bei ClamAV-Malwaremeldungen, mit Benachrichtigungslimit und begrenzter Wiederholungswarteschlange. Voraussetzung: lokaler sendmail-kompatibler Mail-Transport. Eine Transportannahme ist kein Zustellnachweis.</p>
     <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'alerts')) ?>">
       <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
       <label for="guardian-alert-recipient">Empfaenger (E-Mail)</label>
@@ -414,11 +414,21 @@ $action = static function ($name) use ($esc) {
       </div>
     </form>
     <p>Status: <strong><?= !empty($this->alerts['enabled']) ? 'E-Mail-Warnungen aktiviert' : 'Deaktiviert' ?></strong></p>
+    <?php $alertDelivery = is_array($this->alertDelivery ?? null) ? $this->alertDelivery : []; ?>
+    <p>Warteschlange: <?= $esc($alertDelivery['pending'] ?? 0) ?> offen · <?= $esc($alertDelivery['failed'] ?? 0) ?> mit ausgeschöpften Versuchen</p>
+    <?php if (!empty($alertDelivery['last_error'])): ?><p class="guardian-alert">Letzter Transportfehler: <?= $esc($alertDelivery['last_error']) ?></p><?php endif; ?>
+    <?php if (!empty($alertDelivery['error'])): ?><p class="guardian-alert">Warteschlangenfehler: <?= $esc($alertDelivery['error']) ?></p><?php endif; ?>
     <?php if (!empty($this->alerts['enabled'])): ?>
       <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'alerts-test')) ?>">
         <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
         <button type="submit">Testmail an Mail-Transport uebergeben</button>
       </form>
+      <?php if (!empty($alertDelivery['pending']) || !empty($alertDelivery['failed'])): ?>
+        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'alerts-retry')) ?>" onsubmit="return confirm('Ausstehende Malware-Warnungen jetzt erneut an den lokalen Mail-Transport uebergeben?');">
+          <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
+          <button type="submit">Warnungen erneut versuchen</button>
+        </form>
+      <?php endif; ?>
     <?php endif; ?>
     <h3>Incident-Audit-Log</h3>
     <p>Nur Ereignis-Metadaten, keine HTTP-Bodies, keine Malware-Inhalte. Maximal 25 aktuelle Ereignisse in der Tabelle. Logs liegen root-privat auf dem Server.</p>
@@ -473,6 +483,6 @@ $action = static function ($name) use ($esc) {
     <p class="guardian-small">Volumetrische DDoS-Abwehr muss beim Provider oder vorgelagerten DDoS-/CDN-Dienst erfolgen.</p>
   </section>
   <?php include __DIR__ . '/management.phtml'; ?>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.25.0" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.26.0" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

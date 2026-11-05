@@ -1,4 +1,4 @@
-# Guardian Lite 0.25.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.26.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -13,6 +13,8 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | Scans, Historie, Quarantaene, Baselines/Reparatur | ClamAV `clamscan` und aktuelle Signaturen, z. B. unter Debian/Ubuntu `apt install clamav clamav-freshclam`; Signaturen mit `freshclam` aktualisieren. |
 | Fail2Ban-Anzeige und IP-Aktionen | Fail2Ban (`fail2ban-client`) und mindestens ein konfiguriertes Jail. Guardian erstellt keine Jails. |
 | E-Mail-Warnungen | Lokaler Sendmail-kompatibler Mailtransport oder in Plesk funktionierender Mailtransport. |
+
+Fehlgeschlagene Malware-Warnungen werden bis zu 100 Eintraege root-privat gespeichert und beim stuendlichen Plesk-Task mit wachsendem Abstand bis zu sechs Mal erneut uebergeben. Der Administrator kann den Versuch manuell starten. Plesk zeigt Warteschlangenstand und letzten Transportfehler; eine erfolgreiche lokale Annahme belegt nicht die Zustellung zum Empfaenger.
 | Dateiwache | Linux `inotify` (Kernel-Schnittstelle); kein zusaetzliches PHP-Modul. |
 | Plesk-Firewall-Status | Optionale Plesk-Erweiterung **Firewall**. Die Installation allein aktiviert keine Regeln. Die Erweiterung ist keine Voraussetzung fuer andere Guardian-Funktionen. |
 | Plesk-Firewall-Regeln | Plesk Firewall muss installiert und aktiv sein; Plesk-CLI `plesk ext firewall` und der dazugehoerige Dienst muessen funktionieren. `firewalld` darf laut Plesk nicht parallel betrieben werden. |

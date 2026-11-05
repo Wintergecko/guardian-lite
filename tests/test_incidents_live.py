@@ -25,11 +25,15 @@ class IncidentsLiveTests(unittest.TestCase):
         self.original_vhosts = h.VHOSTS
         self.original_incident = h.INCIDENT_LOG
         self.original_alerts = h.ALERT_FILE
+        self.original_alert_queue = h.ALERT_QUEUE_FILE
+        self.original_alert_queue_lock = h.ALERT_QUEUE_LOCK
         self.original_monitor = h.MONITOR_CONFIG
         h.ROOT = self.root
         h.VHOSTS = self.vhosts
         h.INCIDENT_LOG = self.root / 'incidents.jsonl'
         h.ALERT_FILE = self.root / 'alerts.json'
+        h.ALERT_QUEUE_FILE = self.root / 'alerts-outbox.json'
+        h.ALERT_QUEUE_LOCK = self.root / 'alerts-outbox.lock'
         h.MONITOR_CONFIG = self.root / 'realtime.json'
         self.addCleanup(self.reset)
         h.prepare_dir()
@@ -39,6 +43,8 @@ class IncidentsLiveTests(unittest.TestCase):
         h.VHOSTS = self.original_vhosts
         h.INCIDENT_LOG = self.original_incident
         h.ALERT_FILE = self.original_alerts
+        h.ALERT_QUEUE_FILE = self.original_alert_queue
+        h.ALERT_QUEUE_LOCK = self.original_alert_queue_lock
         h.MONITOR_CONFIG = self.original_monitor
 
     def test_incident_log_safe_permissions_and_export(self):
@@ -62,6 +68,64 @@ class IncidentsLiveTests(unittest.TestCase):
             h.alert_test() if not h.binary(h.MAIL_PATHS) else h.set_alert_settings('bad', True)
         h.set_alert_settings('', False)
         self.assertFalse(h.alert_settings()['enabled'])
+
+    def test_failed_email_is_queued_then_retried_with_transport_status(self):
+        h.set_alert_settings('admin@example.com', True)
+        with mock.patch.object(h, 'notify_alert', side_effect=ValueError('mail transport unavailable')):
+            event = h.incident_log('malware_detected', 'critical', 'example.com', 'ClamAV test signature')
+        status = h.alert_queue_status()
+        self.assertEqual(status['pending'], 1)
+        self.assertEqual(status['failed'], 0)
+        self.assertEqual(stat.S_IMODE(h.ALERT_QUEUE_FILE.stat().st_mode), 0o600)
+        with mock.patch.object(h, 'notify_alert', return_value=True) as send:
+            result = h.alert_queue_process(force=True)
+        self.assertEqual(result['delivered'], 1)
+        self.assertEqual(h.alert_queue_status()['pending'], 0)
+        send.assert_called_once()
+
+    def test_alert_queue_is_bounded_and_invalid_records_fail_closed(self):
+        entries = []
+        for index in range(h.MAX_ALERT_QUEUE):
+            event = {'id': '%032x' % index, 'type': 'malware_detected', 'time': h.utc_now(),
+                     'severity': 'critical', 'domain': 'example.com', 'path': 'wp-content/a.php',
+                     'detail': 'ClamAV signature'}
+            entries.append({'id': event['id'], 'event': event, 'created_epoch': time.time(),
+                            'attempts': 0, 'next_attempt': time.time() + 3600,
+                            'last_error': '', 'state': 'pending'})
+        h.alert_queue_write(entries)
+        overflow = {'id': 'f' * 32, 'type': 'malware_detected', 'time': h.utc_now(), 'severity': 'critical',
+                    'domain': 'example.com', 'path': 'wp-content/b.php', 'detail': 'ClamAV signature'}
+        with self.assertRaisesRegex(ValueError, 'Warteschlange voll'):
+            h.alert_queue_add(overflow, 'mail transport unavailable')
+        h.alert_queue_write([{}])
+        with self.assertRaisesRegex(ValueError, 'ungueltigen Datensatz'):
+            h.alert_queue_read()
+        self.assertIn('error', h.alert_queue_status())
+
+    def test_alert_queue_failure_backs_off_and_can_be_manually_retried(self):
+        h.set_alert_settings('admin@example.com', True)
+        event = {'id': 'a' * 32, 'type': 'malware_detected', 'time': h.utc_now(), 'severity': 'critical',
+                 'domain': 'example.com', 'path': 'wp-content/a.php', 'detail': 'ClamAV signature'}
+        h.alert_queue_add(event, 'mail transport unavailable')
+        with mock.patch.object(h, 'notify_alert', side_effect=ValueError('still offline')):
+            result = h.alert_queue_process(force=True)
+        self.assertEqual(result['failed'], 1)
+        queued = h.alert_queue_read()[0]
+        self.assertEqual(queued['attempts'], 1)
+        self.assertEqual(queued['state'], 'pending')
+        self.assertGreater(queued['next_attempt'], time.time())
+        self.assertEqual(h.alert_queue_status()['pending'], 1)
+        queued['attempts'] = h.MAX_ALERT_ATTEMPTS - 1
+        queued['next_attempt'] = 0
+        h.alert_queue_write([queued])
+        with mock.patch.object(h, 'notify_alert', side_effect=ValueError('still offline')):
+            result = h.alert_queue_process()
+        self.assertEqual(result['failed'], 1)
+        self.assertEqual(h.alert_queue_status()['failed'], 1)
+        with mock.patch.object(h, 'notify_alert', return_value=True):
+            result = h.alert_queue_process(force=True)
+        self.assertEqual(result['delivered'], 1)
+        self.assertEqual(h.alert_queue_status()['failed'], 0)
 
     def test_monitor_config_never_starts_by_default(self):
         self.assertEqual(h.monitor_config(), {})

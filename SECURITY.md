@@ -1,4 +1,10 @@
-# Guardian Lite v0.25.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.26.0 – Sicherheitsmodell und Grenzen
+
+## 0.26.0 – E-Mail-Outbox
+
+- Outbox und Sperrdatei liegen root-eigen mit Modus 0600 unter dem Guardian-Datenverzeichnis. Eintraege enthalten nur Incident-Metadaten, nie Dateiinhalt oder API-Schluessel; Anzahl und Dateigroesse sind begrenzt.
+- Transportfehler werden als Incident protokolliert und bis zu sechs Mal mit Backoff wiederholt. Nach Erschoepfung ist eine manuelle Wiederholung verfuegbar.
+- Sendmail-Exit-Code null bedeutet nur lokale Annahme. Externe Mailzustellung und Bounce-Verarbeitung werden nicht bestaetigt.
 
 ## 0.25.0 – Guardian-IP-Ausnahmen
 

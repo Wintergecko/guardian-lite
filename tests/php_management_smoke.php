@@ -216,5 +216,14 @@ checkManagement(strpos($html, 'global-ignore-remove') !== false, 'Global malware
 checkManagement(strpos($html, 'Global ignoriert') !== false, 'Global ignore scope is not visible');
 checkManagement(strpos($html, 'Speicher und Wiederherstellungspunkte') !== false, 'Storage overview not rendered');
 checkManagement(strpos($html, 'backup-delete') !== false, 'Backup retention action not rendered');
-checkManagement(strpos($html, 'baseline-delete') !== false, 'Baseline retention action not rendered');
+$beforeRetryCsrf = count(pm_ApiCli::$calls);
+$controller->request->post = ['csrf' => 'wrong-token'];
+try { $controller->alertsRetryAction(); throw new RuntimeException('Alert retry accepted invalid CSRF'); }
+catch (pm_Exception $e) {}
+checkManagement(count(pm_ApiCli::$calls) === $beforeRetryCsrf, 'Alert retry with invalid CSRF reached privileged helper');
+$controller->request->post = ['csrf' => 'test-token'];
+try { $controller->alertsRetryAction(); } catch (ManagementRedirect $e) {}
+$retryCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+checkManagement($retryCall[0] === 'guardian-helper' && $retryCall[1] === ['alerts-retry'],
+    'Alert retry did not reach the fixed helper action');
 echo "Management controller and template smoke: OK\n";

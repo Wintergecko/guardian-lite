@@ -1,3 +1,11 @@
+## 0.26.0 – Mail-Warteschlange mit Wiederholungen
+
+- Fehlgeschlagene Malware-E-Mail-Warnungen bleiben in einer root-eigenen, auf 100 Eintraege begrenzten Warteschlange erhalten.
+- Plesks stuendlicher Task wiederholt Zustellungen mit wachsendem Abstand; nach sechs Fehlern wird ein Eintrag als ausgeschöpft markiert. Administratoren koennen manuell erneut versuchen.
+- Panel zeigt offene und ausgeschöpfte Zustellungen sowie den letzten Transportfehler. Zustellung bleibt vom lokalen Mailtransport abhaengig und wird durch Exit-Code null nicht garantiert.
+- Ereignisfehler werden im Incident-Protokoll festgehalten; Geheimnisse oder Dateiinhalte werden nicht in die Warteschlange geschrieben.
+- Tests fuer Outbox-Berechtigungen/Validierung, Wiederholungen, Rueckstau, Controller-CSRF und Panelstatus.
+
 ## 0.25.0 – Guardian-IP-Ausnahmen
 
 - Fuehrt eine kommentierte, serverweite IP-/CIDR-Ausnahmeliste fuer Guardian-eigene Firewall-IP- und Port-Sperren ein.

@@ -62,8 +62,15 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn('Guardian-IP-Ausnahmen', view)
         self.assertIn('hebt keine bereits bestehenden Regeln auf', view)
 
+    def test_alert_delivery_queue_is_visible_and_admin_retry_is_csrf_protected(self):
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        controller = (ROOT / 'plib/controllers/IndexController.php').read_text()
+        self.assertIn("$alertDelivery['pending']", view)
+        self.assertIn("getActionUrl('index', 'alerts-retry')", view)
+        self.assertIn("$this->verifyPost();", controller.split('public function alertsRetryAction()', 1)[1])
+
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.25.0')
+        self.assertEqual(version, '0.26.0')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())
