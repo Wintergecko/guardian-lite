@@ -216,7 +216,16 @@ $view->management = ['handlers' => [['version' => '8.3', 'sha256' => str_repeat(
         'managed_bytes' => 8, 'baseline_quota_bytes' => 536870912, 'backup_quota_bytes' => 268435456,
         'disk' => ['free_bytes' => 1000]],
     'baseline_inventory' => [['id' => str_repeat('d', 32), 'domain' => 'example.com', 'created_at' => 'test',
-        'files' => 1, 'bytes' => 3, 'incomplete' => false, 'active' => true, 'autorepair' => false]]];
+        'files' => 1, 'bytes' => 3, 'incomplete' => false, 'active' => true, 'autorepair' => false]],
+    'jobs' => [
+        ['id' => str_repeat('1', 32), 'domain' => 'example.com', 'trigger' => 'manual', 'status' => 'finished',
+            'queued_at' => '2026-11-05T10:00:00+00:00', 'started_at' => '2026-11-05T10:00:01+00:00',
+            'finished_at' => '2026-11-05T10:03:10+00:00', 'infected' => 2],
+        ['id' => str_repeat('2', 32), 'domain' => 'shop.example.com', 'trigger' => 'schedule', 'status' => 'running',
+            'queued_at' => '2026-11-05T11:00:00+00:00', 'started_at' => '2026-11-05T11:00:05+00:00'],
+        ['id' => str_repeat('3', 32), 'domain' => 'example.com', 'trigger' => 'manual', 'status' => 'error',
+            'queued_at' => '2026-11-05T09:00:00+00:00', 'started_at' => '2026-11-05T09:00:01+00:00',
+            'finished_at' => '2026-11-05T09:00:03+00:00', 'error' => 'Scan-Fehler: clamscan nicht gefunden']]];
 $view->managementError = '';
 $view->managementResult = [];
 $view->domains = ['example.com'];
@@ -238,6 +247,9 @@ $render = function () {
 $html = $render->call($view);
 checkManagement(strpos($html, 'guardian-management') !== false, 'Management partial did not render');
 checkManagement(strpos($html, 'Guardian-Moduldiagnose') !== false, 'Management tab lacks module-wide debug controls');
+checkManagement(strpos($html, 'guardian-job-table') !== false && strpos($html, '<span class="guardian-state is-good">Abgeschlossen</span>') !== false, 'Job status table lacks finished badge');
+checkManagement(strpos($html, 'Scan-Fehler: clamscan nicht gefunden') !== false && strpos($html, '<span class="guardian-state is-bad">Fehler</span>') !== false, 'Job status table lacks error details');
+checkManagement(strpos($html, 'data-guardian-scan-running') !== false, 'Running job lacks progress bar');
 checkManagement(strpos($html, 'Guardian-Debugging einschalten') !== false, 'Management tab lacks global debug toggle');
 checkManagement(strpos($html, 'Keine Guardian-Regel konfiguriert') !== false, 'WAF state is not human readable');
 checkManagement(strpos($html, 'Aktuell: []') === false, 'WAF state leaks raw empty JSON');

@@ -22,6 +22,17 @@ class ScanUiTests(unittest.TestCase):
         rapid = helper.index("scan['rapid_scan'] = rapid_scan")
         self.assertIn('save_job(scan)', helper[rapid:rapid + 200])
 
+    def test_job_status_is_a_table_with_badges_and_progress(self):
+        management = (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
+        css = (ROOT / 'htdocs/css/guardian.css').read_text()
+        self.assertNotIn("renderResult('Auftragsstatus'", management)
+        self.assertIn('$renderJobs(', management)
+        self.assertIn('guardian-job-table', management)
+        self.assertIn("'finished' => ['Abgeschlossen', 'is-good']", management)
+        self.assertIn("'error' => ['Fehler', 'is-bad']", management)
+        self.assertIn('data-guardian-scan-running', management)
+        self.assertIn('.guardian-state.is-bad', css)
+
     def test_long_operations_show_busy_bar_without_cancelled_confirms(self):
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
         for operation in ('crs-stage', 'cloud-save', 'baseline-create', 'repair-set', 'wp-db-scan',
