@@ -95,7 +95,7 @@ CRON_PATTERNS = (
     ('remote-shell-pipe', re.compile(r'\b(?:curl|wget)\b[^\n|]{0,500}\|\s*(?:/bin/)?(?:ba)?sh\b', re.I)),
     ('encoded-payload-pipe', re.compile(r'\bbase64\s+(?:-[A-Za-z]*d|--decode)\b[^\n|]{0,300}\|\s*(?:/bin/)?(?:ba)?sh\b', re.I)),
     ('php-inline-eval', re.compile(r'\bphp(?:\d+(?:\.\d+)?)?\s+-r\s+[^\n]{0,1000}\b(?:eval|assert|base64_decode)\s*\(', re.I)),
-    ('temporary-executable', re.compile(r'(?:^|\s)(?:/tmp|/var/tmp|/dev/shm)/[^\s;|]+\s*(?:;|$)', re.I)),
+    ('temporary-executable', re.compile(r'(?:^|\s)(?<!mktemp )(?<!mktemp -d )(?<!mkdir )(?<!touch )(?:/tmp|/var/tmp|/dev/shm)/[^\s;|]+\s*(?:;|$)', re.I)),
 )
 CRON_CLAM_TIMEOUT = 45
 CRON_CLAM_MAX_BYTES = 4 * 1024 * 1024
@@ -471,16 +471,19 @@ def waf_set(domain, mode, limit, expected):
     return {'message': 'WAF-Regeln installiert und Apache neu geladen. HTTP-Wirksamkeitspruefung erforderlich.', 'backup': backup}
 
 
+def waf_engine_mode(output):
+    text = output.strip().lower()
+    match = re.search(r'(?:waf[-_ ]rule[-_ ]engine|rule[-_ ]engine|mode|modus)\]?\s*(?:[:=]\s*|\n\s*)(on|off|detection[- ]?only)\b', text)
+    value = match.group(1) if match else text
+    return {'detectiononly': 'detection-only', 'detection only': 'detection-only'}.get(value, value)
+
+
 def waf_engine(domain, mode):
     h.site_docroot(domain)
     if mode not in ('on', 'off', 'detection-only'):
         raise ValueError('Ungueltiger WAF-Engine-Modus.')
     before = plesk(['subscription', '--show-web-app-firewall', domain])
-    previous = before.strip().lower()
-    match = re.search(r'(?:waf[-_ ]rule[-_ ]engine|rule[-_ ]engine|mode|modus)\s*[:=]\s*(on|off|detection[- ]?only)', previous)
-    if match:
-        previous = match.group(1)
-    previous = {'detectiononly': 'detection-only', 'detection only': 'detection-only'}.get(previous, previous)
+    previous = waf_engine_mode(before)
     if previous not in ('on', 'off', 'detection-only'):
         raise ValueError('Vorheriger Plesk-WAF-Modus konnte nicht eindeutig ermittelt werden; keine Aenderung.')
     token = uuid.uuid4().hex
@@ -548,7 +551,7 @@ def crs_fetch(url, limit):
     current = url
     for _ in range(5):
         try:
-            request = urllib.request.Request(current, headers={'User-Agent': 'Guardian-Lite/0.28.22 OWASP-CRS'})
+            request = urllib.request.Request(current, headers={'User-Agent': 'Guardian-Lite/0.28.23 OWASP-CRS'})
             with opener.open(request, timeout=20) as response:
                 if response.getcode() != 200:
                     raise ValueError('CRS-Download lieferte keinen HTTP-200-Status.')
@@ -2724,7 +2727,7 @@ def wordpress_theme_fetch(url, max_bytes):
     parts = urllib.parse.urlsplit(url)
     if not allowed_target(url) or parts.fragment:
         raise ValueError('Theme-Pruefung akzeptiert nur HTTPS von WordPress.org.')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.22 theme-integrity'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.23 theme-integrity'})
     class AllowedRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not allowed_target(newurl):
