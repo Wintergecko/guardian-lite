@@ -2,6 +2,7 @@
 import contextlib
 import importlib.machinery
 import importlib.util
+import io
 import json
 import pathlib
 import subprocess
