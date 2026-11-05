@@ -105,6 +105,28 @@
         if (progress) progress.hidden = false;
       });
     }
+    var firewallTable = document.getElementById('guardian-firewall-inventory');
+    var firewallSearch = document.getElementById('guardian-firewall-search');
+    var firewallFilter = document.getElementById('guardian-firewall-filter');
+    var firewallResults = document.getElementById('guardian-firewall-results');
+    if (firewallTable && firewallSearch && firewallFilter) {
+      var firewallRows = Array.prototype.slice.call(firewallTable.querySelectorAll('tbody tr'));
+      function filterFirewallRules() {
+        var query = firewallSearch.value.trim().toLocaleLowerCase();
+        var action = firewallFilter.value;
+        var shown = 0;
+        firewallRows.forEach(function (row) {
+          var matches = (!query || row.textContent.toLocaleLowerCase().indexOf(query) !== -1) &&
+            (action === 'all' || row.getAttribute('data-firewall-action') === action);
+          row.hidden = !matches;
+          if (matches) shown += 1;
+        });
+        if (firewallResults) firewallResults.textContent = shown + ' von ' + firewallRows.length + ' angezeigt';
+      }
+      firewallSearch.addEventListener('input', filterFirewallRules);
+      firewallFilter.addEventListener('change', filterFirewallRules);
+      filterFirewallRules();
+    }
     var saved = null;
     try { saved = window.sessionStorage.getItem('guardian_active_tab'); } catch (e) { /* storage optional */ }
     var requested = fromHash();

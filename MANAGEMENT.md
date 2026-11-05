@@ -1,4 +1,4 @@
-# Guardian Lite 0.26.0 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.27.0 – Schutzverwaltung und Plesk-Praxistest
 
 ## Voraussetzungen und Reichweite
 
@@ -50,9 +50,13 @@ Plesk-Pakete/Handler-Komponenten koennen je nach Betriebssystem und PHP-Version 
 
 Automatisierte Tests ersetzen die Plesk-Praxistests nicht. Die Tests des Betreibers finden auf einem separaten Plesk-Testserver statt. Guardian fuehrt keine pauschale Aktivierung auf vorhandenen Domains durch.
 
-## Plesk-Firewall-IP- und Portregeln
+## Plesk-Firewall-Dashboard, Diagnose und IP-/Portregeln
 
-Im Angriffe-&-Schutz-Bereich zeigt Guardian eigene IP-Sperren und quell-IP-gebundene Portregeln, die es in der Plesk-Firewall angelegt hat. Neben eingehenden Deny-Regeln kann es einen einzelnen TCP-/UDP-Port fuer eine einzelne Quell-IP erlauben oder fuer ein begrenztes Quellnetz sperren. Jede Regel nutzt `plesk ext firewall --set-rule`; Entfernen ist nur fuer exakt gelistete Guardian-Portregeln per numerischer ID und Guardian-IP-Sperren per exakt passendem Netz moeglich. Andere Regeln werden weder veraendert noch geloescht. Plesk Firewall muss bereits aktiv sein; Guardian aktiviert sie nicht.
+Im Angriffe-&-Schutz-Bereich zeigt Guardian Zaehler und ein durchsuchbares Inventar der von Plesk gemeldeten Regeln. Die Inventaransicht ist auf 300 Regeln begrenzt. Plesk-Erlauben-Regeln werden als Allow/White, Sperrregeln als Deny/Black bezeichnet; dies ist keine separate Guardian-Prioritaetssteuerung. Greylist, Bot-Challenges und Cloud-Reputation werden nicht von dieser Plesk-Firewall bereitgestellt.
+
+Die Debugausgabe ist standardmaessig deaktiviert und kann im Firewall-Bereich ein- und ausgeschaltet werden. Bei Aktivierung protokolliert Guardian Zeit, CLI-Schritt, Ergebniscode, Laufzeit und Ausgabeumfang in einer root-privaten JSONL-Datei mit maximal 256 KiB. CLI-Argumente und Standardausgabe werden nicht gespeichert. Das Panel zeigt die letzten begrenzten Ereignisse. Zum Support kann die Diagnose kurzzeitig aktiviert, nach dem Nachstellen wieder deaktiviert und der Status im Panel geprueft werden.
+
+Guardian zeigt eigene IP-Sperren und quell-IP-gebundene Portregeln, die es in der Plesk-Firewall angelegt hat. Neben eingehenden Deny-Regeln kann es einen einzelnen TCP-/UDP-Port fuer eine einzelne Quell-IP erlauben oder fuer ein begrenztes Quellnetz sperren. Jede Regel nutzt `plesk ext firewall --set-rule`; Entfernen ist nur fuer exakt gelistete Guardian-Portregeln per numerischer ID und Guardian-IP-Sperren per exakt passendem Netz moeglich. Andere Regeln werden weder veraendert noch geloescht. Plesk Firewall muss bereits aktiv sein; Guardian aktiviert sie nicht.
 
 Unterstuetzt sind einzelne IPv4-/IPv6-Adressen und CIDR-Netze bis maximal IPv4 `/24` bzw. IPv6 `/64`. Loopback-, unspecified-, link-local- und Multicast-Netze sowie die aktuelle `REMOTE_ADDR` der Plesk-Admin-Verbindung werden abgelehnt. Weitergeleitete Proxy-Header werden nicht als Admin-IP verwendet. Ein Admin hinter Proxy/CDN muss nach dem ersten Plesk-Test die tatsaechlich ankommende Verbindung beruecksichtigen.
 

@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.26.0';
+    private const GUARDIAN_VERSION = '0.27.0';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -543,8 +543,14 @@ class IndexController extends pm_Controller_Action
         $request = $this->getRequest();
         $operation = (string)$request->getPost('operation', '');
         if (!in_array($operation, ['ban', 'unban', 'port-allow', 'port-deny', 'port-remove',
+            'debug-on', 'debug-off',
             'allowlist-add', 'allowlist-remove', 'confirm', 'cancel'], true)) {
             throw new pm_Exception('Ungueltige Plesk-Firewall-Aktion.');
+        }
+        if (in_array($operation, ['debug-on', 'debug-off'], true)) {
+            $this->finishAction(['firewall-debug-set', $operation === 'debug-on' ? 'on' : 'off'],
+                $operation === 'debug-on' ? 'Firewall-Debugausgabe aktiviert.' : 'Firewall-Debugausgabe deaktiviert.');
+            return;
         }
         if ($operation === 'allowlist-add') {
             $network = trim((string)$request->getPost('network', ''));

@@ -119,6 +119,48 @@ class GuardianTests(unittest.TestCase):
         self.assertEqual(result['rules'][0]['network'], '203.0.113.0/24')
         self.assertEqual(result['rules'][1]['kind'], 'ip_deny')
         self.assertEqual(result['rules'][2]['ports'], '2222/tcp')
+        self.assertEqual(result['counts']['input_allow'], 2)
+        self.assertEqual(result['counts']['input_deny'], 4)
+        self.assertEqual(result['counts']['port_allow'], 1)
+        self.assertEqual(len(result['inventory']), 6)
+        self.assertEqual(result['inventory'][1]['name'], 'Other tool rule')
+
+    def test_firewall_debug_is_off_by_default_and_can_be_toggled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / 'guardian'
+            root.mkdir(mode=0o700)
+            config, log, lock = root / 'firewall-debug.json', root / 'firewall-debug.jsonl', root / 'firewall-debug.lock'
+            with mock.patch.object(helper, 'ROOT', root), \
+                 mock.patch.object(helper, 'FIREWALL_DEBUG_CONFIG', config), \
+                 mock.patch.object(helper, 'FIREWALL_DEBUG_LOG', log), \
+                 mock.patch.object(helper, 'FIREWALL_DEBUG_LOCK', lock), \
+                 mock.patch.object(helper.os, 'geteuid', return_value=0):
+                self.assertFalse(helper.firewall_debug_status()['debug_enabled'])
+                helper.firewall_debug_log('action', stage='ignored')
+                self.assertFalse(log.exists())
+                status = helper.firewall_debug_set(True)
+                self.assertTrue(status['debug_enabled'])
+                helper.firewall_debug_log('plesk-cli', stage='list', returncode=0,
+                                          duration_ms=12, output_bytes=25)
+                status = helper.firewall_debug_status()
+                self.assertEqual(len(status['debug_events']), 2)
+                self.assertEqual(status['debug_events'][-1]['output_bytes'], 25)
+                helper.firewall_debug_set(False)
+                self.assertFalse(helper.firewall_debug_status()['debug_enabled'])
+                before = log.read_bytes()
+                helper.firewall_debug_log('action', stage='after-disable')
+                self.assertEqual(log.read_bytes(), before)
+                self.assertEqual(log.stat().st_mode & 0o777, 0o600)
+
+    def test_firewall_debug_rejects_unsafe_settings_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = pathlib.Path(tmp) / 'firewall-debug.json'
+            config.write_text('{"enabled":true}')
+            config.chmod(0o644)
+            with mock.patch.object(helper, 'FIREWALL_DEBUG_CONFIG', config):
+                result = helper.firewall_debug_status()
+            self.assertFalse(result['debug_enabled'])
+            self.assertIn('unsichere Dateirechte', result['debug_error'])
 
     def test_guardian_firewall_rules_displays_confirmed_expiry(self):
         row = {'id': 41, 'class': 'custom', 'name': 'Guardian Lite managed deny 203.0.113.25/32',

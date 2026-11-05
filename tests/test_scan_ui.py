@@ -62,6 +62,19 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn('Guardian-IP-Ausnahmen', view)
         self.assertIn('hebt keine bereits bestehenden Regeln auf', view)
 
+    def test_firewall_dashboard_and_debug_toggle_are_available(self):
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        controller = (ROOT / 'plib/controllers/IndexController.php').read_text()
+        js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
+        self.assertIn('guardian-firewall-inventory', view)
+        self.assertIn('guardian-firewall-search', view)
+        self.assertIn('Greylist, Bot-Challenges', view)
+        self.assertIn('debug-on', controller)
+        self.assertIn('debug-off', controller)
+        action = controller.split('public function firewallAction()', 1)[1]
+        self.assertIn('$this->verifyPost();', action)
+        self.assertIn("getElementById('guardian-firewall-inventory')", js)
+
     def test_alert_delivery_queue_is_visible_and_admin_retry_is_csrf_protected(self):
         view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
         controller = (ROOT / 'plib/controllers/IndexController.php').read_text()
@@ -71,6 +84,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.26.0')
+        self.assertEqual(version, '0.27.0')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())
