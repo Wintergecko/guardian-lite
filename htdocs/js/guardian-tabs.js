@@ -256,6 +256,40 @@
         if (progress) progress.hidden = false;
       });
     }
+    // Long server-side operations (CRS download, WAF/backup/checksum audits, update apply) get a visible
+    // indeterminate bar. Forms cancelled by an inline confirm() are skipped via defaultPrevented.
+    var longOperations = ['crs-stage', 'crs-activate', 'crs-rollback', 'cloud-save', 'baseline-create', 'repair-set',
+      'repair', 'repair-rollback', 'retention-prune', 'php-backup', 'php-restore', 'runtime-install',
+      'wp-checksum-audit', 'wp-plugin-checksum-audit', 'wp-theme-checksum-audit', 'wp-db-scan', 'cms-db-clamav-scan'];
+    Array.prototype.forEach.call(root.querySelectorAll('form'), function (form) {
+      var operation = form.querySelector('input[name="operation"]');
+      var action = form.getAttribute('action') || '';
+      var isUpdate = /\/update-apply(\?|$)/.test(action);
+      if (!isUpdate && !(operation && longOperations.indexOf(operation.value) !== -1)) return;
+      form.addEventListener('submit', function (event) {
+        if (event.defaultPrevented) return;
+        var label = isUpdate ? 'Update wird installiert' : 'Vorgang laeuft';
+        var bar = form.querySelector('.guardian-busy[data-guardian-busy-generated]');
+        if (!bar) {
+          bar = document.createElement('div');
+          bar.className = 'guardian-busy';
+          bar.setAttribute('role', 'progressbar');
+          bar.setAttribute('aria-label', label);
+          bar.setAttribute('data-guardian-busy-generated', '');
+          var track = document.createElement('div');
+          track.className = 'guardian-busy-track';
+          track.appendChild(document.createElement('span'));
+          bar.appendChild(track);
+          form.appendChild(bar);
+        }
+        bar.setAttribute('aria-valuetext', label);
+        bar.classList.add('is-active');
+      });
+    });
+    // While a malware scan is queued or running, reload the report every 10 seconds.
+    if (root.querySelector('[data-guardian-scan-running]')) {
+      window.setTimeout(function () { window.location.reload(); }, 10000);
+    }
     var firewallTable = document.getElementById('guardian-firewall-inventory');
     var firewallSearch = document.getElementById('guardian-firewall-search');
     var firewallFilter = document.getElementById('guardian-firewall-filter');
