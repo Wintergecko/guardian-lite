@@ -551,7 +551,7 @@ def crs_fetch(url, limit):
     current = url
     for _ in range(5):
         try:
-            request = urllib.request.Request(current, headers={'User-Agent': 'Guardian-Lite/0.28.23 OWASP-CRS'})
+            request = urllib.request.Request(current, headers={'User-Agent': 'Guardian-Lite/0.28.24 OWASP-CRS'})
             with opener.open(request, timeout=20) as response:
                 if response.getcode() != 200:
                     raise ValueError('CRS-Download lieferte keinen HTTP-200-Status.')
@@ -2727,7 +2727,7 @@ def wordpress_theme_fetch(url, max_bytes):
     parts = urllib.parse.urlsplit(url)
     if not allowed_target(url) or parts.fragment:
         raise ValueError('Theme-Pruefung akzeptiert nur HTTPS von WordPress.org.')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.23 theme-integrity'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.24 theme-integrity'})
     class AllowedRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not allowed_target(newurl):
