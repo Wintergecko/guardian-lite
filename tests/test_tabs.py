@@ -25,6 +25,7 @@ class TabsTests(unittest.TestCase):
 
     def test_progressive_enhancement_and_accessibility(self):
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
         for expected in ('guardian-menu', 'guardian-submenu', 'aria-expanded', 'aria-controls',
                          'data-menu-target', 'ArrowRight', 'ArrowLeft', 'Home', 'End',
                          'guardian_active_tab', 'hashchange', 'DOMContentLoaded', 'WebShield',
@@ -33,6 +34,12 @@ class TabsTests(unittest.TestCase):
         self.assertNotIn('eval(', js)
         self.assertNotIn('innerHTML', js)
         self.assertIn('panel.hidden = !active;', js)
+        self.assertIn('guardian-menu-static', view)
+        self.assertIn('<main class="guardian-pages">', view)
+        self.assertIn('id="guardian-firewall"', view)
+        self.assertIn('href="#guardian-malware-repair"', view)
+        self.assertIn('id="guardian-malware-repair"',
+                      (ROOT / 'plib/views/scripts/index/management.phtml').read_text())
 
     def test_sidebar_groups_and_submenu_links_have_rendered_targets(self):
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
@@ -46,7 +53,7 @@ class TabsTests(unittest.TestCase):
 
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.0')
+        self.assertEqual(version, '0.28.1')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('Guardian Lite <span>v' + version + '</span>',

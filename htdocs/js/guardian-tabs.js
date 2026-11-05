@@ -3,7 +3,7 @@
   'use strict';
   function init() {
     var root = document.querySelector('.guardian');
-    if (!root || root.querySelector('.guardian-shell')) return;
+    if (!root || root.querySelector('.guardian-menu-enhanced')) return;
     var sections = [
       {id: 'overview', label: 'Dashboard', sections: ['guardian-overview'],
         items: [['guardian-overview', 'Systemstatus']]},
@@ -31,16 +31,33 @@
           ['guardian-updater', 'Updates'], ['guardian-management-diagnostics', 'Diagnose'],
           ['guardian-roadmap', 'Funktionsumfang']]}
     ];
-    if (sections.some(function (group) {
-      return group.sections.some(function (id) { return !document.getElementById(id); });
-    })) return;
-    var shell = document.createElement('div');
-    shell.className = 'guardian-shell';
-    var nav = document.createElement('nav');
-    nav.className = 'guardian-menu';
-    nav.setAttribute('aria-label', 'Guardian Lite Hauptmenü');
-    var content = document.createElement('main');
-    content.className = 'guardian-pages';
+    sections = sections.map(function (group) {
+      group.sections = group.sections.filter(function (id) { return !!document.getElementById(id); });
+      group.items = (group.items || []).filter(function (entry) { return !!document.getElementById(entry[0]); });
+      return group;
+    }).filter(function (group) { return group.sections.length > 0; });
+    if (!sections.length) return;
+    var shell = root.querySelector('.guardian-shell');
+    if (!shell) {
+      shell = document.createElement('div');
+      shell.className = 'guardian-shell';
+    }
+    var nav = shell.querySelector('.guardian-menu');
+    if (!nav) {
+      nav = document.createElement('nav');
+      nav.className = 'guardian-menu';
+      nav.setAttribute('aria-label', 'Guardian Lite Hauptmenü');
+      shell.insertBefore(nav, shell.firstChild);
+    }
+    var content = shell.querySelector('.guardian-pages');
+    if (!content) {
+      content = document.createElement('main');
+      content.className = 'guardian-pages';
+      shell.appendChild(content);
+    }
+    while (nav.firstChild) nav.removeChild(nav.firstChild);
+    nav.classList.remove('guardian-menu-static');
+    nav.classList.add('guardian-menu-enhanced');
     var items = {};
     sections.forEach(function (group) {
       var menuGroup = document.createElement('div');
@@ -82,15 +99,15 @@
       content.appendChild(panel);
       items[group.id] = {button: button, panel: panel, submenu: submenu, menuGroup: menuGroup};
     });
-    var footer = root.querySelector('.guardian-foot');
-    if (!footer) return;
     ['guardian-shield', 'guardian-network'].forEach(function (id) {
       var legacyGrid = document.getElementById(id);
       if (legacyGrid && legacyGrid.children.length === 0) legacyGrid.remove();
     });
-    shell.appendChild(nav);
-    shell.appendChild(content);
-    root.insertBefore(shell, footer);
+    if (!shell.parentNode) {
+      var footer = root.querySelector('.guardian-foot');
+      if (!footer) return;
+      root.insertBefore(shell, footer);
+    }
     var aliases = {attacks: 'firewall', management: 'settings', updates: 'settings', roadmap: 'settings'};
     function normalize(id) { return aliases[id] || id; }
     function isValid(id) { return Object.prototype.hasOwnProperty.call(items, normalize(id)); }
