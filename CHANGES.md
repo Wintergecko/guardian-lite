@@ -1,3 +1,8 @@
+## 0.28.25 – Übersichtlicher Auftragsstatus
+
+- Auftragsstatus im Tab „Verwaltung“ ist jetzt eine Tabelle mit Statusbadges (Wartet, Startet, Läuft, Abgeschlossen, Fehler, Unterbrochen), lesbaren Zeiten, Funden und Fehlertext.
+- Laufende Aufträge zeigen einen Fortschrittsbalken; die Seite aktualisiert sich dabei automatisch.
+
 ## 0.28.24 – Fortschrittsanzeigen für Scans und lange Vorgänge
 
 - Laufende oder wartende Malware-Scans zeigen einen Fortschrittsbalken mit Laufzeit; der Bericht aktualisiert sich alle 10 Sekunden, bis der Scan abgeschlossen ist.
