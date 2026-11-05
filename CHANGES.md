@@ -1,3 +1,10 @@
+## 0.28.30 – Firewall als Listen-Übersicht
+
+- Der Tab „Firewall“ heißt jetzt „Alle Listen“ und zeigt die Sperren in Prioritätsreihenfolge: Weiß (Guardian-Allow-Regeln) schlägt Schwarz (Fail2Ban, CrowdSec, Deny-Regeln).
+- Jede Zeile trägt ein Listen-Badge (Weiß/Schwarz) zusätzlich zur Quelle.
+- Der Plesk-Bereich heißt „Ports & Plesk-Regeln“.
+- Greylist und Anti-Bot-Challenge sind nicht enthalten, da Guardian dafür keine Datenquelle hat.
+
 ## 0.28.29 – Firewall-Übersicht neu geordnet
 
 - Der Tab „Firewall“ zeigt eine gemeinsame Liste „Wirksame Sperren“ mit Quelle (Fail2Ban, Guardian·Plesk, CrowdSec), Ziel, Ablauf und passender Aktion.

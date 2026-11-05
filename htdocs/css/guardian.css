@@ -212,6 +212,9 @@
 .guardian-firewall-summary:not(.guardian-firewall-summary-four) .guardian-firewall-summary-item:last-child strong{font-size:15px}
 .guardian-firewall-section-title{padding-top:2px}
 .guardian-firewall-intro{margin:0 0 12px;color:#586a7d!important;font-size:13px}
+.guardian .guardian-list-badge{display:inline-block;margin-right:6px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;vertical-align:middle;text-shadow:none}
+.guardian .guardian-list-badge.is-white{background:#fff;color:#1d2b3a;border:1px solid #c9d2dc}
+.guardian .guardian-list-badge.is-black{background:#1d2b3a;color:#fff}
 .guardian-firewall-sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 14px}
 .guardian-firewall-source{display:grid;gap:3px;padding:12px 14px;border:1px solid #e1e8ee;border-left:3px solid #2f7de1;border-radius:10px;background:#fff}
 .guardian-firewall-source span{color:#82909c;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}

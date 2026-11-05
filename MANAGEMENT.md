@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.29 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.30 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
