@@ -73,7 +73,7 @@ class TabsTests(unittest.TestCase):
 
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.9')
+        self.assertEqual(version, '0.28.10')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('<span>v' + version + '</span>',
@@ -89,6 +89,9 @@ class TabsTests(unittest.TestCase):
         self.assertIn('name="operation" value="permanent"', view)
         self.assertIn('Kostenlose CrowdSec-Installation fuer Linux', view)
         self.assertIn('Guardian installiert keinen zweiten Firewall-Bouncer', view)
+        management = (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
+        self.assertIn('CrowdSec AppSec', management)
+        self.assertIn("'forwarding_enabled'", helper)
 
 
 if __name__ == '__main__':

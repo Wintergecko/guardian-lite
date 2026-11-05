@@ -2,6 +2,8 @@
 $management = is_array($this->management) ? $this->management : [];
 $firewallDebug = is_array($fw ?? null) ? $fw : [];
 $cloud = $management['cloud'] ?? [];
+$crowdsec = is_array($services['crowdsec'] ?? null) ? $services['crowdsec'] : [];
+$crowdsecAppsec = is_array($crowdsec['appsec'] ?? null) ? $crowdsec['appsec'] : [];
 $storage = is_array($management['storage'] ?? null) ? $management['storage'] : [];
 $storageAreas = is_array($storage['areas'] ?? null) ? $storage['areas'] : [];
 $formatBytes = static function ($bytes) { return number_format(max(0, (float)$bytes) / 1048576, 2, ',', '.') . ' MiB'; };
@@ -113,6 +115,17 @@ $domainSelect = function () use ($esc) {
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="waf-engine">
     <?php $domainSelect(); ?><select name="mode"><option value="detection-only">Nur Erkennung</option><option value="on">WAF aktiv</option><option value="off">WAF aus</option></select><button>WAF-Modus setzen</button>
   </form>
+  <h4>CrowdSec AppSec · WAF und Bot-Challenge</h4>
+  <p>Optionaler Open-Source-Baustein. Guardian erkennt die lokale Konfiguration, installiert oder aktiviert aber weder CrowdSec noch das Apache-Modul. Statuspruefung ist kein Nachweis fuer wirksame HTTP-Pruefung; erst auf einer Testdomain kontrollieren.</p>
+  <ul class="guardian-checklist">
+    <li>CrowdSec-Dienst: <strong><?= !empty($crowdsecAppsec['engine_running']) ? 'aktiv' : 'nicht aktiv / nicht erkannt' ?></strong></li>
+    <li>AppSec-Erfassungsquelle: <strong><?= !empty($crowdsecAppsec['acquisition_configured']) ? 'konfiguriert' : 'nicht erkannt' ?></strong></li>
+    <li>AppSec lauscht nur lokal auf 127.0.0.1:7422: <strong><?= !empty($crowdsecAppsec['loopback_listener']) ? 'ja' : 'nicht erkannt' ?></strong></li>
+    <li>Apache-Modul geladen: <strong><?= !empty($crowdsecAppsec['apache_module_loaded']) ? 'ja' : 'nein / nicht erkannt' ?></strong></li>
+    <li>Apache-Bouncer-Konfiguration eingebunden: <strong><?= !empty($crowdsecAppsec['bouncer_config_included']) ? 'ja' : 'nein / nicht erkannt' ?></strong></li>
+    <li>Apache-AppSec-Weiterleitung konfiguriert: <strong><?= !empty($crowdsecAppsec['forwarding_enabled']) ? 'ja' : 'nein / nicht erkannt' ?></strong></li>
+  </ul>
+  <p><a href="https://docs.crowdsec.net/docs/appsec/quickstart/apache/" target="_blank" rel="noopener noreferrer">Offizielle CrowdSec-AppSec-Anleitung fuer Apache</a>. Die Apache-Komponente hat eigene Installations- und Vertrauensanforderungen; Guardian laedt keine Fremd-Binaries.</p>
 
   </section>
   <section class="guardian-card guardian-subsection" id="guardian-service-keys">

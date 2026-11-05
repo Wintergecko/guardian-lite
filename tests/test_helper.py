@@ -103,6 +103,52 @@ class GuardianTests(unittest.TestCase):
         self.assertFalse(failed['available'])
         self.assertFalse(invalid['available'])
 
+    def test_crowdsec_appsec_status_checks_local_listener_and_apache_without_secrets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            acquisition = pathlib.Path(tmp) / 'appsec.yaml'
+            bouncer = pathlib.Path(tmp) / 'bouncer.conf'
+            acquisition.write_text('source: appsec\nlisten_addr: 127.0.0.1:7422\n')
+            bouncer.write_text('CrowdsecAPIKey secret-must-not-leak\nCrowdsecAppsec On\n'
+                               'CrowdsecAppsecURL http://127.0.0.1:7422\n')
+            def fake_binary(paths):
+                if paths == helper.CROWDSEC_PATHS:
+                    return '/usr/bin/cscli'
+                if paths == helper.SYSTEMCTL_PATHS:
+                    return '/usr/bin/systemctl'
+                return '/usr/sbin/apache2ctl'
+            def fake_execute(args, timeout=5):
+                if args[1:3] == ['decisions', 'list']:
+                    return subprocess.CompletedProcess(args, 0, '[]', '')
+                if args[1:3] == ['is-active', 'crowdsec']:
+                    return subprocess.CompletedProcess(args, 0, 'active\n', '')
+                if 'DUMP_INCLUDES' in args:
+                    return subprocess.CompletedProcess(args, 0, str(bouncer) + '\n', '')
+                return subprocess.CompletedProcess(args, 0, ' crowdsec_module (shared)\n', '')
+            with mock.patch.object(helper, 'CROWDSEC_APPSEC_CONFIG', acquisition), \
+                 mock.patch.object(helper, 'CROWDSEC_BOUNCER_CONFIG', bouncer), \
+                 mock.patch.object(helper, 'binary', side_effect=fake_binary), \
+                 mock.patch.object(helper, 'execute', side_effect=fake_execute):
+                result = helper.crowdsec_status()
+        self.assertEqual(result['appsec'], {
+            'engine_running': True, 'acquisition_configured': True,
+            'loopback_listener': True, 'apache_module_loaded': True,
+            'bouncer_config_included': True, 'forwarding_enabled': True})
+        self.assertNotIn('secret-must-not-leak', json.dumps(result))
+
+    def test_crowdsec_appsec_rejects_public_listener_and_commented_forwarding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            acquisition = pathlib.Path(tmp) / 'appsec.yaml'
+            bouncer = pathlib.Path(tmp) / 'bouncer.conf'
+            acquisition.write_text('source: appsec\nlisten_addr: 0.0.0.0:7422\n')
+            bouncer.write_text('# CrowdsecAppsec On\n# CrowdsecAppsecURL http://127.0.0.1:7422\n')
+            with mock.patch.object(helper, 'CROWDSEC_APPSEC_CONFIG', acquisition), \
+                 mock.patch.object(helper, 'CROWDSEC_BOUNCER_CONFIG', bouncer), \
+                 mock.patch.object(helper, 'binary', return_value=None):
+                result = helper.crowdsec_appsec_status()
+        self.assertTrue(result['acquisition_configured'])
+        self.assertFalse(result['loopback_listener'])
+        self.assertFalse(result['forwarding_enabled'])
+
     def test_firewall_detects_installed_but_inactive_plesk_firewall(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings = pathlib.Path(tmp) / 'settings'

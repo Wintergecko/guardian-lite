@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.9 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.10 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -103,6 +103,12 @@ Apache muss ModSecurity v2 und `mod_unique_id` geladen haben und ein vorhandenes
 Hinter CDN/Reverse-Proxy muss die vertrauenswuerdige Real-IP-Konfiguration bereits stimmen. Guardian interpretiert keine ungeprueften Forwarded-Header. NAT-Nutzer teilen sich ein Limit. Andere Aliase als der gewaehlte Hostname, statische NGINX-Antworten und volumetrische DDoS-Angriffe koennen ausserhalb dieser Apache-Regeln liegen.
 
 Referenzen: [Plesk Custom Rules](https://support.plesk.com/hc/en-us/articles/12388798361495-How-to-add-a-custom-rule-to-Web-Application-Firewall-ModSecurity-in-Plesk), [Plesk WAF CLI](https://support.plesk.com/hc/en-us/articles/12377452876439-How-to-manage-Web-Application-Firewall-ModSecurity-on-Plesk-server-via-CLI).
+
+### Optional: CrowdSec AppSec
+
+Unter **Verwaltung → WebShield · WAF-Regeln** zeigt Guardian lesend, ob der CrowdSec-Dienst aktiv ist, die AppSec-Acquisition konfiguriert ist, der Inspector auf `127.0.0.1:7422` lauscht, das Apache-Modul geladen ist und AppSec-Forwarding eingeschaltet ist. Geheimnisse aus der Bouncer-Konfiguration werden nicht ausgegeben. Das ist eine Konfigurationspruefung und kein HTTP-Wirksamkeitsnachweis.
+
+CrowdSec AppSec kann WAF-Regeln und Browser-Challenges ueber den Apache-Bouncer bereitstellen. Vor dem Einsatz die aktuelle offizielle Anleitung und Kompatibilitaet mit Plesks Apache/ModSecurity-Aufbau pruefen, zuerst nur auf einer Testdomain aktivieren und Anmeldepfade, API, Uploads, grosse POSTs sowie Verhalten bei nicht erreichbarem AppSec testen. Guardian nimmt keine Aenderungen vor und installiert keine Dritt-Binaries. CrowdSec weist darauf hin, dass Apache-Bouncer-Release-Dateien nicht GPG-signiert sind; deren Herkunft separat bewerten. [Apache AppSec-Anleitung](https://docs.crowdsec.net/docs/appsec/quickstart/apache/), [Apache-Bouncer-Dokumentation](https://docs.crowdsec.net/u/bouncers/apache_bouncer/).
 
 ## AbuseIPDB und Turnstile
 

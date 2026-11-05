@@ -1,3 +1,9 @@
+## 0.28.10 – CrowdSec AppSec-Status
+- Erkennt lesend CrowdSec-Dienst, AppSec-Erfassungsquelle, nur lokalen Listener, geladenes Apache-Modul, Einbindung der Bouncer-Konfiguration und aktivierte Weiterleitung.
+- Zeigt Status in der Schutzverwaltung; Schluessel und Konfigurationsinhalte werden nicht ausgegeben.
+- Installiert und aktiviert keine Fremdkomponenten; Hinweise zum manuellen Plesk-Test ergaenzt.
+- Tests fuer lokale Listenerpruefung, Apache-Modulerkennung und Geheimnisausschluss hinzugefuegt.
+
 ## 0.28.9 – Optionale CrowdSec-Entscheidungen
 - Zeigt aktive lokale CrowdSec-Entscheidungen begrenzt und validiert im Firewall-Bereich an.
 - Einzelne IP-Entscheidungen vom Typ `ban` koennen manuell in Guardians bestaetigten Plesk-Firewallablauf uebernommen werden; Bereiche bleiben reine Anzeige.
