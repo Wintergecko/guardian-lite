@@ -20,12 +20,12 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.10" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.11" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sicherheitsübersicht <span>v0.28.10</span></h1>
+      <h1>Sicherheitsübersicht <span>v0.28.11</span></h1>
       <p>Malware-Scans · Firewall · Incidents · Webschutz</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -416,7 +416,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.10</h2>
+    <h2>GitHub-Updater · v0.28.11</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -552,11 +552,33 @@ $action = static function ($name) use ($esc) {
       <?php endif; ?>
     <?php endif; ?>
     <h3>Incident-Audit-Log</h3>
-    <p>Nur Ereignis-Metadaten, keine HTTP-Bodies, keine Malware-Inhalte. Maximal 25 aktuelle Ereignisse in der Tabelle. Logs liegen root-privat auf dem Server.</p>
+    <p>Nur Ereignis-Metadaten, keine HTTP-Bodies, keine Malware-Inhalte. Die Ansicht zeigt bis zu 200 aktuelle Ereignisse aus dem root-privaten Serverprotokoll.</p>
     <p><a href="<?= $esc(pm_Context::getActionUrl('index', 'incidents-export')) ?>">Letzte 200 Ereignisse als JSON exportieren</a></p>
-    <div class="guardian-scroll"><table><thead><tr><th>Zeit</th><th>Stufe</th><th>Typ</th><th>Domain / Pfad</th><th>Hinweis</th></tr></thead><tbody>
+    <div class="guardian-incident-dashboard" data-incident-dashboard>
+      <div class="guardian-formline guardian-incident-ranges" role="group" aria-label="Incident-Zeitraum">
+        <button type="button" data-incident-range="24h" aria-pressed="false">Letzte 24 Stunden</button>
+        <button type="button" data-incident-range="7d" aria-pressed="true">Letzte 7 Tage</button>
+        <button type="button" data-incident-range="30d" aria-pressed="false">Letzte 30 Tage</button>
+      </div>
+      <div class="guardian-stats" aria-live="polite">
+        <div class="guardian-stat"><strong data-incident-count="total">0</strong><span>Ereignisse</span></div>
+        <div class="guardian-stat"><strong data-incident-count="critical">0</strong><span>Kritisch</span></div>
+        <div class="guardian-stat"><strong data-incident-count="warning">0</strong><span>Warnungen</span></div>
+        <div class="guardian-stat"><strong data-incident-count="malware">0</strong><span>Malwarefunde</span></div>
+      </div>
+      <p class="guardian-small" data-incident-chart-caption aria-live="polite">Ereignisverlauf wird aus den gespeicherten letzten 200 Eintraegen erstellt.</p>
+      <div class="guardian-incident-chart" data-incident-chart role="img" aria-label="Ereignisverlauf"></div>
+      <div class="guardian-formline">
+        <label for="guardian-incident-search">Ereignisse suchen</label>
+        <input id="guardian-incident-search" type="search" maxlength="120" placeholder="Typ, Domain, Pfad …" />
+        <label for="guardian-incident-severity">Stufe</label>
+        <select id="guardian-incident-severity"><option value="all">Alle Stufen</option><option value="critical">Kritisch</option><option value="warning">Warnung</option><option value="info">Info</option></select>
+        <span class="guardian-small" data-incident-results aria-live="polite"></span>
+      </div>
+    </div>
+    <div class="guardian-scroll"><table id="guardian-incidents-table"><thead><tr><th>Zeit</th><th>Stufe</th><th>Typ</th><th>Domain / Pfad</th><th>Hinweis</th></tr></thead><tbody>
       <?php foreach ($this->incidents as $incident): ?>
-        <tr><td><?= $esc($incident['time'] ?? '') ?></td><td><?= $esc($incident['severity'] ?? '') ?></td>
+        <tr data-incident-time="<?= $esc($incident['time'] ?? '') ?>" data-incident-severity="<?= $esc($incident['severity'] ?? '') ?>" data-incident-type="<?= $esc($incident['type'] ?? '') ?>"><td><?= $esc($incident['time'] ?? '') ?></td><td><?= $esc($incident['severity'] ?? '') ?></td>
           <td><?= $esc($incident['type'] ?? '') ?></td><td><?= $esc($incident['domain'] ?? '') ?> / <?= $esc($incident['path'] ?? '') ?></td>
           <td><?= $esc($incident['detail'] ?? '') ?></td></tr>
       <?php endforeach; ?>
@@ -606,6 +628,6 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.10" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.11" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

@@ -1,4 +1,4 @@
-# Weitere Features nach 0.28.10
+# Weitere Features nach 0.28.11
 
 Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 

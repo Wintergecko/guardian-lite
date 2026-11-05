@@ -255,6 +255,92 @@
       firewallFilter.addEventListener('change', filterFirewallRules);
       filterFirewallRules();
     }
+    var incidentDashboard = root.querySelector('[data-incident-dashboard]');
+    var incidentTable = document.getElementById('guardian-incidents-table');
+    var incidentSearch = document.getElementById('guardian-incident-search');
+    var incidentSeverity = document.getElementById('guardian-incident-severity');
+    if (incidentDashboard && incidentTable && incidentSearch && incidentSeverity) {
+      var incidentRows = Array.prototype.slice.call(incidentTable.querySelectorAll('tbody tr'));
+      var rangeButtons = Array.prototype.slice.call(incidentDashboard.querySelectorAll('[data-incident-range]'));
+      var incidentChart = incidentDashboard.querySelector('[data-incident-chart]');
+      var incidentCaption = incidentDashboard.querySelector('[data-incident-chart-caption]');
+      var incidentResults = incidentDashboard.querySelector('[data-incident-results]');
+      var incidentRange = '7d';
+      function renderIncidents() {
+        var now = Date.now();
+        var span = incidentRange === '24h' ? 24 * 60 * 60 * 1000 :
+          (incidentRange === '7d' ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000);
+        var bins = incidentRange === '24h' ? 24 : (incidentRange === '7d' ? 7 : 30);
+        var start = now - span;
+        var counts = {total: 0, critical: 0, warning: 0, malware: 0};
+        var histogram = [];
+        for (var i = 0; i < bins; i += 1) histogram.push(0);
+        var query = incidentSearch.value.trim().toLocaleLowerCase();
+        var level = incidentSeverity.value;
+        var shown = 0;
+        incidentRows.forEach(function (row) {
+          var timestamp = Date.parse(row.getAttribute('data-incident-time') || '');
+          var severity = row.getAttribute('data-incident-severity') || '';
+          var type = row.getAttribute('data-incident-type') || '';
+          var inRange = !isNaN(timestamp) && timestamp >= start && timestamp <= now;
+          var matches = inRange && (level === 'all' || severity === level) &&
+            (!query || row.textContent.toLocaleLowerCase().indexOf(query) !== -1);
+          row.hidden = !matches;
+          if (matches) shown += 1;
+          if (!inRange) return;
+          counts.total += 1;
+          if (severity === 'critical') counts.critical += 1;
+          if (severity === 'warning') counts.warning += 1;
+          if (type === 'malware_detected') counts.malware += 1;
+          var bin = Math.min(bins - 1, Math.floor(((timestamp - start) / span) * bins));
+          histogram[bin] += 1;
+        });
+        Object.keys(counts).forEach(function (key) {
+          var output = incidentDashboard.querySelector('[data-incident-count="' + key + '"]');
+          if (output) output.textContent = String(counts[key]);
+        });
+        if (incidentResults) incidentResults.textContent = shown + ' von ' + incidentRows.length + ' angezeigt';
+        rangeButtons.forEach(function (button) {
+          button.setAttribute('aria-pressed', button.getAttribute('data-incident-range') === incidentRange ? 'true' : 'false');
+        });
+        if (!incidentChart) return;
+        while (incidentChart.firstChild) incidentChart.removeChild(incidentChart.firstChild);
+        var maximum = Math.max.apply(Math, histogram.concat([1]));
+        var labels = [];
+        histogram.forEach(function (value, index) {
+          var binDate = new Date(start + (index + 0.5) * span / bins);
+          var label = incidentRange === '24h' ?
+            String(binDate.getHours()).padStart(2, '0') + ':00' :
+            String(binDate.getDate()).padStart(2, '0') + '.' + String(binDate.getMonth() + 1).padStart(2, '0');
+          labels.push(label + ': ' + value);
+          var bar = document.createElement('span');
+          bar.className = 'guardian-incident-bar';
+          bar.style.height = value ? Math.max(5, value * 100 / maximum) + '%' : '0%';
+          bar.title = label + ': ' + value;
+          bar.setAttribute('aria-hidden', 'true');
+          incidentChart.appendChild(bar);
+        });
+        incidentChart.setAttribute('aria-label', 'Ereignisse nach Zeitintervall: ' + labels.join(', '));
+        if (incidentCaption) incidentCaption.textContent = counts.total + ' Ereignisse in ' +
+          (incidentRange === '24h' ? '24 Stunden' : (incidentRange === '7d' ? '7 Tagen' : '30 Tagen')) +
+          ' · Verlauf der gespeicherten maximal 200 letzten Eintraege';
+        if (!counts.total) {
+          var empty = document.createElement('span');
+          empty.className = 'guardian-small';
+          empty.textContent = 'Keine Ereignisse in diesem Zeitraum';
+          incidentChart.appendChild(empty);
+        }
+      }
+      rangeButtons.forEach(function (button) {
+        button.addEventListener('click', function () {
+          incidentRange = button.getAttribute('data-incident-range') || '7d';
+          renderIncidents();
+        });
+      });
+      incidentSearch.addEventListener('input', renderIncidents);
+      incidentSeverity.addEventListener('change', renderIncidents);
+      renderIncidents();
+    }
     var saved = null;
     try { saved = window.sessionStorage.getItem('guardian_active_tab'); } catch (e) { /* storage optional */ }
     var requested = fromHash();

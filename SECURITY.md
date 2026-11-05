@@ -1,4 +1,4 @@
-# Guardian Lite v0.28.10 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.11 – Sicherheitsmodell und Grenzen
 
 ## 0.28.4 – Bewegungseinstellungen
 - Kurzanimationen sind dekorativ und veraendern keine Sicherheitsaktionen oder deren Bestaetigung.

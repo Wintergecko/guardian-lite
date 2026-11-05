@@ -73,7 +73,7 @@ class TabsTests(unittest.TestCase):
 
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.10')
+        self.assertEqual(version, '0.28.11')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('<span>v' + version + '</span>',
@@ -92,6 +92,19 @@ class TabsTests(unittest.TestCase):
         management = (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
         self.assertIn('CrowdSec AppSec', management)
         self.assertIn("'forwarding_enabled'", helper)
+
+    def test_incident_dashboard_has_time_filters_stats_and_accessible_chart(self):
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        helper = (ROOT / 'sbin/guardian-helper').read_text()
+        js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
+        for item in ('data-incident-range="24h"', 'data-incident-range="7d"',
+                     'data-incident-range="30d"', 'data-incident-count="critical"',
+                     'data-incident-count="malware"', 'data-incident-chart',
+                     'id="guardian-incidents-table"', 'id="guardian-incident-severity"'):
+            self.assertIn(item, view)
+        self.assertIn("'incidents': incident_list(200)", helper)
+        self.assertIn('Date.parse(row.getAttribute(\'data-incident-time\')', js)
+        self.assertIn('aria-label', js)
 
 
 if __name__ == '__main__':

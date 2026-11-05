@@ -1,3 +1,8 @@
+## 0.28.11 – Incident-Zeitreihe und Filter
+- Erweitert die Incident-Ansicht auf bis zu 200 gespeicherte Ereignisse.
+- Fuegt 24-Stunden-, 7-Tage- und 30-Tage-Filter, Kennzahlen, Ereignisverlauf sowie Suche und Schweregradfilter hinzu.
+- Chart und Tabelle nutzen ausschliesslich bereits gespeicherte Incident-Metadaten; kein externer Dienst erforderlich.
+
 ## 0.28.10 – CrowdSec AppSec-Status
 - Erkennt lesend CrowdSec-Dienst, AppSec-Erfassungsquelle, nur lokalen Listener, geladenes Apache-Modul, Einbindung der Bouncer-Konfiguration und aktivierte Weiterleitung.
 - Zeigt Status in der Schutzverwaltung; Schluessel und Konfigurationsinhalte werden nicht ausgegeben.

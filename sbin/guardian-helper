@@ -2709,7 +2709,7 @@ def status():
             'scan_queue': scan_queue_status(),
             'watch': watch_status(), 'realtime': monitor_status(),
             'alerts': alert_settings(), 'alert_delivery': alert_queue_status(),
-            'incidents': incident_list(25)}
+            'incidents': incident_list(200)}
 
 
 def main(argv):
