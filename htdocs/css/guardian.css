@@ -26,7 +26,7 @@
 .guardian-scroll{max-height:350px;overflow:auto}
 .guardian-card .guardian-alert{font-size:12px}
 
-/* Imunify-style top navigation with server-rendered fallback links. */
+/* Top navigation with server-rendered fallback links. */
 .guardian{display:flex;flex-direction:column}
 .guardian-shell{display:contents}
 .guardian-menu{order:0}
@@ -127,7 +127,7 @@
 .guardian .guardian-debug-events summary{font-size:12px}
 @media(max-width:760px){.guardian .guardian-debug-control{align-items:stretch;flex-direction:column}.guardian-debug-control-actions{align-items:flex-start}.guardian .guardian-waf-fields{grid-template-columns:1fr}.guardian .guardian-waf-form .guardian-button-row{align-items:stretch;flex-direction:column}.guardian .guardian-waf-form .guardian-button-row button{width:100%}}
 
-/* Dashboard panels inspired by Imunify's compact protection summary and threat map. */
+/* Dashboard panels with a compact protection summary and threat map. */
 .guardian-dashboard-top{display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:16px;margin:0 0 18px}
 .guardian-protection-panel,.guardian-map-panel{min-width:0;padding:21px 23px;border:1px solid #e3e7eb;border-radius:10px;background:#f1f3f5;color:#27313c}
 .guardian-panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px}
@@ -157,7 +157,7 @@
 @media(max-width:560px){.guardian-protection-panel,.guardian-map-panel,.guardian-dashboard-trend{padding:16px}.guardian-protection-body{align-items:flex-start;gap:13px}.guardian-protection-ring{flex-basis:90px;width:90px;height:90px}.guardian-protection-ring:before{inset:7px}.guardian-protection-ring strong{font-size:24px}.guardian-protection-copy h3{font-size:14px}.guardian-map-layout{grid-template-columns:1fr}.guardian-map-countries{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:12px}.guardian-map-countries li{font-size:10px}.guardian-dashboard-metrics strong{font-size:18px}.guardian-dashboard-trend .guardian-panel-heading{align-items:flex-start;flex-direction:column}.guardian-trend-summary{gap:12px}.guardian-dashboard-chart{gap:2px}.guardian-dashboard-chart-column small{font-size:7px}}
 @media(prefers-reduced-motion:reduce){.guardian-world-map{opacity:1;animation:none}}
 
-/* One Imunify-inspired button language across every Guardian tab. */
+/* One button style across every Guardian tab. */
 .guardian{--guardian-button-green:#4bab68;--guardian-button-green-hover:#378d54;--guardian-button-border:#cfd8df;--guardian-button-ink:#405163;--guardian-button-danger:#b94b4b}
 .guardian .guardian-pages button:not(.guardian-tab),.guardian .guardian-pages .guardian-button{
  display:inline-flex;align-items:center;justify-content:center;gap:6px;box-sizing:border-box;width:auto;min-width:0;min-height:36px;padding:8px 13px!important;
@@ -280,7 +280,7 @@
 .guardian-result-block .guardian-result-grid{grid-template-columns:1fr}
 @media(max-width:700px){.guardian-result-grid,.guardian-result-list{grid-template-columns:1fr}.guardian-result-grid>div{grid-template-columns:minmax(95px,.7fr) minmax(0,1.3fr)}}
 
-/* Imunify360 docs layout: green top bar, light left navigation with expandable groups, white content area. */
+/* Docs-style layout: green top bar, light left navigation with expandable groups, white content area. */
 .guardian{display:flow-root;position:relative;max-width:none;margin:0;padding:0;background:#fff;border:1px solid #e2e7ed;border-radius:4px;min-height:600px;font-size:14px;color:#253447!important}
 .guardian-shell{display:contents;margin:0}
 .guardian-menu{position:absolute;top:0;bottom:0;left:0;width:250px;box-sizing:border-box;display:flex;flex-direction:column;gap:0;padding:0;margin:0;background:#f6f8f7;border:0;border-right:1px solid #e2e7ed;border-radius:0;box-shadow:none;overflow:visible;z-index:5}

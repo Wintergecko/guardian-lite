@@ -1,4 +1,4 @@
-# Guardian Lite v0.28.25 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.26 – Sicherheitsmodell und Grenzen
 
 ## 0.28.16 – Lokale IP-Länderkarte
 
@@ -115,7 +115,7 @@
 - WP-CLI exportiert die Datenbank als Website-Benutzer direkt auf stdout; der Inhalt wird ohne Dumpdatei in ClamAV eingespeist. Beide Prozesse verwenden feste Argumente, leere/isolierte Umgebungen, begrenzte CPU und getrennte Prozessgruppen.
 - Datenstrom ist auf 512 MiB und 5 Minuten begrenzt. Bei Ueberschreitung werden Prozesse beendet und der Befund als unvollstaendig markiert. ClamAV laeuft als Website-Benutzer und benoetigt dort lesbare lokale Signaturen.
 - Prozessausgaben werden nicht roh gespeichert. Berichte enthalten nur begrenzte Dateibytes und validierte ClamAV-Signaturnamen; keine Datenbankinhalte oder Zugangsdaten.
-- Der Scan ist read-only und nutzt ClamAV-Signaturen, nicht Imunifys MDS-Datenbank-Signaturen. Keine Bereinigung, Datenbank-Backup-/Rollback-Funktion oder vollstaendige Datenbankabdeckung bei ueberschrittenem Streamlimit.
+- Der Scan ist read-only und nutzt ClamAV-Signaturen, nicht proprietaere Datenbank-Signaturen. Keine Bereinigung, Datenbank-Backup-/Rollback-Funktion oder vollstaendige Datenbankabdeckung bei ueberschrittenem Streamlimit.
 
 ## 0.19.0 – WordPress.org-Themevergleich
 
@@ -192,7 +192,7 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 - WP-CLI laeuft mit Website-UID/GID, isoliertem HOME und deaktivierten Plugins/Themes. Tabellen-/Spaltennamen stammen aus festen Allowlisten; Tabellenpraefixe werden strikt validiert.
 - Ausschliesslich read-only SELECT-Abfragen, 101 Zeilen je Tabelle, 2 MiB Ausgabe und 5 Minuten Gesamtzeit. Ausgabe/Bericht enthalten keine Datenbankwerte oder Zugangsdaten.
 - Numerische Zeilen-IDs koennen Website-Strukturen offenlegen und werden nur root-privat gespeichert sowie Administratoren angezeigt.
-- Muster sind heuristisch; Fehlalarme und uebersehene Malware sind moeglich. Kein Imunify MDS, kein ClamAV-Ersatz und keine Datenbankaenderung.
+- Muster sind heuristisch; Fehlalarme und uebersehene Malware sind moeglich. Keine proprietaeren Datenbank-Signaturen, kein ClamAV-Ersatz und keine Datenbankaenderung.
 
 ## 0.18.0 – RapidScan-Cache
 

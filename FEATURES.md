@@ -1,6 +1,6 @@
-# Weitere Features nach 0.28.25
+# Weitere Features nach 0.28.26
 
-Der umfassende Vergleich mit Imunify360 steht in [IMUNIFY360_PARITY.md](IMUNIFY360_PARITY.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
+Der umfassende Funktionsvergleich steht in [FUNKTIONSUEBERSICHT.md](FUNKTIONSUEBERSICHT.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 
 Diese Punkte sind Vorschlaege aus der Code- und Ablaufpruefung, keine bereits implementierten Funktionen.
 

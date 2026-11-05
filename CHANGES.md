@@ -1,3 +1,9 @@
+## 0.28.26 – Bereinigte Dokumentation
+
+- Rein textliche Bereinigung: verbleibende Verweise auf Fremdprodukte aus README, Änderungsprotokoll, Management-, Sicherheits- und Funktionsdokumentation, CSS-Kommentaren, Oberflächentexten und Tests entfernt.
+- Die Datei `IMUNIFY360_PARITY.md` heißt jetzt `FUNKTIONSUEBERSICHT.md`; Links in README und FEATURES wurden angepasst.
+- Keine funktionalen Änderungen.
+
 ## 0.28.25 – Übersichtlicher Auftragsstatus
 
 - Auftragsstatus im Tab „Verwaltung“ ist jetzt eine Tabelle mit Statusbadges (Wartet, Startet, Läuft, Abgeschlossen, Fehler, Unterbrochen), lesbaren Zeiten, Funden und Fehlertext.
@@ -21,8 +27,8 @@
 - Richtet die Chevrons der aufklappbaren Navigationsgruppen rechts aus; Beschriftungen stehen linksbündig.
 - Ändert nur die Darstellung per CSS; Markup, Formularziele und Aktionen bleiben unverändert.
 
-## 0.28.21 – Imunify360-Dashboard-Layout
-- Gestaltet die Administrationsoberfläche nach dem Layout der Imunify360-Dashboard-Dokumentation: grüne Kopfleiste, helle Seitennavigation links mit aufklappbaren Gruppen und grünem Akzent für den aktiven Bereich.
+## 0.28.21 – Dashboard-Layout im Komplettschutz-Stil
+- Gestaltet die Administrationsoberfläche nach einer Dashboard-Vorlage: grüne Kopfleiste, helle Seitennavigation links mit aufklappbaren Gruppen und grünem Akzent für den aktiven Bereich.
 - Passt Inhaltsfläche, Abstände und Buttonfarben an; auf schmalen Bildschirmen (unter 900 px) stehen Navigation und Inhalt untereinander.
 - Ändert nur die Darstellung per CSS; Markup, Formularziele und Aktionen bleiben unverändert.
 
@@ -107,21 +113,21 @@ Auf dem Testserver erfolgreich fuer PHP 8.4 geprueft: sechs dedizierte FPM-Diens
 - Statische Menue-Fallbacks blenden geschlossene Untermenues ausdruecklich aus, auch wenn Plesk-Styles die Browser-Standarddarstellung ueberschreiben.
 - Ausgewaehltes Modul bleibt waehrend der Sitzung erhalten; Asset-Cacheversion auf 0.28.3 aktualisiert.
 
-## 0.28.2 – Imunify-aehnliche obere Navigation
-- Navigationsbereiche in eine horizontale Kopfzeile nach dem Imunify-Dashboard-Beispiel verschoben; Unterpunkte erscheinen in Dropdowns.
+## 0.28.2 – Obere Navigation
+- Navigationsbereiche in eine horizontale Kopfzeile nach Dashboard-Vorlage verschoben; Unterpunkte erscheinen in Dropdowns.
 - Guardian Lite Wortmarke, helle Kopfzeile, gruenes Aktivsignal und kompaktere Seitentitel eingefuehrt.
 - Serverseitig gerenderte Menuepunkte bleiben ohne JavaScript als native Dropdowns und Sprunglinks nutzbar.
 
 ## 0.28.1 – Navigation auch ohne JavaScript
-- Imunify-aehnliche Menueleiste wird serverseitig gerendert und bleibt bei blockiertem oder nicht geladenem JavaScript sichtbar.
+- Obere Menueleiste wird serverseitig gerendert und bleibt bei blockiertem oder nicht geladenem JavaScript sichtbar.
 - JavaScript verbessert das statische Menue, schaltet Inhaltsbereiche um und verarbeitet auch Seiten, auf denen optionale Funktionsbereiche fehlen.
 - Versionierte Assets und Release-Paket auf 0.28.1 aktualisiert.
 
-## 0.28.0 – Menue-Neuordnung nach Imunify360-Dashboard
+## 0.28.0 – Menue-Neuordnung nach Dashboard-Vorlage
 
 - Ersetzt die bisherigen Sammel-Tabs durch ein Seitenmenue fuer Dashboard, Malware Scanner, Incidents, Firewall, WebShield, PHP Runtime, Reputation Management und Einstellungen.
 - Verschiebt funktionierende Scan-, Historien-, Ignorierlisten-, Reparatur-, Firewall-, Fail2Ban-, WAF-, Reputation-, Runtime- und Updatebereiche in passende Menues mit Unterpunkten.
-- Kennzeichnet manuelle bzw. partielle Integrationen; nicht vorhandene Imunify-Dienste wie KernelCare oder Cloud-Proactive-Defense erscheinen nicht als Guardian-Funktionen.
+- Kennzeichnet manuelle bzw. partielle Integrationen; nicht vorhandene Cloud-Schutzdienste wie KernelCare oder Cloud-Proactive-Defense erscheinen nicht als Guardian-Funktionen.
 - Ohne JavaScript bleiben Inhalte sichtbar; alte Tab-Links werden auf passende Menues abgebildet.
 - Tests fuer Menuezuordnung, Bereiche, PHP-Templates und Versionskonsistenz.
 
@@ -161,7 +167,7 @@ Auf dem Testserver erfolgreich fuer PHP 8.4 geprueft: sechs dedizierte FPM-Diens
 - Joomla-configuration.php und Magento-app/etc/env.php werden als begrenzte statische Konfiguration gelesen; Guardian fuehrt PHP-Konfiguration nicht aus und lehnt dynamische Werte ab.
 - Joomla/Magento-Exporte laufen ueber ein root-eigenes mysqldump/mariadb-dump als Website-Benutzer. Zugangsdaten stehen nur in einer kurzlebigen 0600-Clientdatei in einem privaten Temp-Verzeichnis und nie in Argumenten oder Berichten.
 - SQL fliesst ohne Dumpdatei direkt in ClamAV. 512-MiB-/5-Minuten-Grenzen, Teilstatus bei Fehlern, begrenzte Signaturausgabe und keine Datenbankaenderungen bleiben erhalten.
-- Lokale ClamAV-Signaturen ersetzen weder Imunify-MDS-Erkennung noch Datenbankbereinigung/CSV-Restore. Dynamische Konfigurationen und andere Datenbanktreiber bleiben nicht unterstuetzt.
+- Lokale ClamAV-Signaturen ersetzen weder proprietaere Datenbank-Erkennung noch Datenbankbereinigung/CSV-Restore. Dynamische Konfigurationen und andere Datenbanktreiber bleiben nicht unterstuetzt.
 - Regressionstests fuer statische Joomla-/Magento-Konfigurationen, dynamische PHP-Ausdruecke und private Credential-Weitergabe.
 
 ## 0.20.0 – WordPress-Datenbankscan mit ClamAV
@@ -254,12 +260,12 @@ Auf dem Testserver erfolgreich fuer PHP 8.4 geprueft: sechs dedizierte FPM-Diens
 - Gepruefte Grenzen (Anzahl/Groesse), ausgelassene Quellen und heuristischer Charakter werden im Ergebnis ausgewiesen; Funde gehen in den Incident-Verlauf.
 - Regressionstest fuer Erkennung, Symlink-Ausschluss und Unveraendertheit der Cron-Dateien.
 
-## 0.8.0 – Malware-Ignore-Liste und Imunify360-Abgleich
+## 0.8.0 – Malware-Ignore-Liste und Funktionsabgleich
 
 - Plesk-Admin kann exakte Datei-SHA-256-Funde je Domain administrativ ignorieren und wieder freigeben. Treffer bleiben sichtbar/gescannt; Warnung und automatische Baseline-Reparatur werden fuer diesen Inhalt unterdrueckt.
 - Ignore-Liste hat Domain-/Gesamtlimits, Audit-Vorfaelle und Schutz fuer manuelle/automatische Reparatur gegen veraltete Berichte.
 - Vollscan, Live-Wache, Scanbericht und Historie zeigen die Ausnahmen getrennt an.
-- Imunify360-Paritaetsabgleich mit Produktgrenzen und priorisiertem Plesk-Implementierungsplan ergaenzt.
+- Funktionsabgleich mit Produktgrenzen und priorisiertem Plesk-Implementierungsplan ergaenzt.
 
 ## 0.7.1 – Abhaengigkeiten und Firewall-Status
 
@@ -381,7 +387,7 @@ Auf dem Testserver erfolgreich fuer PHP 8.4 geprueft: sechs dedizierte FPM-Diens
 - Read-only Cronjob-Audit ergaenzt die bestehenden Heuristiken optional um lokale ClamAV-Signaturen.
 - Nur sicher gelesene, regulaere Cron-Dateien werden in ein privates temporaeres Verzeichnis kopiert; 4-MiB-/45-Sekunden-Grenzen, keine Bereinigung und kein Aendern der Cronjobs.
 - Treffer werden mit urspruenglichem Pfad und bereinigtem Signaturnamen protokolliert; fehlendes ClamAV oder Fehler werden separat ausgewiesen.
-- Imunify360-Cron-Erkennung kann andere proprietaere Regeln verwenden; ClamAV-Treffer sind keine vollstaendige Cron-Malware-Bewertung.
+- Cron-Erkennung kann andere proprietaere Regeln verwenden; ClamAV-Treffer sind keine vollstaendige Cron-Malware-Bewertung.
 - Tests pruefen Trefferzuordnung und unveraenderte Quell-Dateien.
 
 ## 0.23.0 – Plesk-Portregeln fuer ausgewaehlte Quell-IPs
@@ -401,7 +407,7 @@ Auf dem Testserver erfolgreich fuer PHP 8.4 geprueft: sechs dedizierte FPM-Diens
 
 ## 0.28.16 – Dashboard und Sperr-IP-Länderkarte
 
-- Ergaenzt eine Imunify-inspirierte Dashboard-Kopfkarte mit Statusring, lokalen Schutzkomponenten und kompakten Kennzahlen.
+- Ergaenzt eine Dashboard-Kopfkarte mit Statusring, lokalen Schutzkomponenten und kompakten Kennzahlen.
 - Zeigt aktuelle sichtbare Fail2Ban-/CrowdSec-Sperren und blockierte WAF-IP-Adressen in einer interaktiven Laenderkarte sowie als Rangliste.
 - Geolokalisierung laeuft ausschliesslich lokal mit DB-IP Lite; die Karte kennzeichnet ungefaehre Standorte und begrenzte Ereignisquellen.
 - Verwendet eine vereinfachte Natural-Earth-Weltkarte und nennt die Datenquellen direkt im Dashboard.

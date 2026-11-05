@@ -128,7 +128,7 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn("['firewall-action', 'ban', $ip, $remote, '0']", controller)
         self.assertIn("'banned_ips_available': ip_match is not None", helper)
 
-    def test_imunify_style_menus_group_existing_guardian_features(self):
+    def test_menus_group_existing_guardian_features(self):
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
         management = (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
         self.assertIn("['guardian-fail2ban', 'Fail2Ban']", js)
@@ -167,6 +167,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.25')
+        self.assertEqual(version, '0.28.26')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())
