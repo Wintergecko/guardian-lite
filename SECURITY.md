@@ -1,4 +1,11 @@
-# Guardian Lite v0.26.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.27.0 – Sicherheitsmodell und Grenzen
+
+## 0.27.0 – Firewall-Dashboard und Diagnose
+
+- Fremde Plesk-Regeln werden ausschliesslich aus `plesk ext firewall --list-json` gelesen und im Panel mit HTML-Escaping angezeigt; Schreibaktionen bleiben auf Guardian-eigene Regeln begrenzt.
+- Firewall-Diagnose ist standardmaessig aus und nur ueber Admin-POST mit CSRF schaltbar. Die root-private JSONL-Datei ist auf 256 KiB begrenzt und speichert keine Argumente oder Standardausgabe.
+- Das Diagnoseprotokoll enthaelt Zeit, feste CLI-Schritte, Exitcode, Laufzeit, Ausgabegroesse und begrenzte Fehlerhinweise. Unbekannte/unlesbare Settings deaktivieren Logging.
+- Debugdaten koennen begrenzte Fehlerdetails enthalten und sind daher nur fuer kurzzeitiges Troubleshooting vorgesehen; das Abschalten stoppt weitere Eintraege, loescht den Verlauf aber nicht.
 
 ## 0.26.0 – E-Mail-Outbox
 

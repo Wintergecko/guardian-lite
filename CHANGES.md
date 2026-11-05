@@ -1,3 +1,11 @@
+## 0.27.0 – Plesk-Firewall-Dashboard und schaltbare Diagnose
+
+- Plesks eingehende Erlauben-/Sperrregeln und Sperrregeln mit Zaehlern, Suche und Listenfilter anzeigen; Fremdregeln bleiben read-only.
+- Guardian-eigene IP-/Portaktionen bleiben an Plesk gebunden und erfordern weiterhin den separaten Verbindungstest mit Ruecknahme.
+- Firewall-Debugausgabe im Panel ein-/ausschaltbar, standardmaessig aus; root-private, auf 256 KiB begrenzte Ereignisse mit Zeit, Schritt, Exitcode und Laufzeit. Keine CLI-Argumente oder Firewall-Standardausgabe im Log.
+- Greylist, Bot-Challenge, Reputation und globale Port-Policies werden als nicht durch Plesk bereitgestellt gekennzeichnet.
+- Tests fuer Plesk-Regelinventar, Zaehler, sichere Debugrechte, Deaktivierung, Panel-CSRF und Such-/Filteroberflaeche.
+
 ## 0.26.0 – Mail-Warteschlange mit Wiederholungen
 
 - Fehlgeschlagene Malware-E-Mail-Warnungen bleiben in einer root-eigenen, auf 100 Eintraege begrenzten Warteschlange erhalten.
