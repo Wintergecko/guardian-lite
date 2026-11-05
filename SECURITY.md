@@ -1,4 +1,4 @@
-# Guardian Lite v0.28.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.1 – Sicherheitsmodell und Grenzen
 
 ## 0.28.0 – Menue-Neuordnung
 
@@ -163,3 +163,7 @@ Die vorstehende v0.4.0-Beschreibung ist historisch. `guardian-manager` bietet nu
 
 - Nur Plugins mit verfuegbaren WordPress.org-Pruefsummen gelten als geprueft. Uebersprungene Plugins werden separat benannt und als Teilstatus ausgewiesen.
 - WP-CLI bleibt an root-eigene Binary-Pfade, isolierte Konfiguration, Webspace-UID und TLS-Standardpruefung gebunden. Keine automatische Aenderung oder Reparatur.
+
+## 0.28.1 – Navigation-Fallback
+- Die Navigation und Sprungmarken werden im Plesk-Template ausgegeben, bevor JavaScript ausgefuehrt wird.
+- JavaScript blendet nicht aktive Panels erst nach erfolgreicher Initialisierung aus.

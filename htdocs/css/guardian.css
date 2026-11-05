@@ -29,6 +29,12 @@
 .guardian-shell{display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;align-items:start;margin:14px 0}
 .guardian-menu{background:#10233c;border-radius:12px;padding:10px;position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto;scrollbar-width:thin}
 .guardian-menu-group{margin:2px 0}
+.guardian-menu-static details{margin:0;color:#d4e1ef}
+.guardian-menu-static summary{padding:11px 12px;border-radius:7px;cursor:pointer;color:#fff;font-weight:700;list-style-position:inside}
+.guardian-menu-static summary:hover{background:#1c3c5e}
+.guardian-menu-static ul{list-style:none;margin:0 0 8px 18px;padding:0 0 0 10px;border-left:1px solid #47627e}
+.guardian-menu-static a{display:block;padding:7px 9px;color:#c1d2e3;text-decoration:none;border-radius:5px;font-size:12px}
+.guardian-menu-static a:hover{background:#1b3c5d;color:#fff}
 .guardian .guardian-tab{width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:transparent;border:0;border-radius:7px;color:#d4e1ef;white-space:normal;padding:11px 12px}
 .guardian .guardian-tab:before{content:"";width:7px;height:7px;border:solid currentColor;border-width:0 2px 2px 0;transform:rotate(-45deg);transition:transform .15s;flex:0 0 auto}
 .guardian .guardian-tab:hover{background:#1c3c5e;color:#fff}

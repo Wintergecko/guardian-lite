@@ -1,3 +1,8 @@
+## 0.28.1 – Navigation auch ohne JavaScript
+- Imunify-aehnliche Menueleiste wird serverseitig gerendert und bleibt bei blockiertem oder nicht geladenem JavaScript sichtbar.
+- JavaScript verbessert das statische Menue, schaltet Inhaltsbereiche um und verarbeitet auch Seiten, auf denen optionale Funktionsbereiche fehlen.
+- Versionierte Assets und Release-Paket auf 0.28.1 aktualisiert.
+
 ## 0.28.0 – Menue-Neuordnung nach Imunify360-Dashboard
 
 - Ersetzt die bisherigen Sammel-Tabs durch ein Seitenmenue fuer Dashboard, Malware Scanner, Incidents, Firewall, WebShield, PHP Runtime, Reputation Management und Einstellungen.
