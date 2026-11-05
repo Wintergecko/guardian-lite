@@ -80,7 +80,7 @@ class ManagementTests(unittest.TestCase):
         files = m.crs_archive_members(self.crs_archive(), '4.30.0')
         self.assertEqual(files['crs-setup.conf'], b'# setup')
         self.assertEqual(len([name for name in files if name.startswith('rules/')]), 32)
-        with self.assertRaisesRegex(ValueError, 'Pfad'):
+        with self.assertRaisesRegex(ValueError, 'Dateipfad'):
             m.crs_archive_members(self.crs_archive(extra=('../escape.conf', b'bad')), '4.30.0')
         with self.assertRaisesRegex(ValueError, 'Links'):
             m.crs_archive_members(self.crs_archive(extra=('rules/evil.conf', b'', 'symlink')), '4.30.0')
