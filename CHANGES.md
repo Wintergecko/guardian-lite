@@ -1,3 +1,8 @@
+## 0.28.2 – Imunify-aehnliche obere Navigation
+- Navigationsbereiche in eine horizontale Kopfzeile nach dem Imunify-Dashboard-Beispiel verschoben; Unterpunkte erscheinen in Dropdowns.
+- Guardian Lite Wortmarke, helle Kopfzeile, gruenes Aktivsignal und kompaktere Seitentitel eingefuehrt.
+- Serverseitig gerenderte Menuepunkte bleiben ohne JavaScript als native Dropdowns und Sprunglinks nutzbar.
+
 ## 0.28.1 – Navigation auch ohne JavaScript
 - Imunify-aehnliche Menueleiste wird serverseitig gerendert und bleibt bei blockiertem oder nicht geladenem JavaScript sichtbar.
 - JavaScript verbessert das statische Menue, schaltet Inhaltsbereiche um und verarbeitet auch Seiten, auf denen optionale Funktionsbereiche fehlen.

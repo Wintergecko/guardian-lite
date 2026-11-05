@@ -1,4 +1,4 @@
-/* Guardian Lite sidebar navigation. All server-rendered content stays visible without JS. */
+/* Guardian Lite top navigation. All server-rendered content stays available without JS. */
 (function () {
   'use strict';
   function init() {
@@ -7,23 +7,21 @@
     var sections = [
       {id: 'overview', label: 'Dashboard', sections: ['guardian-overview'],
         items: [['guardian-overview', 'Systemstatus']]},
+      {id: 'incidents', label: 'Incidents', sections: ['guardian-waf-events', 'guardian-incidents'],
+        items: [['guardian-waf-events', 'WAF-Ereignisse'], ['guardian-incidents', 'Meldungen & Audit-Log']]},
+      {id: 'firewall', label: 'Firewall', sections: ['guardian-fail2ban', 'guardian-firewall'],
+        items: [['guardian-fail2ban', 'Fail2Ban'], ['guardian-firewall', 'Plesk Firewall']]},
       {id: 'malware', label: 'Malware Scanner', sections: ['guardian-scan', 'guardian-changes',
         'guardian-monitor', 'guardian-history', 'guardian-malware-repair', 'guardian-malware-ignore', 'guardian-cms-integrity'],
         items: [['guardian-scan', 'Scans & Berichte'], ['guardian-changes', 'Dateiänderungen'],
           ['guardian-monitor', 'Live-Dateiwache'], ['guardian-history', 'Scan-Historie'],
           ['guardian-malware-repair', 'Baselines & Wiederherstellung'],
           ['guardian-malware-ignore', 'Ignore List'], ['guardian-cms-integrity', 'CMS- & Cron-Prüfung']]},
-      {id: 'incidents', label: 'Incidents', sections: ['guardian-waf-events', 'guardian-incidents'],
-        items: [['guardian-waf-events', 'WAF-Ereignisse'], ['guardian-incidents', 'Meldungen & Audit-Log']]},
-      {id: 'firewall', label: 'Firewall', sections: ['guardian-fail2ban', 'guardian-firewall'],
-        items: [['guardian-fail2ban', 'Fail2Ban'], ['guardian-firewall', 'Plesk Firewall']]},
-      {id: 'webshield', label: 'WebShield', badge: 'Teilweise', sections: ['guardian-webshield', 'guardian-webshield-config', 'guardian-turnstile'],
-        items: [['guardian-webshield', 'HTTP-Botlimits'], ['guardian-webshield-config', 'WAF-Regeln'],
-          ['guardian-turnstile', 'Login-Challenge']]},
-      {id: 'runtime', label: 'PHP Runtime', badge: 'Teilfunktion', sections: ['guardian-runtime', 'guardian-php-config'],
-        items: [['guardian-runtime', 'Schutzstatus'], ['guardian-php-config', 'Handler & Rollback']]},
-      {id: 'reputation', label: 'Reputation Management', badge: 'manuell', sections: ['guardian-reputation'],
-        items: [['guardian-reputation', 'IP-Abfrage']]},
+      {id: 'more', label: 'Mehr', sections: ['guardian-webshield', 'guardian-webshield-config', 'guardian-turnstile',
+        'guardian-runtime', 'guardian-php-config', 'guardian-reputation'],
+        items: [['guardian-webshield', 'WebShield · HTTP-Botlimits'], ['guardian-webshield-config', 'WebShield · WAF-Regeln'],
+          ['guardian-turnstile', 'WebShield · Login-Challenge'], ['guardian-runtime', 'PHP Runtime · Schutzstatus'],
+          ['guardian-php-config', 'PHP Runtime · Handler & Rollback'], ['guardian-reputation', 'Reputation · IP-Abfrage']]},
       {id: 'settings', label: 'Einstellungen', sections: ['guardian-settings-storage', 'guardian-service-keys',
         'guardian-management', 'guardian-management-diagnostics', 'guardian-updater', 'guardian-roadmap'],
         items: [['guardian-management', 'Firewall-Debugausgabe'], ['guardian-settings-storage', 'Speicher & Backups'],
@@ -58,10 +56,33 @@
     while (nav.firstChild) nav.removeChild(nav.firstChild);
     nav.classList.remove('guardian-menu-static');
     nav.classList.add('guardian-menu-enhanced');
+    var brand = document.createElement('a');
+    brand.className = 'guardian-brand';
+    brand.href = '#guardian-overview';
+    var mark = document.createElement('span');
+    mark.className = 'guardian-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = '✥';
+    var wordmark = document.createElement('span');
+    wordmark.appendChild(document.createTextNode('guardian'));
+    var lite = document.createElement('span');
+    lite.textContent = 'lite';
+    var small = document.createElement('small');
+    small.textContent = 'security';
+    wordmark.appendChild(lite);
+    wordmark.appendChild(small);
+    brand.appendChild(mark);
+    brand.appendChild(wordmark);
+    nav.appendChild(brand);
+    brand.addEventListener('click', function (event) {
+      event.preventDefault();
+      activate('overview', false, true);
+    });
     var items = {};
     sections.forEach(function (group) {
       var menuGroup = document.createElement('div');
       menuGroup.className = 'guardian-menu-group';
+      menuGroup.setAttribute('data-menu-group', group.id);
       var button = document.createElement('button');
       button.type = 'button';
       button.id = 'guardian-tab-' + group.id;

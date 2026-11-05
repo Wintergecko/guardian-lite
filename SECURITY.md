@@ -1,4 +1,8 @@
-# Guardian Lite v0.28.1 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.2 – Sicherheitsmodell und Grenzen
+
+## 0.28.2 – Menue-Darstellung
+- Servergerenderte native Menuepunkte sind statisch und fuer alle Beschriftungen HTML-escaped.
+- Die Navigation ist auch ohne JavaScript verfuegbar; ausgeblendete Inhaltsbereiche werden erst nach erfolgreicher Initialisierung verborgen.
 
 ## 0.28.0 – Menue-Neuordnung
 
