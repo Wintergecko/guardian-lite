@@ -1,3 +1,9 @@
+## 0.28.24 – Fortschrittsanzeigen für Scans und lange Vorgänge
+
+- Laufende oder wartende Malware-Scans zeigen einen Fortschrittsbalken mit Laufzeit; der Bericht aktualisiert sich alle 10 Sekunden, bis der Scan abgeschlossen ist.
+- RapidScan-Zählwerte (geprüfte und übersprungene Dateien) werden vor dem ClamAV-Lauf gespeichert, damit sie während des Scans sichtbar sind.
+- Lange Verwaltungsvorgänge (CRS-Bereitstellung, WAF-/Backup-/Prüfsummen-Audits, Reparaturmodus, Update-Installation) zeigen beim Absenden einen Balken. Abgebrochene Bestätigungsdialoge lösen keinen Balken aus.
+
 ## 0.28.23 – Cron-Audit: Fehlalarm bei mktemp behoben
 
 - Die Heuristik `temporary-executable` meldet keine Zeilen mehr, in denen ein /tmp-Pfad nur als Ziel von `mktemp`, `mktemp -d`, `mkdir` oder `touch` vorkommt. Plesks eigenes `/etc/cron.weekly/fail2ban-vacuum` war ein Fehlalarm.

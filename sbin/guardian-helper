@@ -2297,6 +2297,8 @@ def scan_worker(domain, jobid, inherited_fd):
         if not cache_enabled:
             rapid_scan['note'] = inventory_reason or 'ClamAV-Signaturstand nicht sicher bestimmbar; Vollscan ausgefuehrt.'
         scan['rapid_scan'] = rapid_scan
+        # Persist the pre-scan counts now so a running report can show them before ClamAV finishes.
+        save_job(scan)
         args = [program, '--infected', '--no-summary', '--follow-dir-symlinks=0',
                 '--follow-file-symlinks=0', '--cross-fs=no', '--max-filesize=25M',
                 '--max-scansize=150M', '--max-files=10000', '--max-recursion=16']

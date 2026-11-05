@@ -7,6 +7,29 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class ScanUiTests(unittest.TestCase):
+    def test_running_scan_shows_progress_and_refreshes(self):
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        css = (ROOT / 'htdocs/css/guardian.css').read_text()
+        js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
+        helper = (ROOT / 'sbin/guardian-helper').read_text()
+        self.assertIn("['queued', 'starting', 'running']", view)
+        self.assertIn('data-guardian-scan-running', view)
+        self.assertIn('role="progressbar"', view)
+        self.assertIn('.guardian-busy-track span', css)
+        self.assertIn('@keyframes guardian-busy-slide', css)
+        self.assertIn("root.querySelector('[data-guardian-scan-running]')", js)
+        self.assertIn('window.location.reload()', js)
+        rapid = helper.index("scan['rapid_scan'] = rapid_scan")
+        self.assertIn('save_job(scan)', helper[rapid:rapid + 200])
+
+    def test_long_operations_show_busy_bar_without_cancelled_confirms(self):
+        js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
+        for operation in ('crs-stage', 'cloud-save', 'baseline-create', 'repair-set', 'wp-db-scan',
+                          'cms-db-clamav-scan', 'retention-prune'):
+            self.assertIn("'" + operation + "'", js)
+        self.assertIn('update-apply', js)
+        self.assertIn('if (event.defaultPrevented) return;', js)
+
     def test_every_form_uses_plesk_action_url(self):
         view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
         self.assertNotIn('$this->url(', view)
@@ -133,6 +156,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.23')
+        self.assertEqual(version, '0.28.24')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())
