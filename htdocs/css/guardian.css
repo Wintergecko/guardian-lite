@@ -90,6 +90,7 @@
   visibility:visible!important;-webkit-appearance:menulist;appearance:auto;
 }
 .guardian select option,#guardian-jail option,#guardian-operation option{color:#162c43!important;background:#fff!important;-webkit-text-fill-color:#162c43!important}
+#guardian-jail,#guardian-operation{display:block;box-sizing:border-box;width:100%;max-width:460px;min-width:280px;min-height:40px;margin:0 0 12px;padding:8px 36px 8px 12px!important;font-size:13px!important;line-height:1.4!important;white-space:nowrap}
 .guardian-action-feedback{border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px;line-height:1.6}
 .guardian-action-feedback.is-ok{background:#e1f7ed;color:#145c38;border:1px solid #a9dec0}
 .guardian-action-feedback.is-error{background:#fff0ed;color:#8f2929;border:1px solid #efb1ab}

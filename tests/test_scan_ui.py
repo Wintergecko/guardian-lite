@@ -21,6 +21,8 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn('guardian-domain-selection-value', view)
         self.assertIn('color:#162c43!important', css)
         self.assertIn('#guardian-jail,#guardian-operation', css)
+        self.assertIn('value="ban">', view)
+        self.assertIn('Fail2Ban-Freigabe', view)
         self.assertIn('class="guardian-native-select"', view)
         self.assertIn("domainSelect.addEventListener('change', showSelectedDomain)", js)
 
@@ -115,6 +117,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.6')
+        self.assertEqual(version, '0.28.7')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())

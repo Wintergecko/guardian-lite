@@ -1,3 +1,6 @@
+## 0.28.7 – Kompakte Firewall-Auswahl
+- Kuerzt die Fail2Ban-Aktionsnamen und setzt feste responsive Feldbreiten, damit Jail- und Aktionsauswahl nicht als abgeschnittene Punkte erscheinen.
+
 ## 0.28.6 – Sichtbare Fail2Ban-Auswahlfelder
 - Verstaerkt die Kontrastregeln fuer Jail- und Aktionsauswahl mit ID-spezifischen CSS-Regeln und expliziten Feldstilen, damit Plesk-Formularregeln den ausgewaehlten Text nicht unsichtbar machen.
 
