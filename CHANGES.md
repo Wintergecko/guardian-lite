@@ -1,3 +1,10 @@
+## 0.28.29 – Firewall-Übersicht neu geordnet
+
+- Der Tab „Firewall“ zeigt eine gemeinsame Liste „Wirksame Sperren“ mit Quelle (Fail2Ban, Guardian·Plesk, CrowdSec), Ziel, Ablauf und passender Aktion.
+- Drei Quellenkarten fassen den Status von Fail2Ban, Guardian·Plesk und CrowdSec zusammen.
+- Der vollständige Plesk-Regelbestand liegt unter „Erweitert“ und ist standardmäßig eingeklappt. Die Such- und Filterfunktion bleibt erhalten.
+- Die IP-Aktion warnt wieder davor, die eigene Administrator-IP zu sperren.
+
 ## 0.28.28 – Status pro Domain
 
 - Der Tab „Webschutz & PHP“ zeigt pro Domain den aktuellen Plesk-WAF-Modus und den PHP-Anmeldeschutz (aktiv/aus) direkt neben den Schaltflächen.
