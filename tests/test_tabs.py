@@ -29,13 +29,17 @@ class TabsTests(unittest.TestCase):
         for expected in ('guardian-menu', 'guardian-submenu', 'aria-expanded', 'aria-controls',
                          'data-menu-target', 'ArrowRight', 'ArrowLeft', 'Home', 'End',
                          'guardian_active_tab', 'hashchange', 'DOMContentLoaded', 'WebShield',
-                         'Malware Scanner', 'Reputation Management'):
+                         'Malware Scanner', "label: 'Mehr'"):
             self.assertIn(expected, js)
         self.assertNotIn('eval(', js)
         self.assertNotIn('innerHTML', js)
         self.assertIn('panel.hidden = !active;', js)
         self.assertIn('guardian-menu-static', view)
         self.assertIn('<main class="guardian-pages">', view)
+        self.assertLess(view.index('>Dashboard</summary>'), view.index('>Incidents</summary>'))
+        self.assertLess(view.index('>Incidents</summary>'), view.index('>Firewall</summary>'))
+        self.assertIn('guardian-menu-settings', view)
+        self.assertIn('guardian-brand', view)
         self.assertIn('id="guardian-firewall"', view)
         self.assertIn('href="#guardian-malware-repair"', view)
         self.assertIn('id="guardian-malware-repair"',
@@ -53,10 +57,10 @@ class TabsTests(unittest.TestCase):
 
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.1')
+        self.assertEqual(version, '0.28.2')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
-        self.assertIn('Guardian Lite <span>v' + version + '</span>',
+        self.assertIn('<span>v' + version + '</span>',
                       (ROOT / 'plib/views/scripts/index/index.phtml').read_text())
 
 
