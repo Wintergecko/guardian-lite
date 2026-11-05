@@ -1,3 +1,8 @@
+## 0.28.21 – Imunify360-Dashboard-Layout
+- Gestaltet die Administrationsoberfläche nach dem Layout der Imunify360-Dashboard-Dokumentation: grüne Kopfleiste, helle Seitennavigation links mit aufklappbaren Gruppen und grünem Akzent für den aktiven Bereich.
+- Passt Inhaltsfläche, Abstände und Buttonfarben an; auf schmalen Bildschirmen (unter 900 px) stehen Navigation und Inhalt untereinander.
+- Ändert nur die Darstellung per CSS; Markup, Formularziele und Aktionen bleiben unverändert.
+
 ## 0.28.20 – Einheitliches Button-Design
 - Vereinheitlicht Primär-, Neben- und Sicherheitsaktionen in allen Guardian-Tabs mit zurückhaltenden Farben und klaren Zuständen.
 - Verbessert Größen, Fokus- und Hoverdarstellung sowie kompakte Aktionsbuttons.
