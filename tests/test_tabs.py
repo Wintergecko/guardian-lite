@@ -10,6 +10,7 @@ class TabsTests(unittest.TestCase):
     def test_panel_landmarks_exist(self):
         view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
         ids = ['guardian-overview', 'guardian-scan', 'guardian-shield',
+               'guardian-scan-start', 'guardian-scan-report',
                'guardian-network', 'guardian-runtime', 'guardian-webshield',
                'guardian-waf-events', 'guardian-fail2ban', 'guardian-firewall',
                'guardian-updater', 'guardian-changes', 'guardian-monitor',
@@ -28,12 +29,14 @@ class TabsTests(unittest.TestCase):
         view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
         for expected in ('guardian-menu', 'guardian-submenu', 'aria-expanded', 'aria-controls',
                          'data-menu-target', 'ArrowRight', 'ArrowLeft', 'Home', 'End',
-                         'guardian_active_tab', 'hashchange', 'DOMContentLoaded', 'WebShield',
-                         'Malware Scanner', "label: 'Mehr'"):
+                         'guardian_active_tab', 'hashchange', 'DOMContentLoaded', 'guardian-webshield',
+                         'guardian_active_module', 'Malware Scanner', "label: 'Webschutz & PHP'"):
             self.assertIn(expected, js)
         self.assertNotIn('eval(', js)
         self.assertNotIn('innerHTML', js)
-        self.assertIn('panel.hidden = !active;', js)
+        self.assertIn('moduleViews[target].hidden = !active || target !== selected;', js)
+        self.assertIn('var openMenu = null;', js)
+        self.assertIn('submenu.hidden = openMenu !== group.id;', js)
         self.assertIn('guardian-menu-static', view)
         self.assertIn('<main class="guardian-pages">', view)
         self.assertLess(view.index('>Dashboard</summary>'), view.index('>Incidents</summary>'))
@@ -49,15 +52,21 @@ class TabsTests(unittest.TestCase):
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
         templates = (ROOT / 'plib/views/scripts/index/index.phtml').read_text() + \
             (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
-        for group in re.findall(r"sections:\s*\[([^\]]+)\]", js):
-            for target in re.findall(r"'([^']+)'", group):
-                self.assertIn('id="' + target + '"', templates, target)
         for target in re.findall(r"\['(guardian-[a-z-]+)',\s*'[^']+'\]", js):
             self.assertIn('id="' + target + '"', templates, target)
 
+    def test_module_views_are_individual_and_scan_is_split(self):
+        js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        self.assertIn("['guardian-scan-start', 'Scan starten']", js)
+        self.assertIn("['guardian-scan-report', 'Letzter Bericht']", js)
+        self.assertIn('view.appendChild(target);', js)
+        self.assertIn('details:not([open])>ul{display:none!important}',
+                      (ROOT / 'htdocs/css/guardian.css').read_text())
+
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.2')
+        self.assertEqual(version, '0.28.3')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('<span>v' + version + '</span>',

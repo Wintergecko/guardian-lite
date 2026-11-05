@@ -1,8 +1,8 @@
-# Guardian Lite 0.28.2 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.3 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
-Die Guardian-Oberflaeche ist an die Hauptbereiche im Imunify360-Dashboard angelehnt. **Dashboard**, **Malware Scanner**, **Incidents**, **Firewall**, **WebShield**, **PHP Runtime**, **Reputation Management** und **Einstellungen** enthalten nur Guardian-Funktionen. Unterpunkte fuehren direkt zu den passenden Scans, Ereignissen und Verwaltungsschritten. WebShield, PHP Runtime und Reputation sind in Guardian Teil-/Manuell-Integrationen, keine Imunify360-Paritaet.
+Die Guardian-Oberflaeche ist an die Hauptbereiche im Imunify360-Dashboard angelehnt. **Dashboard**, **Malware Scanner**, **Incidents**, **Firewall**, **Webschutz & PHP** und **Verwaltung** enthalten nur Guardian-Funktionen. Jeder Unterpunkt zeigt eine eigene Modulansicht; Scanstart und letzter Bericht sind getrennt. Webschutz, PHP-Runtime und Reputation sind in Guardian Teil-/Manuell-Integrationen, keine Imunify360-Paritaet.
 
 ## Voraussetzungen und Reichweite
 
@@ -34,7 +34,7 @@ Die kommentierte Guardian-IP-Ausnahmeliste verhindert nur kuenftige Guardian-eig
 
 ## Speicher, Quotas und Aufbewahrung
 
-Unter **Einstellungen → Speicher & Backups** zeigt Guardian pro Bereich die belegten Bytes und Dateien sowie den freien Speicher des Dateisystems an. Die gemessenen Bereiche sind PHP-/WAF-Backups, Good-File-Baselines, Reparaturprotokolle und Scan-Berichte. Eine unvollstaendige Dateisystemmessung wird markiert.
+Unter **Verwaltung → Speicher & Backups** zeigt Guardian pro Bereich die belegten Bytes und Dateien sowie den freien Speicher des Dateisystems an. Die gemessenen Bereiche sind PHP-/WAF-Backups, Good-File-Baselines, Reparaturprotokolle und Scan-Berichte. Eine unvollstaendige Dateisystemmessung wird markiert.
 
 Baselines sind auf 20 Verzeichnisse, 512 MiB Gesamtspeicher, 64 MiB und 5000 Dateien pro Baseline begrenzt. PHP-/WAF-Backups sind auf 200 Eintraege und 256 MiB begrenzt. Bei voller Quote wird eine neue Sicherung vor einer Aenderung abgelehnt. Guardian loescht alte Sicherungen nie automatisch. Nicht mehr benoetigte Baselines und verwaltete Backups koennen einzeln nach ausdruecklicher Bestaetigung geloescht werden. Baselines, die fuer automatische Reparatur ausgewaehlt sind, und das aktuelle WAF-Rollback-Backup koennen erst nach Deaktivierung beziehungsweise Ablosung entfernt werden. Vor jeder Bereinigung VPS-Snapshot und externe Sicherung pruefen.
 
@@ -105,7 +105,7 @@ Referenzen: [Plesk Custom Rules](https://support.plesk.com/hc/en-us/articles/123
 
 ## AbuseIPDB und Turnstile
 
-Schluessel unter **Einstellungen → Dienst-Schluessel** eingeben und Uebermittlung ausdruecklich erlauben. Die private Datei `/var/lib/guardian-lite/management/config.json` hat Modus 0600; Status und Diagnose geben keine Schluessel aus. Leere Formularfelder behalten gespeicherte Werte.
+Schluessel unter **Verwaltung → Dienst-Schluessel** eingeben und Uebermittlung ausdruecklich erlauben. Die private Datei `/var/lib/guardian-lite/management/config.json` hat Modus 0600; Status und Diagnose geben keine Schluessel aus. Leere Formularfelder behalten gespeicherte Werte.
 
 AbuseIPDB fragt nur oeffentliche IPs ueber den festen CHECK-Endpunkt ab und prueft IP sowie Score der Antwort. Ergebnisse werden eine Stunde zwischengespeichert. Keine automatischen Meldungen, Reports oder IP-Sperren. API-Limits/Verbindungsfehler erzeugen einen Fehler, keinen vermeintlich sicheren Score.
 
@@ -172,7 +172,7 @@ Nach CMS-Updates eine neue saubere Baseline erstellen. Eine neue Baseline deakti
 
 ## Diagnose und Testreihenfolge in Plesk
 
-1. ZIP installieren/aktualisieren und Guardian als direkter Administrator oeffnen. **Einstellungen → Diagnose** muss ohne Helferfehler laden.
+1. ZIP installieren/aktualisieren und Guardian als direkter Administrator oeffnen. **Verwaltung → Diagnose** muss ohne Helferfehler laden.
 2. Fuer eine Testdomain **Diagnose ausfuehren**. Optional HTTPS-PHP-Probe aktivieren: Guardian legt kurz eine zufaellig benannte PHP-Datei an, ruft sie mit TLS-Pruefung ab und entfernt sie im Abschlussblock. Der Bericht prueft PHP-Version, geladenes Snuffleupagus, PHP-cURL und Prepend-Anzeige. Abstuerze/harte Prozessabbrueche koennen eine Testdatei zuruecklassen; sie enthaelt keine Geheimnisse.
 3. **Letztes Diagnoseergebnis als JSON herunterladen** und zur Auswertung weitergeben. Der Export enthaelt Domainnamen und Betriebsstatus, keine API-Schluessel oder vollstaendigen Konfigurationen.
 4. PHP-Backup → Installation → Simulation → echte Website-Requests → Blockieren → legitime Requests/absichtlich blockierte harmlose Testfunktion → Rollback testen.

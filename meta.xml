@@ -3,7 +3,7 @@
     <id>guardian-lite</id>
     <name>Guardian Lite - Plesk Security</name>
     <description>Sicherheitssuite mit Malware-Scans, Quarantaene, WAF und optionalen PHP-Runtime- und HTTP-Rate-Limit-Policies.</description>
-    <version>0.28.2</version>
+    <version>0.28.3</version>
     <plesk_min_version>18.0.55</plesk_min_version>
     <os>unix</os>
 </module>

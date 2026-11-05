@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.2 – Plesk Security (Linux)
+# Guardian Lite 0.28.3 – Plesk Security (Linux)
 
 Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf Linux, Python >=3.8. Beta: aktive Schutzfunktionen zuerst auf einem separaten Testserver pruefen. Keine offizielle Plesk-/Imunify360-Software.
 
@@ -46,14 +46,14 @@ Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.28.2.zip
+plesk bin extension -i /root/guardian-lite-0.28.3.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.28.2.zip
+plesk bin extension -g /root/guardian-lite-0.28.3.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
 
-In Plesk als direkt angemeldeter Administrator unter **Erweiterungen → Guardian Lite** oeffnen. Impersonierte Sitzungen sind gesperrt. Das Seitenmenue ordnet die vorhandenen Funktionen in Dashboard, Malware Scanner, Incidents, Firewall, WebShield, PHP Runtime, Reputation Management und Einstellungen. Teilweise Funktionen und manuelle Anbieterabfragen sind im Menue als solche gekennzeichnet.
+In Plesk als direkt angemeldeter Administrator unter **Erweiterungen → Guardian Lite** oeffnen. Impersonierte Sitzungen sind gesperrt. Das Menue gruppiert einzelne Ansichten in Dashboard, Malware Scanner, Incidents, Firewall, Webschutz & PHP und Verwaltung. Scanstart und letzter Bericht sind getrennte Ansichten; die Modulseite zeigt jeweils nur den gewaehlten Bereich. Teilweise Funktionen und manuelle Anbieterabfragen sind im Menue als solche gekennzeichnet.
 
 Der automatisch registrierte Stundentask startet ohne pro Domain aktivierte Scanplanung keinen Scan. Faellige Scans werden einzeln und in FIFO-Reihenfolge ausgefuehrt; die Warteschlange nimmt bis zu 100 Auftraege an und zeigt ihren Status in der Oberflaeche. Der Mindestabstand von 24 Stunden gilt zwischen tatsaechlichen Scanstarts je Domain. Die neue Schutzverwaltung verlangt jeweils eine ausdrueckliche Aktivierung. Snuffleupagus benoetigt die zum gewaehlten Plesk-PHP-Handler passenden Entwicklungswerkzeuge; fehlende Voraussetzungen werden angezeigt. Paketinstallation und Freigaben auf dem Testserver nimmt der Betreiber vor.
 
@@ -75,7 +75,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.28.2
+python3 tools/build_release.py --tag v0.28.3
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.

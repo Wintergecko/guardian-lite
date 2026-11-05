@@ -1,4 +1,8 @@
-# Guardian Lite v0.28.2 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.3 – Sicherheitsmodell und Grenzen
+
+## 0.28.3 – Modulnavigation
+- Statische Menue-Fallbacks verbergen Untermenues ausdruecklich, solange ihr `details`-Element geschlossen ist.
+- Die JavaScript-Navigation verschiebt weiterhin ausschliesslich serverseitig gerenderte Elemente anhand fester IDs; pro Ansicht wird genau ein Modulbereich eingeblendet.
 
 ## 0.28.2 – Menue-Darstellung
 - Servergerenderte native Menuepunkte sind statisch und fuer alle Beschriftungen HTML-escaped.

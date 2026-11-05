@@ -19,12 +19,12 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.3" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sicherheitsübersicht <span>v0.28.2</span></h1>
+      <h1>Sicherheitsübersicht <span>v0.28.3</span></h1>
       <p>Malware-Scans · Firewall · Incidents · Webschutz</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -42,15 +42,16 @@ $action = static function ($name) use ($esc) {
       <div class="guardian-menu-group"><details><summary>Firewall</summary><ul>
         <li><a href="#guardian-fail2ban">Fail2Ban</a></li><li><a href="#guardian-firewall">Plesk Firewall</a></li></ul></details></div>
       <div class="guardian-menu-group"><details><summary>Malware Scanner</summary><ul>
-        <li><a href="#guardian-scan">Scans &amp; Berichte</a></li><li><a href="#guardian-changes">Dateiaenderungen</a></li>
+        <li><a href="#guardian-scan-start">Scan starten</a></li><li><a href="#guardian-scan-report">Letzter Bericht</a></li>
+        <li><a href="#guardian-changes">Dateiaenderungen</a></li>
         <li><a href="#guardian-monitor">Live-Dateiwache</a></li><li><a href="#guardian-history">Scan-Historie</a></li>
         <li><a href="#guardian-malware-repair">Baselines &amp; Wiederherstellung</a></li><li><a href="#guardian-malware-ignore">Ignore List</a></li>
         <li><a href="#guardian-cms-integrity">CMS- &amp; Cron-Pruefung</a></li></ul></details></div>
-      <div class="guardian-menu-group"><details><summary>Mehr</summary><ul>
+      <div class="guardian-menu-group"><details><summary>Webschutz &amp; PHP</summary><ul>
         <li><a href="#guardian-webshield">WebShield · HTTP-Botlimits</a></li><li><a href="#guardian-webshield-config">WebShield · WAF-Regeln</a></li>
         <li><a href="#guardian-turnstile">WebShield · Login-Challenge</a></li><li><a href="#guardian-runtime">PHP Runtime · Schutzstatus</a></li>
         <li><a href="#guardian-php-config">PHP Runtime · Handler &amp; Rollback</a></li><li><a href="#guardian-reputation">Reputation · IP-Abfrage</a></li></ul></details></div>
-      <div class="guardian-menu-group guardian-menu-settings"><details><summary>⚙ Einstellungen</summary><ul>
+      <div class="guardian-menu-group guardian-menu-settings"><details><summary>⚙ Verwaltung</summary><ul>
         <li><a href="#guardian-management">Firewall-Debugausgabe</a></li><li><a href="#guardian-settings-storage">Speicher &amp; Backups</a></li>
         <li><a href="#guardian-service-keys">Dienst-Schluessel</a></li><li><a href="#guardian-updater">Updates</a></li>
         <li><a href="#guardian-management-diagnostics">Diagnose</a></li><li><a href="#guardian-roadmap">Funktionsumfang</a></li></ul></details></div>
@@ -118,7 +119,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <div class="guardian-grid guardian-lower" id="guardian-scan">
-    <section class="guardian-card">
+    <section class="guardian-card" id="guardian-scan-start">
       <h2>Malware-Scan starten</h2>
       <?php if (is_array($this->malwareAction) && !empty($this->malwareAction['message'])): ?>
         <div class="guardian-action-feedback <?= !empty($this->malwareAction['ok']) ? 'is-ok' : 'is-error' ?>" role="status" aria-live="polite">
@@ -165,7 +166,7 @@ $action = static function ($name) use ($esc) {
         <?php endforeach; ?>
       </tbody></table></div>
     </section>
-    <section class="guardian-card">
+    <section class="guardian-card" id="guardian-scan-report">
       <h2><?= $scan ? 'Scan-Bericht' : 'Letzter Scan' ?></h2>
       <?php if (!$scan): ?>
         <p>Es wurde noch kein Scan ausgefuehrt.</p>
@@ -365,7 +366,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.2</h2>
+    <h2>GitHub-Updater · v0.28.3</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -555,6 +556,6 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.2" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.3" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

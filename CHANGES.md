@@ -1,3 +1,9 @@
+## 0.28.3 – Einzelansichten und kompaktere Navigation
+- Navigationspunkte zeigen jeweils nur das gewaehlte Modul; zusammengehoerige Funktionen bleiben unter Malware Scanner, Incidents, Firewall, Webschutz & PHP sowie Verwaltung gruppiert.
+- Malware-Scanstart und letzter Bericht sind eigene Ansichten; umfangreiche Modulbereiche muessen nicht mehr als lange Gesamtliste durchsucht werden.
+- Statische Menue-Fallbacks blenden geschlossene Untermenues ausdruecklich aus, auch wenn Plesk-Styles die Browser-Standarddarstellung ueberschreiben.
+- Ausgewaehltes Modul bleibt waehrend der Sitzung erhalten; Asset-Cacheversion auf 0.28.3 aktualisiert.
+
 ## 0.28.2 – Imunify-aehnliche obere Navigation
 - Navigationsbereiche in eine horizontale Kopfzeile nach dem Imunify-Dashboard-Beispiel verschoben; Unterpunkte erscheinen in Dropdowns.
 - Guardian Lite Wortmarke, helle Kopfzeile, gruenes Aktivsignal und kompaktere Seitentitel eingefuehrt.

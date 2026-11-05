@@ -80,12 +80,19 @@ class ScanUiTests(unittest.TestCase):
 
     def test_imunify_style_menus_group_existing_guardian_features(self):
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
-        self.assertIn("sections: ['guardian-fail2ban', 'guardian-firewall']", js)
-        self.assertIn("sections: ['guardian-waf-events', 'guardian-incidents']", js)
-        self.assertIn("'guardian-malware-repair', 'guardian-malware-ignore', 'guardian-cms-integrity'", js)
-        self.assertIn("'guardian-runtime', 'guardian-php-config', 'guardian-reputation'", js)
-        self.assertIn("label: 'Mehr'", js)
-        self.assertIn("'guardian-updater', 'guardian-roadmap'", js)
+        self.assertIn("['guardian-fail2ban', 'Fail2Ban']", js)
+        self.assertIn("['guardian-firewall', 'Plesk Firewall']", js)
+        self.assertIn("['guardian-waf-events', 'WAF-Ereignisse']", js)
+        self.assertIn("['guardian-incidents', 'Meldungen & Audit-Log']", js)
+        self.assertIn("['guardian-malware-repair', 'Baselines & Wiederherstellung']", js)
+        self.assertIn("['guardian-malware-ignore', 'Ignore List']", js)
+        self.assertIn("['guardian-cms-integrity', 'CMS- & Cron-", js)
+        self.assertIn("['guardian-runtime', 'PHP Runtime", js)
+        self.assertIn("['guardian-php-config', 'Handler & Rollback']", js)
+        self.assertIn("['guardian-reputation', 'IP-Reputation']", js)
+        self.assertIn("label: 'Webschutz & PHP'", js)
+        self.assertIn("['guardian-updater', 'Updates']", js)
+        self.assertIn("['guardian-roadmap', 'Funktionsumfang']", js)
 
     def test_alert_delivery_queue_is_visible_and_admin_retry_is_csrf_protected(self):
         view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
@@ -96,6 +103,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.2')
+        self.assertEqual(version, '0.28.3')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())
