@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.28.12';
+    private const GUARDIAN_VERSION = '0.28.13';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -61,13 +61,33 @@ class IndexController extends pm_Controller_Action
 
     private function updater(array $args)
     {
-        $result = pm_ApiCli::callSbin('guardian-updater', $args, pm_ApiCli::RESULT_FULL);
+        $started = microtime(true);
+        $debugStage = isset($args[0]) && in_array($args[0], ['check', 'apply'], true)
+            ? ($args[0] === 'check' ? 'check' : 'install') : '';
+        try {
+            $result = pm_ApiCli::callSbin('guardian-updater', $args, pm_ApiCli::RESULT_FULL);
+        } catch (\Throwable $e) {
+            if ($debugStage !== '') { $this->logUpdaterDebug($debugStage, true, $started); }
+            throw $e;
+        }
         $data = json_decode(isset($result['stdout']) ? $result['stdout'] : '', true);
         if (!is_array($data) || !empty($result['code']) || empty($data['ok'])) {
+            if ($debugStage !== '') { $this->logUpdaterDebug($debugStage, true, $started); }
             throw new RuntimeException(is_array($data) && !empty($data['error'])
                 ? (string)$data['error'] : 'Guardian-Updater nicht erreichbar.');
         }
+        if ($debugStage !== '') { $this->logUpdaterDebug($debugStage, false, $started); }
         return $data;
+    }
+
+    private function logUpdaterDebug($stage, $failed, $started)
+    {
+        try {
+            $elapsed = max(0, (int)round((microtime(true) - $started) * 1000));
+            $this->helper(['debug-event', $stage, $failed ? '1' : '0', (string)$elapsed]);
+        } catch (\Throwable $ignored) {
+            // Diagnostics must never change the updater result.
+        }
     }
 
     private function manager($request = null)
@@ -557,7 +577,7 @@ class IndexController extends pm_Controller_Action
         }
         if (in_array($operation, ['debug-on', 'debug-off'], true)) {
             $this->finishAction(['firewall-debug-set', $operation === 'debug-on' ? 'on' : 'off'],
-                $operation === 'debug-on' ? 'Firewall-Debugausgabe aktiviert.' : 'Firewall-Debugausgabe deaktiviert.');
+                $operation === 'debug-on' ? 'Guardian-Moduldiagnose aktiviert.' : 'Guardian-Moduldiagnose deaktiviert.');
             return;
         }
         if ($operation === 'allowlist-add') {

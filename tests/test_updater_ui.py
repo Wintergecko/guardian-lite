@@ -31,6 +31,12 @@ class UpdaterUiTests(unittest.TestCase):
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
         self.assertIn("checkForm.addEventListener('submit'", js)
 
+    def test_global_debug_includes_updater_outcome_hook(self):
+        controller = (ROOT / 'plib/controllers/IndexController.php').read_text()
+        helper = (ROOT / 'sbin/guardian-helper').read_text()
+        self.assertIn("$this->helper(['debug-event', $stage", controller)
+        self.assertIn("'updater-' + argv[1]", helper)
+
 
 if __name__ == '__main__':
     unittest.main()

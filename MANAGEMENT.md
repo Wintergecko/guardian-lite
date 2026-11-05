@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.12 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.13 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -60,7 +60,7 @@ Automatisierte Tests ersetzen die Plesk-Praxistests nicht. Die Tests des Betreib
 
 Im Angriffe-&-Schutz-Bereich zeigt Guardian Zaehler und ein durchsuchbares Inventar der von Plesk gemeldeten Regeln. Die Inventaransicht ist auf 300 Regeln begrenzt. Plesk-Erlauben-Regeln werden als Allow/White, Sperrregeln als Deny/Black bezeichnet; dies ist keine separate Guardian-Prioritaetssteuerung. Greylist, Bot-Challenges und Cloud-Reputation werden nicht von dieser Plesk-Firewall bereitgestellt.
 
-Die Debugausgabe ist standardmaessig deaktiviert und kann im Firewall-Bereich sowie unter **Schutzverwaltung und Diagnose** ein- und ausgeschaltet werden. Beide Stellen steuern dieselbe Einstellung. Bei Aktivierung protokolliert Guardian Zeit, CLI-Schritt, Ergebniscode, Laufzeit und Ausgabeumfang in einer root-privaten JSONL-Datei mit maximal 256 KiB. CLI-Argumente und Standardausgabe werden nicht gespeichert. Das Panel zeigt die letzten begrenzten Ereignisse. Zum Support kann die Diagnose kurzzeitig aktiviert, nach dem Nachstellen wieder deaktiviert und der Status im Panel geprueft werden.
+Die **Guardian-Moduldiagnose** ist standardmaessig deaktiviert. Der identische globale Schalter steht im Firewall-Bereich und unter **Verwaltung → Guardian-Moduldiagnose**. Bei Aktivierung protokolliert Guardian feste Aktionsnamen, Ergebniscode, Laufzeit sowie begrenzte Plesk-Firewall-CLI-Metadaten. Die root-private JSONL-Datei ist auf 256 KiB und 100 sichtbare Ereignisse begrenzt. Anfrageargumente und CLI-Standardausgaben werden nicht gespeichert; vorhandene gekuerzte Fehlerhinweise koennen weiterhin Details enthalten. Deaktivieren stoppt weitere Ereignisse, loescht das vorhandene Protokoll aber nicht.
 
 Guardian zeigt eigene IP-Sperren und quell-IP-gebundene Portregeln, die es in der Plesk-Firewall angelegt hat. Neben eingehenden Deny-Regeln kann es einen einzelnen TCP-/UDP-Port fuer eine einzelne Quell-IP erlauben oder fuer ein begrenztes Quellnetz sperren. Jede Regel nutzt `plesk ext firewall --set-rule`; Entfernen ist nur fuer exakt gelistete Guardian-Portregeln per numerischer ID und Guardian-IP-Sperren per exakt passendem Netz moeglich. Andere Regeln werden weder veraendert noch geloescht. Plesk Firewall muss bereits aktiv sein; Guardian aktiviert sie nicht.
 

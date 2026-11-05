@@ -1,3 +1,9 @@
+## 0.28.13 – WAF-Formulare und globales Debugging
+- Gruppiert WAF-Einstellungen in beschriftete Felder und klare Aktionsleisten; ersetzt leeres Roh-JSON durch einen lesbaren Regelstatus.
+- Gestaltet CRS-Status, Bereitstellung, Aktivierung und Rollback als abgegrenzten Bereich mit responsiven Aktionen.
+- Macht den bestehenden Diagnose-Schalter global fuer Helper-, Verwaltungs-, Hintergrund- und Updater-Aktionen; protokolliert nur feste Aktion, Ergebnis und Laufzeit.
+- Zeigt denselben globalen Status samt Umschalter in Verwaltung und Firewall; Debug bleibt standardmaessig aus und die Logdatei begrenzt.
+
 ## 0.28.12 – OWASP CRS-Verwaltung
 - Stellt offizielle OWASP CRS-v4-Minimal-Releases nach Downloadbegrenzung, Archivpfadpruefung und GPG-Signaturpruefung gegen einen fest gepinnten Fingerprint bereit.
 - Verlangt separate Admin-Aktivierung; Apache-ModSecurity-/mod_unique_id-Erkennung, Konfigurationstest, Include-Pruefung, Reload und transaktionaler Rollback schuetzen vor fehlerhaften Includes.

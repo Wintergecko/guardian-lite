@@ -88,3 +88,38 @@
 .guardian-action-feedback.is-ok{background:#e1f7ed;color:#145c38;border:1px solid #a9dec0}
 .guardian-action-feedback.is-error{background:#fff0ed;color:#8f2929;border:1px solid #efb1ab}
 #guardian-domain-selection{margin-top:5px}
+
+/* Compact control groups for WAF configuration and the module-wide trace toggle. */
+.guardian .guardian-button{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 16px!important;border:1px solid #0875b7!important;border-radius:8px!important;background:#0875b7!important;color:#fff!important;font:600 13px/1.25 system-ui,-apple-system,'Segoe UI',sans-serif!important;white-space:normal;text-align:center;box-shadow:0 1px 2px rgba(15,45,75,.12);transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease}
+.guardian .guardian-button:hover{background:#075f95!important;border-color:#075f95!important;box-shadow:0 3px 8px rgba(15,45,75,.16);transform:translateY(-1px)}
+.guardian .guardian-button:focus-visible{outline:3px solid #79b9e2;outline-offset:2px}
+.guardian .guardian-button-secondary{background:#fff!important;color:#075f95!important;border-color:#b8c9d8!important;box-shadow:none}
+.guardian .guardian-button-secondary:hover{background:#f1f7fb!important;border-color:#6a9fbe!important}
+.guardian .guardian-button-muted{background:#526173!important;border-color:#526173!important}
+.guardian .guardian-debug-control{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:12px 0 22px;padding:16px 18px;border:1px solid #d7e1e8;border-left:4px solid #52986a;border-radius:9px;background:#f7faf8}
+.guardian .guardian-debug-control h3{margin:0 0 4px}
+.guardian .guardian-debug-control p{margin:4px 0}
+.guardian-debug-control-actions{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.guardian-debug-control-actions form{margin:0}
+.guardian-debug-state{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;font-size:12px;line-height:1.2}
+.guardian-debug-state.is-on{background:#e1f7ed;color:#11623a}
+.guardian-debug-state.is-off,.guardian-debug-state.is-neutral{background:#edf1f5;color:#526173}
+.guardian-waf-status{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0 16px;padding:11px 13px;border:1px solid #e0e7ed;border-radius:8px;background:#f7f9fb;color:#334155}
+.guardian-status-label{font-size:12px;color:#64748b;font-weight:600}
+.guardian .guardian-waf-form{margin:0 0 18px;padding:16px;border:1px solid #e0e7ed;border-radius:9px;background:#fff}
+.guardian .guardian-waf-fields{display:grid;grid-template-columns:minmax(190px,1.2fr) minmax(190px,1fr) minmax(170px,.8fr);gap:14px;align-items:end}
+.guardian .guardian-waf-fields>label{margin:0;color:#334155;font-size:12px}
+.guardian .guardian-waf-fields select,.guardian .guardian-waf-fields input[type=number]{display:block;box-sizing:border-box;width:100%;min-width:0;min-height:40px;margin:6px 0 0;padding:8px 11px;border:1px solid #cad4e0;border-radius:7px;background:#fff;color:#162c43;font:13px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif}
+.guardian .guardian-waf-fields input[type=number]{height:40px}
+.guardian .guardian-waf-form .guardian-button-row{display:flex;align-items:center;gap:9px;margin-top:15px}
+.guardian .guardian-crs-box{margin:17px 0;padding:17px;border:1px solid #dce5ec;border-radius:9px;background:#fff}
+.guardian .guardian-crs-box h4{margin:0 0 8px;color:#193652;font-size:15px}
+.guardian .guardian-crs-box h4 span{margin-left:7px;color:#718196;font-size:11px;font-weight:500}
+.guardian .guardian-crs-box>p{margin:8px 0}
+.guardian .guardian-crs-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.guardian .guardian-crs-stage-form{margin:12px 0 5px}
+.guardian .guardian-crs-stage-form button{max-width:100%}
+.guardian .guardian-crs-box .guardian-scroll{margin:12px 0}
+.guardian .guardian-debug-events{margin-top:12px}
+.guardian .guardian-debug-events summary{font-size:12px}
+@media(max-width:760px){.guardian .guardian-debug-control{align-items:stretch;flex-direction:column}.guardian-debug-control-actions{align-items:flex-start}.guardian .guardian-waf-fields{grid-template-columns:1fr}.guardian .guardian-waf-form .guardian-button-row{align-items:stretch;flex-direction:column}.guardian .guardian-waf-form .guardian-button-row button{width:100%}}

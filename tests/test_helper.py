@@ -1,4 +1,5 @@
 """Unit tests that need no Plesk server and do not touch host service state."""
+import contextlib
 import importlib.machinery
 import importlib.util
 import json
@@ -249,6 +250,31 @@ class GuardianTests(unittest.TestCase):
                 result = helper.firewall_debug_status()
             self.assertFalse(result['debug_enabled'])
             self.assertIn('unsichere Dateirechte', result['debug_error'])
+
+    def test_global_debug_labels_cover_module_actions_without_logging_targets(self):
+        self.assertEqual(helper.debug_action_stage(['scan-start', 'example.com']), 'scan-start')
+        self.assertEqual(helper.debug_action_stage(['firewall-action', 'ban', '198.51.100.8']), 'firewall-ban')
+        self.assertEqual(helper.debug_action_stage(['ip-action', 'ssh', '198.51.100.8', 'unban']), 'fail2ban-unban')
+        self.assertEqual(helper.debug_action_stage(['firewall-action', 'ban', '198.51.100.8']),
+                         helper.debug_action_stage(['firewall-action', 'ban', '203.0.113.19']))
+        self.assertEqual(helper.debug_action_stage(['anything-secret', 'token']), 'helper')
+
+    def test_updater_debug_hook_writes_only_fixed_action_and_duration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / 'guardian'
+            root.mkdir(mode=0o700)
+            with mock.patch.object(helper, 'ROOT', root), \
+                 mock.patch.object(helper, 'FIREWALL_DEBUG_CONFIG', root / 'firewall-debug.json'), \
+                 mock.patch.object(helper, 'FIREWALL_DEBUG_LOG', root / 'firewall-debug.jsonl'), \
+                 mock.patch.object(helper, 'FIREWALL_DEBUG_LOCK', root / 'firewall-debug.lock'), \
+                 mock.patch.object(helper.os, 'geteuid', return_value=0):
+                helper.firewall_debug_set(True)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(helper.main(['debug-event', 'check', '0', '15']), 0)
+                event = helper.firewall_debug_status()['debug_events'][-1]
+                self.assertEqual(event['stage'], 'updater-check')
+                self.assertEqual(event['duration_ms'], 15)
+                self.assertNotIn('domain', event)
 
     def test_guardian_firewall_rules_displays_confirmed_expiry(self):
         row = {'id': 41, 'class': 'custom', 'name': 'Guardian Lite managed deny 203.0.113.25/32',

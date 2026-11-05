@@ -31,22 +31,27 @@ $domainSelect = function () use ($esc) {
       <pre><?= $esc(json_encode($this->managementResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
     </div>
   <?php endif; ?>
-  <h3>Firewall-Debugausgabe</h3>
-  <p>Status: <strong><?= !empty($firewallDebug['debug_enabled']) ? 'aktiv' : 'deaktiviert' ?></strong>. Die Diagnose ist standardmaessig aus. Bei Aktivierung speichert Guardian begrenzte Plesk-CLI-Statusdaten in einer root-privaten Datei; Argumente und Firewall-Ausgaben werden nicht protokolliert.</p>
+  <section class="guardian-debug-control" aria-labelledby="guardian-debug-title">
+  <div><h3 id="guardian-debug-title">Guardian-Moduldiagnose</h3>
+  <p>Globaler Schalter fuer Aktionen in Guardian-Helper, Verwaltungsmanager und Updater. Protokolliert feste Aktionen, Erfolg/Fehler und Laufzeit; keine Anfrageparameter, Schluessel, Dateiinhalte oder CLI-Standardausgaben. Gekuerzte Firewall-Fehlerhinweise koennen Details enthalten. Standardmaessig aus.</p>
+  <p class="guardian-small">Loggroesse: <?= (int)($firewallDebug['debug_log_bytes'] ?? 0) ?> / <?= (int)($firewallDebug['debug_log_limit_bytes'] ?? 262144) ?> Bytes · Status:
+    <strong class="guardian-debug-state <?= !empty($firewallDebug['debug_enabled']) ? 'is-on' : 'is-off' ?>"><?= !empty($firewallDebug['debug_enabled']) ? 'aktiv' : 'deaktiviert' ?></strong></p></div>
+  <div class="guardian-debug-control-actions">
   <?php if (!empty($firewallDebug['debug_error'])): ?><div class="guardian-alert">Debugstatus: <?= $esc($firewallDebug['debug_error']) ?></div><?php endif; ?>
-  <p class="guardian-small">Loggroesse: <?= (int)($firewallDebug['debug_log_bytes'] ?? 0) ?> / <?= (int)($firewallDebug['debug_log_limit_bytes'] ?? 262144) ?> Bytes</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>">
     <input type="hidden" name="operation" value="<?= !empty($firewallDebug['debug_enabled']) ? 'debug-off' : 'debug-on' ?>">
-    <button type="submit"><?= !empty($firewallDebug['debug_enabled']) ? 'Firewall-Debugausgabe deaktivieren' : 'Firewall-Debugausgabe aktivieren' ?></button>
+    <button class="guardian-button <?= !empty($firewallDebug['debug_enabled']) ? 'guardian-button-muted' : '' ?>" type="submit"><?= !empty($firewallDebug['debug_enabled']) ? 'Guardian-Debugging ausschalten' : 'Guardian-Debugging einschalten' ?></button>
   </form>
+  </div>
   <?php if (!empty($firewallDebug['debug_events']) && is_array($firewallDebug['debug_events'])): ?>
-    <details><summary>Letzte Firewall-Debugereignisse</summary><div class="guardian-scroll"><table><thead><tr><th>Zeit (UTC)</th><th>Ereignis</th><th>Schritt</th><th>Ergebnis</th><th>Dauer</th></tr></thead><tbody>
+    <details class="guardian-debug-events"><summary>Letzte Modul-Debugereignisse</summary><div class="guardian-scroll"><table><thead><tr><th>Zeit (UTC)</th><th>Ereignis</th><th>Aktion</th><th>Ergebnis</th><th>Dauer</th></tr></thead><tbody>
       <?php foreach (array_reverse($firewallDebug['debug_events']) as $event): ?>
         <tr><td><?= $esc($event['time'] ?? '') ?></td><td><?= $esc($event['kind'] ?? '') ?></td><td><?= $esc($event['stage'] ?? '') ?></td><td><?= isset($event['returncode']) ? (int)$event['returncode'] : '–' ?></td><td><?= isset($event['duration_ms']) ? (int)$event['duration_ms'] . ' ms' : '–' ?></td></tr>
       <?php endforeach; ?>
     </tbody></table></div></details>
   <?php endif; ?>
+  </section>
   <section class="guardian-card guardian-subsection" id="guardian-settings-storage">
   <h3>Speicher und Wiederherstellungspunkte</h3>
   <p>Guardian-Verbrauch: <strong><?= $esc($formatBytes($storage['managed_bytes'] ?? 0)) ?></strong>
@@ -99,33 +104,41 @@ $domainSelect = function () use ($esc) {
   <section class="guardian-card guardian-subsection" id="guardian-webshield-config">
   <h3>WAF und HTTP-Botlimits</h3>
   <p>Verwaltet eine Guardian-Regeldatei fuer genau eine ausgewaehlte Domain. Bestehende Regeln bleiben erhalten. Benoetigt Apache ModSecurity v2 mit SecDataDir. Ein neues Ziel ersetzt das bisherige Guardian-Ziel. Hinter Proxies muss REMOTE_ADDR bereits die korrekte Besucher-IP enthalten.</p>
-  <p>Aktuell: <?= $esc(json_encode($management['waf'] ?? [], JSON_UNESCAPED_SLASHES)) ?></p>
-  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
+  <?php $wafState = is_array($management['waf'] ?? null) ? $management['waf'] : []; ?>
+  <div class="guardian-waf-status">
+    <span class="guardian-status-label">Guardian-Regelstatus</span>
+    <?php if (!empty($wafState['domain'])): ?>
+      <strong class="guardian-debug-state <?= ($wafState['mode'] ?? '') === 'enforce' ? 'is-on' : 'is-neutral' ?>"><?= ($wafState['mode'] ?? '') === 'enforce' ? '429-Sperre aktiv' : (($wafState['mode'] ?? '') === 'detect' ? 'protokolliert' : (($wafState['mode'] ?? '') === 'off' ? 'Regeln deaktiviert' : 'Regel konfiguriert')) ?></strong>
+      <span><?= $esc($wafState['domain']) ?></span>
+      <?php if (isset($wafState['limit'])): ?><span><?= (int)$wafState['limit'] ?> Anfragen / IP / 60 s</span><?php endif; ?>
+    <?php else: ?><strong class="guardian-debug-state is-neutral">Keine Guardian-Regel konfiguriert</strong><?php endif; ?>
+  </div>
+  <form class="guardian-waf-form" method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="sha256" value="<?= $esc($management['waf_sha256'] ?? '') ?>">
-    <?php $domainSelect(); ?>
-    <select name="mode"><option value="detect">Nur protokollieren</option><option value="enforce">429-Sperre aktiv</option><option value="off">Deaktiviert</option></select>
-    <label>Anfragen je IP / 60 Sekunden <input name="limit" type="number" min="10" max="10000" value="120" required></label>
-    <button name="operation" value="waf-preview">Vorschau</button>
-    <button name="operation" value="waf-set" onclick="return confirm('Guardian-Regeln installieren und Apache nach Syntaxpruefung neu laden?');">Anwenden</button>
+    <div class="guardian-waf-fields"><label>Zieldomain <?php $domainSelect(); ?></label>
+    <label>Schutzmodus <select name="mode"><option value="detect">Nur protokollieren</option><option value="enforce">429-Sperre aktiv</option><option value="off">Deaktiviert</option></select></label>
+    <label>Anfragen je IP / 60 Sekunden <input name="limit" type="number" min="10" max="10000" value="120" required></label></div>
+    <div class="guardian-button-row"><button class="guardian-button guardian-button-secondary" name="operation" value="waf-preview">Regeln vorschauen</button>
+    <button class="guardian-button" name="operation" value="waf-set" onclick="return confirm('Guardian-Regeln installieren und Apache nach Syntaxpruefung neu laden?');">Regeln anwenden</button></div>
   </form>
   <?php foreach ($management['backups'] ?? [] as $backup): if (($backup['kind'] ?? '') === 'waf') {
       $form('waf-restore', ['backup' => $backup['id'], 'sha256' => $management['waf_sha256'] ?? ''], 'WAF-Rollback ' . $backup['created_at'], 'Guardian-WAF-Regeln aus diesem Backup wiederherstellen und Apache neu laden?');
   } endforeach; ?>
-  <h4>OWASP Core Rule Set · signierte Regelbasis</h4>
+  <section class="guardian-crs-box"><h4>OWASP Core Rule Set <span>Signaturgepruefte Regelbasis</span></h4>
   <?php $crs = is_array($management['crs'] ?? null) ? $management['crs'] : []; ?>
   <p>Guardian kann das offizielle CRS-4-Minimalpaket herunterladen und dessen GPG-Signatur gegen den fest gepinnten OWASP-Fingerprint pruefen. Bereitstellen aendert noch keine Apache-Konfiguration. Aktivierung erfolgt separat nach Apache-Konfigurationstest; zuerst Plesk-ModSecurity auf einer Testdomain im Erkennungsmodus pruefen. Benoetigt Apache ModSecurity v2, mod_unique_id und gnupg.</p>
-  <p>Status: <strong><?= !empty($crs['active_version']) ? 'CRS ' . $esc($crs['active_version']) . ' aktiv' : (!empty($crs['managed']) ? 'Guardian-Regeldatei erkannt, Zustand stimmt nicht ueberein' : 'nicht aktiv') ?></strong>
+  <p class="guardian-crs-status">Status: <strong class="guardian-debug-state <?= !empty($crs['active_version']) ? 'is-on' : 'is-neutral' ?>"><?= !empty($crs['active_version']) ? 'CRS ' . $esc($crs['active_version']) . ' aktiv' : (!empty($crs['managed']) ? 'Regeldatei erkannt, Zustand weicht ab' : 'nicht aktiv') ?></strong>
     <?php if (!empty($crs['active_sha256'])): ?><br><small>Aktive Konfiguration SHA-256: <?= $esc($crs['active_sha256']) ?></small><?php endif; ?></p>
-  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Offizielles OWASP-CRS-Release herunterladen und GPG-Signatur pruefen? Es wird nur bereitgestellt, noch nicht aktiviert.');">
+  <form class="guardian-crs-stage-form" method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Offizielles OWASP-CRS-Release herunterladen und GPG-Signatur pruefen? Es wird nur bereitgestellt, noch nicht aktiviert.');">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="crs-stage">
-    <button>Neueste OWASP-CRS-Version signaturgeprueft bereitstellen</button>
+    <button class="guardian-button guardian-button-secondary">CRS herunterladen und Signatur pruefen</button>
   </form>
   <?php if (!empty($crs['staged']) && is_array($crs['staged'])): ?>
     <div class="guardian-scroll"><table><thead><tr><th>Bereitgestellte Version</th><th>Dateien / Archiv-SHA-256</th><th>Aktion</th></tr></thead><tbody>
       <?php foreach ($crs['staged'] as $release): if (!is_array($release) || !preg_match('/^4\.\d{1,3}\.\d{1,3}$/D', (string)($release['version'] ?? '')) || !preg_match('/^[a-f0-9]{64}$/D', (string)($release['archive_sha256'] ?? ''))) { continue; } ?>
         <tr><td><?= $esc($release['version']) ?><br><small><?= $esc($release['staged_at'] ?? '') ?></small></td>
           <td><?= (int)($release['files'] ?? 0) ?> Dateien<br><small><?= $esc($release['archive_sha256']) ?></small></td><td>
-            <?php if (($crs['active_version'] ?? '') !== $release['version']): $form('crs-activate', ['version' => $release['version'], 'sha256' => $release['archive_sha256']], 'CRS aktivieren', 'OWASP CRS ' . $release['version'] . ' als Apache-Include aktivieren? Vorher sicherstellen, dass ModSecurity aktiv ist und die Testdomain im Erkennungsmodus laeuft. Apache wird nur nach erfolgreichem Konfigurationstest neu geladen.'); ?><?php else: ?>Aktiv<?php endif; ?>
+            <?php if (($crs['active_version'] ?? '') !== $release['version']): $form('crs-activate', ['version' => $release['version'], 'sha256' => $release['archive_sha256']], 'Version aktivieren', 'OWASP CRS ' . $release['version'] . ' als Apache-Include aktivieren? Vorher sicherstellen, dass ModSecurity aktiv ist und die Testdomain im Erkennungsmodus laeuft. Apache wird nur nach erfolgreichem Konfigurationstest neu geladen.'); ?><?php else: ?>Aktiv<?php endif; ?>
           </td></tr>
       <?php endforeach; ?>
     </tbody></table></div>
@@ -133,6 +146,7 @@ $domainSelect = function () use ($esc) {
   <?php if (!empty($crs['active_version']) && !empty($crs['active_sha256'])): ?>
     <?php $form('crs-rollback', ['sha256' => $crs['active_sha256']], 'OWASP CRS sicher zurueckrollen', 'Guardian-CRS-Include entfernen bzw. die vorherige Guardian-Konfiguration wiederherstellen? Apache wird nach Konfigurationstest neu geladen.'); ?>
   <?php endif; ?>
+  </section>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Plesk-WAF-Modus dieser Domain aendern?');">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="waf-engine">
     <?php $domainSelect(); ?><select name="mode"><option value="detection-only">Nur Erkennung</option><option value="on">WAF aktiv</option><option value="off">WAF aus</option></select><button>WAF-Modus setzen</button>

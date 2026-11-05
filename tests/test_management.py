@@ -99,6 +99,15 @@ class ManagementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Metadaten'):
             m.crs_release_asset(release, '4.30.0', '')
 
+    def test_manager_debug_records_operation_label_without_request_values(self):
+        request = {'action': 'crs-activate', 'version': '4.30.0', 'sha256': 'a' * 64}
+        with mock.patch.object(m, '_dispatch', return_value={'ok': True}), \
+             mock.patch.object(m.h, 'firewall_debug_log') as debug:
+            self.assertEqual(m.dispatch(request), {'ok': True})
+        self.assertEqual(debug.call_args.kwargs['stage'], 'crs-activate')
+        self.assertNotIn('4.30.0', str(debug.call_args))
+        self.assertNotIn('a' * 64, str(debug.call_args))
+
     def test_crs_activation_configuration_failure_restores_previous_file(self):
         version = '4.30.0'
         release_root = self.base / 'crs-root'

@@ -192,7 +192,7 @@ $view->management = ['handlers' => [['version' => '8.3', 'sha256' => str_repeat(
     'global_ignore_hashes' => [str_repeat('d', 64)],
     'backups' => [['kind' => 'php', 'identity' => '8.3', 'id' => str_repeat('b', 32), 'created_at' => 'test'],
                   ['kind' => 'waf', 'id' => str_repeat('c', 32), 'created_at' => 'test']],
-    'waf_sha256' => str_repeat('d', 64),
+    'waf_sha256' => str_repeat('d', 64), 'waf' => [],
     'crs' => ['active_version' => '', 'active_sha256' => '', 'managed' => false,
         'staged' => [['version' => '4.30.0', 'archive_sha256' => str_repeat('c', 64), 'files' => 42,
             'staged_at' => '2026-11-05T00:00:00Z']]],
@@ -222,7 +222,10 @@ $render = function () {
 };
 $html = $render->call($view);
 checkManagement(strpos($html, 'guardian-management') !== false, 'Management partial did not render');
-checkManagement(strpos($html, 'Firewall-Debugausgabe aktivieren') !== false, 'Management tab lacks firewall debug toggle');
+checkManagement(strpos($html, 'Guardian-Moduldiagnose') !== false, 'Management tab lacks module-wide debug controls');
+checkManagement(strpos($html, 'Guardian-Debugging einschalten') !== false, 'Management tab lacks global debug toggle');
+checkManagement(strpos($html, 'Keine Guardian-Regel konfiguriert') !== false, 'WAF state is not human readable');
+checkManagement(strpos($html, 'Aktuell: []') === false, 'WAF state leaks raw empty JSON');
 checkManagement(strpos($html, 'OWASP Core Rule Set') !== false, 'Management tab lacks OWASP CRS controls');
 checkManagement(strpos($html, 'crs-activate') !== false, 'Management tab lacks staged CRS activation');
 checkManagement(strpos($html, 'name="operation" value="debug-on"') !== false, 'Management debug toggle uses wrong operation');

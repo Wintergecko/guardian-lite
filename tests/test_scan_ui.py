@@ -78,7 +78,8 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn('debug-on', controller)
         self.assertIn('debug-off', controller)
         self.assertIn('firewallDebug', management_view)
-        self.assertIn('Firewall-Debugausgabe aktivieren', management_view)
+        self.assertIn('Guardian-Moduldiagnose', management_view)
+        self.assertIn('Guardian-Debugging einschalten', management_view)
         action = controller.split('public function firewallAction()', 1)[1]
         self.assertIn('$this->verifyPost();', action)
         self.assertIn("getElementById('guardian-firewall-inventory')", js)
@@ -132,6 +133,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.12')
+        self.assertEqual(version, '0.28.13')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())

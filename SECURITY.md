@@ -1,4 +1,11 @@
-# Guardian Lite v0.28.12 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.13 – Sicherheitsmodell und Grenzen
+
+## 0.28.13 – Globale Moduldiagnose und WAF-Bedienung
+
+- Ein gemeinsamer, standardmaessig ausgeschalteter Root-Schalter steuert Debugereignisse aus Helper-Aktionen, Verwaltungsmanager, Hintergrundauftraegen, Updater und Plesk-Firewall.
+- Modulaktionen speichern nur feste Aktionsnamen, Ergebniscode und Laufzeit; keine Anfrageargumente, Datei-Inhalte oder CLI-Standardausgabe. Begrenzte Plesk-Fehlerhinweise aus dem vorhandenen Firewall-Debugpfad koennen weiterhin Werte enthalten.
+- Die Logdatei bleibt root-privat, auf 256 KiB begrenzt und schreibt nichts, wenn der Schalter aus ist. Abschalten behaelt bestehende Ereignisse bis zur natuerlichen Begrenzung bei.
+- WAF- und CRS-Statusanzeige aendert die Aktivierungs- und Rollback-Sicherungen nicht.
 
 ## 0.28.12 – Signaturgepruefte OWASP-CRS-Verwaltung
 

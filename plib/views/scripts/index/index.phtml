@@ -20,12 +20,12 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.12" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.13" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sicherheitsübersicht <span>v0.28.12</span></h1>
+      <h1>Sicherheitsübersicht <span>v0.28.13</span></h1>
       <p>Malware-Scans · Firewall · Incidents · Webschutz</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -53,7 +53,7 @@ $action = static function ($name) use ($esc) {
         <li><a href="#guardian-turnstile">WebShield · Login-Challenge</a></li><li><a href="#guardian-runtime">PHP Runtime · Schutzstatus</a></li>
         <li><a href="#guardian-php-config">PHP Runtime · Handler &amp; Rollback</a></li><li><a href="#guardian-reputation">Reputation · IP-Abfrage</a></li></ul></details></div>
       <div class="guardian-menu-group guardian-menu-settings"><details><summary>⚙ Verwaltung</summary><ul>
-        <li><a href="#guardian-management">Firewall-Debugausgabe</a></li><li><a href="#guardian-settings-storage">Speicher &amp; Backups</a></li>
+        <li><a href="#guardian-management">Guardian-Debugging (global)</a></li><li><a href="#guardian-settings-storage">Speicher &amp; Backups</a></li>
         <li><a href="#guardian-service-keys">Dienst-Schluessel</a></li><li><a href="#guardian-updater">Updates</a></li>
         <li><a href="#guardian-management-diagnostics">Diagnose</a></li><li><a href="#guardian-roadmap">Funktionsumfang</a></li></ul></details></div>
     </nav>
@@ -328,17 +328,17 @@ $action = static function ($name) use ($esc) {
         <?php if (!empty($crowdsec['decisions_limited'])): ?><p class="guardian-small">Anzeige auf <?= (int)($crowdsec['decision_count'] ?? 0) ?> Eintraege begrenzt.</p><?php endif; ?>
       <?php else: ?><p class="guardian-small">CrowdSec laeuft und meldet derzeit keine aktiven Sperrentscheidungen.</p><?php endif; ?>
       <details class="guardian-debug">
-        <summary>Firewall-Debugausgabe · <?= !empty($fw['debug_enabled']) ? 'aktiv' : 'deaktiviert' ?></summary>
-        <p>Bei Aktivierung protokolliert Guardian Plesk-CLI-Aufrufe mit Ergebniscode, Dauer und Ausgabegroesse. Die root-private Datei ist auf 256 KiB begrenzt; Regelargumente und Firewall-Ausgaben werden nicht gespeichert. Standard: deaktiviert.</p>
+        <summary>Guardian-Moduldiagnose · global <?= !empty($fw['debug_enabled']) ? 'aktiv' : 'deaktiviert' ?></summary>
+        <p>Dieser globale Schalter protokolliert feste Aktionen aus Guardian-Helper, Verwaltungsmanager, Updater und Plesk-Firewall mit Ergebnis und Laufzeit. Keine Anfrageparameter, API-Schluessel, Dateiinhalte oder CLI-Standardausgaben; gekuerzte Firewall-Fehlerhinweise koennen Details enthalten. Die root-private Logdatei ist auf 256 KiB begrenzt; Standard: deaktiviert. Schalten im Tab Verwaltung.</p>
         <?php if (!empty($fw['debug_error'])): ?><p class="guardian-alert">Debugstatus: <?= $esc($fw['debug_error']) ?></p><?php endif; ?>
         <p class="guardian-small">Loggroesse: <?= (int)($fw['debug_log_bytes'] ?? 0) ?> / <?= (int)($fw['debug_log_limit_bytes'] ?? 262144) ?> Bytes</p>
         <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
           <input type="hidden" name="operation" value="<?= !empty($fw['debug_enabled']) ? 'debug-off' : 'debug-on' ?>" />
-          <button type="submit" class="<?= empty($fw['debug_enabled']) ? '' : 'guardian-small-button' ?>"><?= !empty($fw['debug_enabled']) ? 'Debugausgabe deaktivieren' : 'Debugausgabe aktivieren' ?></button>
+          <button type="submit" class="guardian-button <?= !empty($fw['debug_enabled']) ? 'guardian-button-muted' : '' ?>"><?= !empty($fw['debug_enabled']) ? 'Guardian-Debugging ausschalten' : 'Guardian-Debugging einschalten' ?></button>
         </form>
         <?php if (!empty($fw['debug_events']) && is_array($fw['debug_events'])): ?>
-          <div class="guardian-scroll"><table><thead><tr><th>Zeit (UTC)</th><th>Ereignis</th><th>Schritt</th><th>Ergebnis</th><th>Dauer</th><th>Ausgabe</th><th>Hinweis</th></tr></thead><tbody>
+          <div class="guardian-scroll"><table><thead><tr><th>Zeit (UTC)</th><th>Ereignis</th><th>Aktion</th><th>Ergebnis</th><th>Dauer</th><th>Ausgabe</th><th>Hinweis</th></tr></thead><tbody>
           <?php foreach (array_reverse($fw['debug_events']) as $event): ?>
             <tr><td><?= $esc($event['time'] ?? '') ?></td><td><?= $esc($event['kind'] ?? '') ?></td><td><?= $esc($event['stage'] ?? '') ?></td><td><?= isset($event['returncode']) ? (int)$event['returncode'] : '–' ?></td><td><?= isset($event['duration_ms']) ? (int)$event['duration_ms'] . ' ms' : '–' ?></td><td><?= isset($event['output_bytes']) ? (int)$event['output_bytes'] . ' B' : '–' ?></td><td><?= $esc($event['detail'] ?? '') ?></td></tr>
           <?php endforeach; ?>
@@ -416,7 +416,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.12</h2>
+    <h2>GitHub-Updater · v0.28.13</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -628,6 +628,6 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.12" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.13" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

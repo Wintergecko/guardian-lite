@@ -2712,7 +2712,7 @@ def status():
             'incidents': incident_list(200)}
 
 
-def main(argv):
+def _main(argv):
     try:
         if argv == ['status']:
             return respond(status())
@@ -2772,6 +2772,47 @@ def main(argv):
         return error('Ungueltige Aktion.')
     except (ValueError, OSError, subprocess.SubprocessError, TypeError) as exc:
         return error(str(exc))
+
+
+def debug_action_stage(argv):
+    """Return a fixed operation label; never place domains, IPs, paths or secrets in logs."""
+    if not argv:
+        return 'helper'
+    action = argv[0]
+    if action == 'firewall-action' and len(argv) > 1:
+        action = 'firewall-' + argv[1]
+    elif action == 'ip-action' and len(argv) > 3:
+        action = 'fail2ban-' + argv[3]
+    allowed = {'scheduled-tick', 'scan-start', 'report', 'monitor-set', 'alerts-set',
+               'alerts-test', 'alerts-retry', 'quarantine', 'restore', 'firewall-ban',
+               'firewall-unban', 'firewall-port-allow', 'firewall-port-deny',
+               'firewall-port-remove', 'firewall-allowlist-add', 'firewall-allowlist-remove',
+               'fail2ban-ban', 'fail2ban-unban', 'firewall-debug-set', 'worker', 'watch-worker'}
+    return action if action in allowed else 'helper'
+
+
+def main(argv):
+    stage = debug_action_stage(argv)
+    started = time.monotonic()
+    if argv and argv[0] == 'debug-event':
+        # The Plesk controller uses this fixed, secret-free hook for the updater process.
+        stage = 'updater-' + argv[1] if len(argv) == 4 and argv[1] in ('check', 'install') else 'invalid-debug-event'
+        if (len(argv) != 4 or argv[1] not in ('check', 'install') or argv[2] not in ('0', '1') or
+                not argv[3].isdigit() or len(argv[3]) > 7):
+            return error('Ungueltiges Debugereignis.')
+        firewall_debug_log('module-action' if argv[2] == '0' else 'module-error', stage=stage,
+                            returncode=int(argv[2]), duration_ms=int(argv[3]))
+        return respond({'ok': True})
+    try:
+        code = _main(argv)
+    except Exception:
+        firewall_debug_log('module-error', stage=stage, returncode=1,
+                           duration_ms=int((time.monotonic() - started) * 1000))
+        raise
+    if not (argv and argv[0] == 'firewall-debug-set'):
+        firewall_debug_log('module-action' if int(code) == 0 else 'module-error', stage=stage,
+                           returncode=int(code), duration_ms=int((time.monotonic() - started) * 1000))
+    return code
 
 
 if __name__ == '__main__':
