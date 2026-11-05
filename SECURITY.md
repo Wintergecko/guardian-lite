@@ -1,4 +1,9 @@
-# Guardian Lite v0.27.0 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.27.1 – Sicherheitsmodell und Grenzen
+
+## 0.27.1 – Diagnose-Schalter in der Schutzverwaltung
+
+- Der Management-Tab verwendet dieselben POST-/CSRF-geschuetzten `debug-on`- und `debug-off`-Aktionen wie die Firewall-Ansicht; es gibt keine zweite unabhaengige Einstellung.
+- Sichtbarer Status und Ereignisausschnitt stammen aus demselben root-privaten, begrenzten Firewall-Debugprotokoll.
 
 ## 0.27.0 – Firewall-Dashboard und Diagnose
 

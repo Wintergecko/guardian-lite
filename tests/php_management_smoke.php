@@ -128,6 +128,15 @@ $controller->request->post = ['csrf' => 'test-token', 'operation' => 'confirm', 
 try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
 checkManagement(pm_ApiCli::$calls[8][1] === ['firewall-action', 'confirm'], 'Firewall confirmation action not routed correctly');
 
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'debug-on'];
+try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
+checkManagement(pm_ApiCli::$calls[9][1] === ['firewall-debug-set', 'on'],
+    'Firewall debug activation did not reach the fixed helper action');
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'debug-off'];
+try { $controller->firewallAction(); } catch (ManagementRedirect $e) {}
+checkManagement(pm_ApiCli::$calls[10][1] === ['firewall-debug-set', 'off'],
+    'Firewall debug deactivation did not reach the fixed helper action');
+
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'baseline-delete',
     'baseline_id' => str_repeat('a', 32), 'domain' => 'example.com'];
 try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
@@ -194,6 +203,8 @@ $view->managementError = '';
 $view->managementResult = [];
 $view->domains = ['example.com'];
 $view->csrf = 'test-token';
+$view->overview = ['firewall' => ['debug_enabled' => false, 'debug_log_bytes' => 0,
+    'debug_log_limit_bytes' => 262144, 'debug_events' => []]];
 $view->scan = ['id' => str_repeat('e', 32), 'domain' => 'example.com', 'findings' => [
     ['path' => '<script>test</script>.php', 'state' => 'found', 'fingerprint' => ['sha256' => str_repeat('f', 64)]],
     ['path' => 'global-cache.php', 'state' => 'found', 'ignore_scope' => 'global', 'ignored' => true,
@@ -201,12 +212,15 @@ $view->scan = ['id' => str_repeat('e', 32), 'domain' => 'example.com', 'findings
     ['path' => 'index.php', 'state' => 'repaired']]];
 $render = function () {
     $esc = static function ($value) { return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
+    $fw = $this->overview['firewall'] ?? [];
     ob_start();
     include dirname(__DIR__) . '/plib/views/scripts/index/management.phtml';
     return ob_get_clean();
 };
 $html = $render->call($view);
 checkManagement(strpos($html, 'guardian-management') !== false, 'Management partial did not render');
+checkManagement(strpos($html, 'Firewall-Debugausgabe aktivieren') !== false, 'Management tab lacks firewall debug toggle');
+checkManagement(strpos($html, 'name="operation" value="debug-on"') !== false, 'Management debug toggle uses wrong operation');
 checkManagement(strpos($html, 'name="csrf"') !== false, 'Management forms lack CSRF');
 checkManagement(strpos($html, '<script>test</script>') === false, 'Finding path was not escaped');
 checkManagement(strpos($html, 'ignore-add') !== false, 'Malware ignore action not rendered');

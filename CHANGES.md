@@ -1,3 +1,9 @@
+## 0.27.1 – Diagnose-Schalter in der Schutzverwaltung
+
+- Der Firewall-Debugstatus kann zusaetzlich im Tab „Schutzverwaltung und Diagnose“ ein- und ausgeschaltet werden.
+- Status und letzte Ereignisse werden dort aus derselben Einstellung wie im Firewall-Dashboard angezeigt.
+- Tests fuer die zwei Admin-Schaltflaechen, CSRF-geschuetztes Controller-Routing und Management-Template.
+
 ## 0.27.0 – Plesk-Firewall-Dashboard und schaltbare Diagnose
 
 - Plesks eingehende Erlauben-/Sperrregeln und Sperrregeln mit Zaehlern, Suche und Listenfilter anzeigen; Fremdregeln bleiben read-only.
