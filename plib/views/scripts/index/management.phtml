@@ -1,5 +1,6 @@
 <?php
 $management = is_array($this->management) ? $this->management : [];
+$firewallDebug = is_array($fw ?? null) ? $fw : [];
 $cloud = $management['cloud'] ?? [];
 $storage = is_array($management['storage'] ?? null) ? $management['storage'] : [];
 $storageAreas = is_array($storage['areas'] ?? null) ? $storage['areas'] : [];
@@ -27,6 +28,22 @@ $domainSelect = function () use ($esc) {
     <div class="guardian-alert"><strong><?= !empty($this->managementResult['ok']) ? 'Aktion bearbeitet' : 'Aktion fehlgeschlagen' ?></strong>
       <pre><?= $esc(json_encode($this->managementResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
     </div>
+  <?php endif; ?>
+  <h3>Firewall-Debugausgabe</h3>
+  <p>Status: <strong><?= !empty($firewallDebug['debug_enabled']) ? 'aktiv' : 'deaktiviert' ?></strong>. Die Diagnose ist standardmaessig aus. Bei Aktivierung speichert Guardian begrenzte Plesk-CLI-Statusdaten in einer root-privaten Datei; Argumente und Firewall-Ausgaben werden nicht protokolliert.</p>
+  <?php if (!empty($firewallDebug['debug_error'])): ?><div class="guardian-alert">Debugstatus: <?= $esc($firewallDebug['debug_error']) ?></div><?php endif; ?>
+  <p class="guardian-small">Loggroesse: <?= (int)($firewallDebug['debug_log_bytes'] ?? 0) ?> / <?= (int)($firewallDebug['debug_log_limit_bytes'] ?? 262144) ?> Bytes</p>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>">
+    <input type="hidden" name="operation" value="<?= !empty($firewallDebug['debug_enabled']) ? 'debug-off' : 'debug-on' ?>">
+    <button type="submit"><?= !empty($firewallDebug['debug_enabled']) ? 'Firewall-Debugausgabe deaktivieren' : 'Firewall-Debugausgabe aktivieren' ?></button>
+  </form>
+  <?php if (!empty($firewallDebug['debug_events']) && is_array($firewallDebug['debug_events'])): ?>
+    <details><summary>Letzte Firewall-Debugereignisse</summary><div class="guardian-scroll"><table><thead><tr><th>Zeit (UTC)</th><th>Ereignis</th><th>Schritt</th><th>Ergebnis</th><th>Dauer</th></tr></thead><tbody>
+      <?php foreach (array_reverse($firewallDebug['debug_events']) as $event): ?>
+        <tr><td><?= $esc($event['time'] ?? '') ?></td><td><?= $esc($event['kind'] ?? '') ?></td><td><?= $esc($event['stage'] ?? '') ?></td><td><?= isset($event['returncode']) ? (int)$event['returncode'] : '–' ?></td><td><?= isset($event['duration_ms']) ? (int)$event['duration_ms'] . ' ms' : '–' ?></td></tr>
+      <?php endforeach; ?>
+    </tbody></table></div></details>
   <?php endif; ?>
   <h3>Speicher und Wiederherstellungspunkte</h3>
   <p>Guardian-Verbrauch: <strong><?= $esc($formatBytes($storage['managed_bytes'] ?? 0)) ?></strong>
