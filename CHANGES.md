@@ -1,3 +1,8 @@
+## 0.28.19 – Einheitliches Button-Design
+- Vereinheitlicht Primär-, Neben- und Sicherheitsaktionen in allen Guardian-Tabs mit zurückhaltenden Farben und klaren Zuständen.
+- Verbessert Größen, Fokus- und Hoverdarstellung sowie kompakte Aktionsbuttons.
+- Hält Navigation und vorhandene Formularaktionen unverändert.
+
 ## 0.28.18 – Firewall-Konsole und lesbare Regelpflege
 - Ordnet Fail2Ban, Plesk-Firewall, CrowdSec, Guardian-Regeln und IP-Ausnahmen in klar getrennte Bereiche.
 - Ergänzt kompakte Status- und Regelzähler sowie eine responsive Toolbar und lesbare Tabellen für die Firewall-Ansichten.
