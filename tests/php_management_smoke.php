@@ -153,6 +153,21 @@ $backupRequest = json_decode($backupCall[3], true);
 checkManagement(($backupRequest['action'] ?? '') === 'backup-delete' &&
     $backupRequest['backup'] === str_repeat('b', 32), 'Backup deletion did not reach the fixed manager request');
 
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'retention-preview', 'days' => '120'];
+try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
+$retentionCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+$retentionRequest = json_decode($retentionCall[3], true);
+checkManagement(($retentionRequest['action'] ?? '') === 'retention-preview' &&
+    $retentionRequest['days'] === 120, 'Retention preview did not reach the manager with its age');
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'retention-prune',
+    'days' => '120', 'sha256' => str_repeat('e', 64)];
+try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
+$retentionCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+$retentionRequest = json_decode($retentionCall[3], true);
+checkManagement(($retentionRequest['action'] ?? '') === 'retention-prune' &&
+    $retentionRequest['days'] === 120 && $retentionRequest['sha256'] === str_repeat('e', 64),
+    'Retention confirmation did not reach the manager with the preview fingerprint');
+
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'global-ignore-add',
     'sha256' => str_repeat('d', 64)];
 try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
@@ -238,6 +253,17 @@ checkManagement(strpos($html, 'global-ignore-remove') !== false, 'Global malware
 checkManagement(strpos($html, 'Global ignoriert') !== false, 'Global ignore scope is not visible');
 checkManagement(strpos($html, 'Speicher und Wiederherstellungspunkte') !== false, 'Storage overview not rendered');
 checkManagement(strpos($html, 'backup-delete') !== false, 'Backup retention action not rendered');
+$view->managementResult = ['ok' => true, 'operation' => 'retention-preview', 'result' => ['plan' => [
+    'days' => 90, 'cutoff' => '2026-08-01T00:00:00Z', 'sha256' => str_repeat('e', 64),
+    'backup_bytes' => 3, 'baseline_bytes' => 0,
+    'backups' => [['id' => str_repeat('b', 32), 'kind' => 'php', 'identity' => '8.3',
+        'created_at' => '2026-01-01T00:00:00Z', 'bytes' => 3]], 'baselines' => []]]];
+$html = $render->call($view);
+checkManagement(strpos($html, 'Bereinigung vorschauen') !== false, 'Retention preview form missing');
+checkManagement(strpos($html, 'Aufbewahrungsfrist (Tage)') !== false, 'Retention age selector missing');
+checkManagement(strpos($html, 'Vorschau dauerhaft bereinigen') !== false, 'Retention confirmation missing');
+checkManagement(strpos($html, 'name="sha256" value="' . str_repeat('e', 64) . '"') !== false,
+    'Retention preview fingerprint not carried to the confirmation form');
 $beforeRetryCsrf = count(pm_ApiCli::$calls);
 $controller->request->post = ['csrf' => 'wrong-token'];
 try { $controller->alertsRetryAction(); throw new RuntimeException('Alert retry accepted invalid CSRF'); }

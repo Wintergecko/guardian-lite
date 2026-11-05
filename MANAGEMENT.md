@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.13 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.14 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -38,7 +38,7 @@ Die kommentierte Guardian-IP-Ausnahmeliste verhindert nur kuenftige Guardian-eig
 
 Unter **Verwaltung → Speicher & Backups** zeigt Guardian pro Bereich die belegten Bytes und Dateien sowie den freien Speicher des Dateisystems an. Die gemessenen Bereiche sind PHP-/WAF-Backups, Good-File-Baselines, Reparaturprotokolle und Scan-Berichte. Eine unvollstaendige Dateisystemmessung wird markiert.
 
-Baselines sind auf 20 Verzeichnisse, 512 MiB Gesamtspeicher, 64 MiB und 5000 Dateien pro Baseline begrenzt. PHP-/WAF-Backups sind auf 200 Eintraege und 256 MiB begrenzt. Bei voller Quote wird eine neue Sicherung vor einer Aenderung abgelehnt. Guardian loescht alte Sicherungen nie automatisch. Nicht mehr benoetigte Baselines und verwaltete Backups koennen einzeln nach ausdruecklicher Bestaetigung geloescht werden. Baselines, die fuer automatische Reparatur ausgewaehlt sind, und das aktuelle WAF-Rollback-Backup koennen erst nach Deaktivierung beziehungsweise Ablosung entfernt werden. Vor jeder Bereinigung VPS-Snapshot und externe Sicherung pruefen.
+Baselines sind auf 20 Verzeichnisse, 512 MiB Gesamtspeicher, 64 MiB und 5000 Dateien pro Baseline begrenzt. PHP-/WAF-Backups sind auf 200 Eintraege und 256 MiB begrenzt. Bei voller Quote wird eine neue Sicherung vor einer Aenderung abgelehnt. Guardian loescht alte Sicherungen nie automatisch. Neben der Einzelloeschung gibt es eine einmalige Aufbewahrungsvorschau: Der Administrator legt 30 bis 3650 Tage fest und bestaetigt danach separat die angezeigten Kandidaten. Die jeweils drei neuesten Backups je Typ/Ziel bleiben erhalten; Baselines behalten die drei neuesten je Domain. Aktive WAF-Rollbacks, ausgewaehlte Baselines, Auto-Reparatur-Quellen, unvollstaendige oder undatierte Baselines sowie alte WAF-Engine-Backups werden nicht automatisch vorgemerkt. Der Bestand wird vor dem Loeschen erneut geprueft; hat er sich seit der Vorschau geaendert, wird die Bestaetigung abgelehnt. Vor jeder Bereinigung VPS-Snapshot und externe Sicherung pruefen.
 
 ## Malware-Scan-Warteschlange
 

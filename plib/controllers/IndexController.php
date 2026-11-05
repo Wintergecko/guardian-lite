@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.28.13';
+    private const GUARDIAN_VERSION = '0.28.14';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -115,7 +115,8 @@ class IndexController extends pm_Controller_Action
                     'waf-set', 'waf-engine', 'waf-restore', 'cloud-save', 'reputation', 'ignore-add', 'ignore-remove',
                     'global-ignore-add', 'global-ignore-remove', 'baseline-create', 'baseline-delete',
                     'repair-set', 'repair', 'repair-rollback', 'bots-set', 'diagnostics', 'cron-audit',
-                    'wp-checksum-audit', 'wp-plugin-checksum-audit', 'wp-db-scan', 'wp-db-clamav-scan', 'cms-db-clamav-scan', 'backup-delete'];
+                    'wp-checksum-audit', 'wp-plugin-checksum-audit', 'wp-db-scan', 'wp-db-clamav-scan', 'cms-db-clamav-scan',
+                    'backup-delete', 'retention-preview', 'retention-prune'];
         $allowed = array_merge($allowed, ['wp-theme-checksum-audit', 'crs-stage', 'crs-activate', 'crs-rollback']);
         if (!in_array($operation, $allowed, true)) {
             throw new pm_Exception('Unbekannte Verwaltungsaktion.');
@@ -132,7 +133,7 @@ class IndexController extends pm_Controller_Action
         if (isset($request['domain']) && !$this->isDomainKnown($request['domain'])) {
             throw new pm_Exception('Unbekannte gehostete Domain.');
         }
-        foreach (['limit', 'index'] as $key) {
+        foreach (['limit', 'index', 'days'] as $key) {
             $value = $post->getPost($key, '');
             if ($value !== '') {
                 if (!is_string($value) || !preg_match('/^\d{1,5}$/D', $value)) {
@@ -140,6 +141,9 @@ class IndexController extends pm_Controller_Action
                 }
                 $request[$key] = (int)$value;
             }
+        }
+        if (isset($request['days']) && ($request['days'] < 30 || $request['days'] > 3650)) {
+            throw new pm_Exception('Aufbewahrungsdauer muss zwischen 30 und 3650 Tagen liegen.');
         }
         foreach (['trusted', 'consent', 'clear', 'http_probe'] as $key) {
             $request[$key] = $post->getPost($key, '') === '1';

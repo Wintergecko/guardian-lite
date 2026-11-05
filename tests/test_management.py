@@ -215,6 +215,43 @@ class ManagementTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '256 MiB'):
                 m.check_backup_capacity(1)
 
+    def test_retention_preview_keeps_three_recent_and_requires_fresh_confirmation(self):
+        source = self.base / 'php.ini'
+        source.write_text('memory_limit=128M\n')
+        def add_backup(age_days):
+            item = m.make_backup('php', '8.3', source)
+            item['created_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() - age_days * 86400))
+            m.h.write_json(m.root() / 'backups' / (item['id'] + '.json'), item)
+            return item
+        for age in (200, 190, 180, 170, 160):
+            add_backup(age)
+        plan = m.retention_plan(90)
+        self.assertEqual(len(plan['backups']), 2)
+        self.assertEqual(len(plan['baselines']), 0)
+        self.assertEqual(plan['days'], 90)
+        add_backup(150)
+        with self.assertRaisesRegex(ValueError, 'Vorschau neu erstellen'):
+            m.retention_prune(90, plan['sha256'])
+        current_plan = m.retention_plan(90)
+        result = m.retention_prune(90, current_plan['sha256'])
+        self.assertEqual(result['backups_removed'], 3)
+        self.assertEqual(len(m.public_backup_inventory()), 3)
+
+    def test_retention_preserves_active_baseline_and_auto_repair_source(self):
+        old = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() - 500 * 86400))
+        backups = []
+        with mock.patch.object(m, 'public_backup_inventory', return_value=backups), \
+             mock.patch.object(m, 'baseline_inventory', return_value=[
+                 {'id': 'a' * 32, 'domain': 'active.example.com', 'created_at': old, 'bytes': 5,
+                  'active': True, 'autorepair': False, 'incomplete': False},
+                 {'id': 'b' * 32, 'domain': 'repair.example.com', 'created_at': old, 'bytes': 7,
+                  'active': False, 'autorepair': True, 'incomplete': False},
+                 {'id': 'c' * 32, 'domain': 'old.example.com', 'created_at': old, 'bytes': 9,
+                  'active': False, 'autorepair': False, 'incomplete': False}]), \
+             mock.patch.object(m, 'config', return_value={}):
+            plan = m.retention_plan(90)
+        self.assertEqual(plan['baselines'], [])
+
     def test_baseline_global_quota_removes_partial_capture(self):
         self.write_site('index.php', b'GOOD')
         self.clean_report()

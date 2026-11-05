@@ -1,3 +1,9 @@
+## 0.28.14 – Bestaetigte Aufbewahrungsbereinigung
+- Ergaenzt eine Aufbewahrungsfrist mit Vorschau fuer alte PHP-/WAF-Backups und Good-File-Baselines.
+- Entfernt Wiederherstellungspunkte erst nach separater Admin-Bestaetigung; die Vorschau wird vor der Bereinigung erneut gegen den aktuellen Bestand geprueft.
+- Schuetzt aktive WAF-Rollbacks, ausgewaehlte und fuer Auto-Reparatur genutzte Baselines; behaelt mindestens drei neueste Sicherungen je Typ/Ziel und drei Baselines je Domain.
+- Erweitert Tests und Betriebsdokumentation fuer Vorschau, Schutzregeln, Bestaetigung und veraltete Vorschauen.
+
 ## 0.28.13 – WAF-Formulare und globales Debugging
 - Gruppiert WAF-Einstellungen in beschriftete Felder und klare Aktionsleisten; ersetzt leeres Roh-JSON durch einen lesbaren Regelstatus.
 - Gestaltet CRS-Status, Bereitstellung, Aktivierung und Rollback als abgegrenzten Bereich mit responsiven Aktionen.

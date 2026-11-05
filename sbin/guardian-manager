@@ -3,6 +3,8 @@
 import contextlib
 import base64
 import ctypes
+import datetime
+import hmac
 import fcntl
 import hashlib
 import io
@@ -532,7 +534,7 @@ def crs_fetch(url, limit):
     current = url
     for _ in range(5):
         try:
-            request = urllib.request.Request(current, headers={'User-Agent': 'Guardian-Lite/0.28.13 OWASP-CRS'})
+            request = urllib.request.Request(current, headers={'User-Agent': 'Guardian-Lite/0.28.14 OWASP-CRS'})
             with opener.open(request, timeout=20) as response:
                 if response.getcode() != 200:
                     raise ValueError('CRS-Download lieferte keinen HTTP-200-Status.')
@@ -1236,6 +1238,118 @@ def backup_delete(token):
                    'Administrator hat ein %s-Wiederherstellungsbackup dauerhaft geloescht: %s' % (kind, token))
     invalidate_storage_cache()
     return {'message': 'Backup geloescht und Speicher freigegeben.', 'id': token}
+
+
+def _retention_epoch(value):
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed.timestamp()
+    except (ValueError, OverflowError):
+        return None
+
+
+def retention_plan(days):
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        raise ValueError('Aufbewahrungsdauer muss zwischen 30 und 3650 Tagen liegen.')
+    if not 30 <= days <= 3650:
+        raise ValueError('Aufbewahrungsdauer muss zwischen 30 und 3650 Tagen liegen.')
+    cutoff = time.time() - days * 86400
+    current = time.time()
+
+    backups = []
+    settings = config()
+    active_waf_backup = settings.get('waf', {}).get('backup', '') if isinstance(settings.get('waf'), dict) else ''
+    for item in public_backup_inventory():
+        if item.get('kind') not in ('php', 'waf') or item.get('id') == active_waf_backup:
+            continue
+        created = _retention_epoch(item.get('created_at'))
+        if created is None:
+            continue
+        backups.append((created, item))
+    # Keep at least the three newest recovery points for each type and target.
+    backup_groups = {}
+    for created, item in sorted(backups, key=lambda row: (row[0], row[1].get('id', '')), reverse=True):
+        group = (item.get('kind', ''), item.get('identity', ''))
+        backup_groups.setdefault(group, []).append((created, item))
+    backup_candidates = []
+    for group_items in backup_groups.values():
+        backup_candidates.extend(item for created, item in group_items[3:] if created <= cutoff)
+
+    baseline_items = baseline_inventory()
+    baseline_groups = {}
+    for item in baseline_items:
+        if item.get('active') or item.get('autorepair') or item.get('incomplete'):
+            continue
+        created = _retention_epoch(item.get('created_at'))
+        if created is None:
+            continue
+        baseline_groups.setdefault(item.get('domain', ''), []).append((created, item))
+    baseline_candidates = []
+    for group_items in baseline_groups.values():
+        for created, item in sorted(group_items, key=lambda row: (row[0], row[1].get('id', '')), reverse=True)[3:]:
+            if created <= cutoff:
+                baseline_candidates.append(item)
+
+    payload = {'days': days,
+               'backups': sorted([{'id': item['id'], 'kind': item['kind'],
+                                   'identity': item.get('identity', ''),
+                                   'created_at': item.get('created_at', ''),
+                                   'bytes': int(item.get('bytes', 0))}
+                                  for item in backup_candidates], key=lambda item: item['id']),
+               'baselines': sorted([{'id': item['id'], 'domain': item.get('domain', ''),
+                                     'created_at': item.get('created_at', ''),
+                                     'bytes': int(item.get('bytes', 0))}
+                                    for item in baseline_candidates], key=lambda item: item['id'])}
+    canonical = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    return {'days': days, 'cutoff': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(cutoff)),
+            'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(current)),
+            'backups': payload['backups'], 'baselines': payload['baselines'],
+            'backup_bytes': sum(item['bytes'] for item in payload['backups']),
+            'baseline_bytes': sum(item['bytes'] for item in payload['baselines']),
+            'sha256': hashlib.sha256(canonical).hexdigest()}
+
+
+def public_backup_inventory():
+    items = []
+    for path in (root() / 'backups').glob('*.json'):
+        item = h.read_json(path, {})
+        if not isinstance(item, dict) or not re.fullmatch(r'[a-f0-9]{32}', str(item.get('id', ''))):
+            continue
+        if item.get('kind') not in ('php', 'waf', 'waf-engine'):
+            continue
+        try:
+            blob_info = (root() / 'backups' / (item['id'] + '.bin')).lstat()
+            item['bytes'] = blob_info.st_size if stat.S_ISREG(blob_info.st_mode) else 0
+        except OSError:
+            item['bytes'] = 0
+        items.append(item)
+    return items
+
+
+def retention_prune(days, expected_sha256):
+    if not re.fullmatch(r'[a-f0-9]{64}', str(expected_sha256)):
+        raise ValueError('Bereinigungsfreigabe ungueltig. Bitte zuerst eine neue Vorschau erstellen.')
+    plan = retention_plan(days)
+    if not hmac.compare_digest(plan['sha256'], expected_sha256):
+        raise ValueError('Speicherbestand oder Schutzstatus hat sich geaendert. Bitte Vorschau neu erstellen.')
+    removed_backups = []
+    removed_baselines = []
+    for item in plan['backups']:
+        removed_backups.append(backup_delete(item['id']))
+    for item in plan['baselines']:
+        removed_baselines.append(baseline_delete(item['id'], item.get('domain', '')))
+    invalidate_storage_cache()
+    return {'message': 'Bestaetigte Aufbewahrungsbereinigung abgeschlossen.',
+            'backups_removed': len(removed_backups), 'baselines_removed': len(removed_baselines),
+            'bytes_freed': plan['backup_bytes'] + plan['baseline_bytes'],
+            'backup_ids': [item['id'] for item in removed_backups],
+            'baseline_ids': [item['id'] for item in removed_baselines]}
 
 
 def baseline(domain, trusted):
@@ -2596,7 +2710,7 @@ def wordpress_theme_fetch(url, max_bytes):
     parts = urllib.parse.urlsplit(url)
     if not allowed_target(url) or parts.fragment:
         raise ValueError('Theme-Pruefung akzeptiert nur HTTPS von WordPress.org.')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.13 theme-integrity'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.14 theme-integrity'})
     class AllowedRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not allowed_target(newurl):
@@ -3144,6 +3258,10 @@ def _dispatch(request):
             return baseline_delete(request.get('baseline_id', ''), request.get('domain', ''))
         if action == 'backup-delete':
             return backup_delete(request.get('backup', ''))
+        if action == 'retention-preview':
+            return {'plan': retention_plan(request.get('days', 90))}
+        if action == 'retention-prune':
+            return retention_prune(request.get('days', 90), request.get('sha256', ''))
         if action == 'repair-set':
             return repair_set(request.get('domain', ''), request.get('mode', ''))
         if action == 'repair':

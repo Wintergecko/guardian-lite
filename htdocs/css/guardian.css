@@ -96,6 +96,9 @@
 .guardian .guardian-button-secondary{background:#fff!important;color:#075f95!important;border-color:#b8c9d8!important;box-shadow:none}
 .guardian .guardian-button-secondary:hover{background:#f1f7fb!important;border-color:#6a9fbe!important}
 .guardian .guardian-button-muted{background:#526173!important;border-color:#526173!important}
+.guardian .guardian-retention-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin:10px 0 16px}
+.guardian .guardian-retention-form label{display:flex;flex-direction:column;gap:5px;font-weight:600}
+.guardian .guardian-retention-form input[type=number]{box-sizing:border-box;width:150px;min-height:40px;padding:8px 11px;border:1px solid #cad4e0;border-radius:7px;background:#fff;color:#162c43;font:13px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif}
 .guardian .guardian-debug-control{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:12px 0 22px;padding:16px 18px;border:1px solid #d7e1e8;border-left:4px solid #52986a;border-radius:9px;background:#f7faf8}
 .guardian .guardian-debug-control h3{margin:0 0 4px}
 .guardian .guardian-debug-control p{margin:4px 0}

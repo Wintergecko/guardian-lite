@@ -28,7 +28,7 @@ $domainSelect = function () use ($esc) {
   <?php if ($this->managementError): ?><div class="guardian-alert"><?= $esc($this->managementError) ?></div><?php endif; ?>
   <?php if ($this->managementResult): ?>
     <div class="guardian-alert"><strong><?= !empty($this->managementResult['ok']) ? 'Aktion bearbeitet' : 'Aktion fehlgeschlagen' ?></strong>
-      <pre><?= $esc(json_encode($this->managementResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+      <?php if (($this->managementResult['operation'] ?? '') !== 'retention-preview'): ?><pre><?= $esc(json_encode($this->managementResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre><?php endif; ?>
     </div>
   <?php endif; ?>
   <section class="guardian-debug-control" aria-labelledby="guardian-debug-title">
@@ -64,7 +64,32 @@ $domainSelect = function () use ($esc) {
       <tr><td><?= $esc($label) ?><?= !empty($usage['incomplete']) ? ' · Pruefung unvollstaendig' : '' ?></td><td><?= $esc($formatBytes($usage['bytes'] ?? 0)) ?></td><td><?= $esc($usage['files'] ?? 0) ?></td></tr>
     <?php endforeach; ?>
   </tbody></table></div>
-  <p class="guardian-small">Quotas: Baselines 512 MiB; PHP-/WAF-Backups 256 MiB und 200 Eintraege. Guardian loescht Wiederherstellungspunkte nie automatisch.</p>
+  <p class="guardian-small">Quotas: Baselines 512 MiB; PHP-/WAF-Backups 256 MiB und 200 Eintraege. Guardian loescht Wiederherstellungspunkte nie automatisch. Die folgende Einmal-Bereinigung loescht nur nach Vorschau und zweiter Bestaetigung.</p>
+  <h4>Aufbewahrung planen</h4>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" class="guardian-retention-form">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="retention-preview">
+    <label>Aufbewahrungsfrist (Tage) <input type="number" name="days" value="90" min="30" max="3650" required></label>
+    <button class="guardian-button" type="submit">Bereinigung vorschauen</button>
+  </form>
+  <?php $retentionResult = $this->managementResult['operation'] ?? ''; $retentionPlan = $this->managementResult['result']['plan'] ?? null; ?>
+  <?php if ($retentionResult === 'retention-preview' && is_array($retentionPlan)): ?>
+    <div class="guardian-alert"><strong>Vorschau ab <?= $esc($retentionPlan['cutoff'] ?? '') ?>.</strong>
+      Es werden <?= count($retentionPlan['backups'] ?? []) ?> Backups (<?= $esc($formatBytes($retentionPlan['backup_bytes'] ?? 0)) ?>) und
+      <?= count($retentionPlan['baselines'] ?? []) ?> Baselines (<?= $esc($formatBytes($retentionPlan['baseline_bytes'] ?? 0)) ?>) vorgemerkt.
+      Die jeweils drei neuesten Wiederherstellungspunkte pro Typ/Ziel sowie aktive WAF-Backups, ausgewaehlte Baselines und Auto-Reparatur-Quellen bleiben geschuetzt.
+    </div>
+    <?php if (!empty($retentionPlan['backups']) || !empty($retentionPlan['baselines'])): ?>
+      <details><summary>Vorgemerkte Eintraege anzeigen</summary><ul>
+        <?php foreach ($retentionPlan['backups'] ?? [] as $item): ?><li>Backup <?= $esc($item['kind'] ?? '') ?> · <?= $esc($item['identity'] ?? '') ?> · <?= $esc($item['created_at'] ?? '') ?> · <?= $esc($formatBytes($item['bytes'] ?? 0)) ?></li><?php endforeach; ?>
+        <?php foreach ($retentionPlan['baselines'] ?? [] as $item): ?><li>Baseline <?= $esc($item['domain'] ?? '') ?> · <?= $esc($item['created_at'] ?? '') ?> · <?= $esc($formatBytes($item['bytes'] ?? 0)) ?></li><?php endforeach; ?>
+      </ul></details>
+      <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Die in der Vorschau genannten Wiederherstellungspunkte dauerhaft loeschen?');">
+        <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="retention-prune">
+        <input type="hidden" name="days" value="<?= (int)($retentionPlan['days'] ?? 90) ?>"><input type="hidden" name="sha256" value="<?= $esc($retentionPlan['sha256'] ?? '') ?>">
+        <button class="guardian-button guardian-button-muted" type="submit">Vorschau dauerhaft bereinigen</button>
+      </form>
+    <?php else: ?><p>Keine alten, entbehrlichen Wiederherstellungspunkte gefunden.</p><?php endif; ?>
+  <?php endif; ?>
   <h4>Backups verwalten</h4>
   <?php if (!empty($management['backups'])): ?>
     <div class="guardian-scroll"><table><thead><tr><th>Typ / Ziel</th><th>Erstellt</th><th>Groesse</th><th>Aktion</th></tr></thead><tbody>

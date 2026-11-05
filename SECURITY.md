@@ -1,4 +1,12 @@
-# Guardian Lite v0.28.13 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.14 – Sicherheitsmodell und Grenzen
+
+## 0.28.14 – Aufbewahrungsbereinigung
+
+- Die Bereinigung ist ein manueller Einmalvorgang; es gibt keine zeitgesteuerte oder automatische Loeschung.
+- Der Admin sieht Alter und Umfang der Kandidaten vorab und bestaetigt per separater POST-/CSRF-geschuetzter Aktion.
+- Ein Digest bindet die Bestaetigung an Frist und Kandidaten. Aenderungen am Bestand oder Schutzstatus machen die Vorschau ungueltig.
+- Die jeweils drei neuesten Backups je Typ/Ziel sowie drei Baselines je Domain bleiben erhalten. Aktive WAF-Backups, ausgewaehlte Baselines und Auto-Reparatur-Quellen werden ausgelassen.
+- Backup-Pruefsummen und Baseline-Schutzpruefungen laufen auch bei der Loeschung erneut. Vor Bereinigung externe Snapshots und Sicherungen pruefen.
 
 ## 0.28.13 – Globale Moduldiagnose und WAF-Bedienung
 
