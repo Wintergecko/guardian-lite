@@ -153,6 +153,20 @@ $backupRequest = json_decode($backupCall[3], true);
 checkManagement(($backupRequest['action'] ?? '') === 'backup-delete' &&
     $backupRequest['backup'] === str_repeat('b', 32), 'Backup deletion did not reach the fixed manager request');
 
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'job-delete', 'jobid' => str_repeat('c', 32)];
+try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
+$jobCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+$jobRequest = json_decode($jobCall[3], true);
+checkManagement(($jobRequest['action'] ?? '') === 'job-delete' && $jobRequest['jobid'] === str_repeat('c', 32),
+    'Job deletion did not reach the fixed manager request');
+
+$controller->request->post = ['csrf' => 'test-token', 'operation' => 'jobs-delete-finished'];
+try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
+$jobsCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+$jobsRequest = json_decode($jobsCall[3], true);
+checkManagement(($jobsRequest['action'] ?? '') === 'jobs-delete-finished',
+    'Bulk job deletion did not reach the fixed manager request');
+
 $controller->request->post = ['csrf' => 'test-token', 'operation' => 'retention-preview', 'days' => '120'];
 try { $controller->manageAction(); } catch (ManagementRedirect $e) {}
 $retentionCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];

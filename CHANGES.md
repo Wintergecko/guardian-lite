@@ -1,3 +1,9 @@
+## 0.28.27 – Bedienung von Aufträgen und Domain-Schutz
+
+- Abgeschlossene, fehlerhafte und unterbrochene Aufträge lassen sich einzeln oder gesammelt aus dem Tab „Verwaltung“ löschen. Laufende Aufträge bleiben erhalten.
+- Neuer Abschnitt „Domains · Schutzaktionen“ im Tab „Webschutz & PHP“: jede Domain hat ihre Schaltflächen für Plesk-WAF und PHP-Anmeldeschutz direkt daneben. Die bisherigen Auswahlfelder entfallen.
+- Gespeicherte Dienst-Schlüssel werden als `************ (gespeichert)` angezeigt, statt leer zu wirken. Die Felder bleiben leer, damit beim Speichern kein Platzhalter als Schlüssel übernommen wird.
+
 ## 0.28.26 – Bereinigte Dokumentation
 
 - Rein textliche Bereinigung: verbleibende Verweise auf Fremdprodukte aus README, Änderungsprotokoll, Management-, Sicherheits- und Funktionsdokumentation, CSS-Kommentaren, Oberflächentexten und Tests entfernt.

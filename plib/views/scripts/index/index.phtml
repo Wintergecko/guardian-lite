@@ -21,12 +21,12 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.26" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.27" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sicherheitsübersicht <span>v0.28.26</span></h1>
+      <h1>Sicherheitsübersicht <span>v0.28.27</span></h1>
       <p>Malware-Scans · Firewall · Incidents · Webschutz</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -50,7 +50,7 @@ $action = static function ($name) use ($esc) {
         <li><a href="#guardian-malware-repair">Baselines &amp; Wiederherstellung</a></li><li><a href="#guardian-malware-ignore">Ignore List</a></li>
         <li><a href="#guardian-cms-integrity">CMS- &amp; Cron-Pruefung</a></li></ul></details></div>
       <div class="guardian-menu-group"><details><summary>Webschutz &amp; PHP</summary><ul>
-        <li><a href="#guardian-webshield">WebShield · HTTP-Botlimits</a></li><li><a href="#guardian-webshield-config">WebShield · WAF-Regeln</a></li>
+        <li><a href="#guardian-webshield">WebShield · HTTP-Botlimits</a></li><li><a href="#guardian-webshield-domains">WebShield · Domains</a></li><li><a href="#guardian-webshield-config">WebShield · WAF-Regeln</a></li>
         <li><a href="#guardian-turnstile">WebShield · Login-Challenge</a></li><li><a href="#guardian-runtime">PHP Runtime · Schutzstatus</a></li>
         <li><a href="#guardian-php-config">PHP Runtime · Handler &amp; Rollback</a></li><li><a href="#guardian-reputation">Reputation · IP-Abfrage</a></li></ul></details></div>
       <div class="guardian-menu-group guardian-menu-settings"><details><summary>⚙ Verwaltung</summary><ul>
@@ -533,7 +533,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.26</h2>
+    <h2>GitHub-Updater · v0.28.27</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -745,6 +745,6 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.26" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.27" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Drittanbieter-Schutzprodukten verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

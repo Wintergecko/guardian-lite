@@ -74,18 +74,23 @@ $formatJobTime = static function ($value) {
         return $value;
     }
 };
-$renderJobs = static function (array $jobs) use ($esc, $jobStatusLabels, $formatJobTime) {
+$renderJobs = static function (array $jobs, $csrf) use ($esc, $jobStatusLabels, $formatJobTime) {
     $jobs = array_values(array_filter($jobs, 'is_array'));
     if (!$jobs) {
         return '<p class="guardian-small">Noch keine Auftraege vorhanden. Gestartete Scans erscheinen hier mit Status.</p>';
     }
+    $actionUrl = $esc(pm_Context::getActionUrl('index', 'manage'));
     $html = '<div class="guardian-scroll guardian-job-table"><table><thead><tr>'
-        . '<th>Domain</th><th>Ausloeser</th><th>Status</th><th>Start / Einreihung</th><th>Ende</th><th>Funde</th>'
+        . '<th>Domain</th><th>Ausloeser</th><th>Status</th><th>Start / Einreihung</th><th>Ende</th><th>Funde</th><th>Aktion</th>'
         . '</tr></thead><tbody>';
+    $finishedCount = 0;
     foreach (array_slice($jobs, 0, 10) as $job) {
         $status = (string)($job['status'] ?? '');
         [$label, $class] = $jobStatusLabels[$status] ?? [$status !== '' ? $status : 'Unbekannt', 'is-neutral'];
         $active = in_array($status, ['queued', 'starting', 'running'], true);
+        $jobId = (string)($job['id'] ?? '');
+        $canDelete = !$active && preg_match('/^[a-f0-9]{32}$/D', $jobId) === 1;
+        if ($canDelete) { $finishedCount++; }
         $html .= '<tr><td>' . $esc($job['domain'] ?? '–') . '</td>'
             . '<td>' . (($job['trigger'] ?? '') === 'schedule' ? 'Zeitplan' : 'Manuell') . '</td>'
             . '<td><span class="guardian-state ' . $class . '">' . $esc($label) . '</span>';
@@ -98,9 +103,25 @@ $renderJobs = static function (array $jobs) use ($esc, $jobStatusLabels, $format
         }
         $html .= '</td><td>' . $esc($formatJobTime($job['started_at'] ?? $job['queued_at'] ?? '')) . '</td>'
             . '<td>' . $esc($formatJobTime($job['finished_at'] ?? '')) . '</td>'
-            . '<td>' . (isset($job['infected']) ? $esc((int)$job['infected']) : '–') . '</td></tr>';
+            . '<td>' . (isset($job['infected']) ? $esc((int)$job['infected']) : '–') . '</td>'
+            . '<td>';
+        if ($canDelete) {
+            $html .= '<form method="post" action="' . $actionUrl . '" onsubmit="return confirm(\'Diesen Auftrag und sein Protokoll loeschen?\');">'
+                . '<input type="hidden" name="csrf" value="' . $esc($csrf) . '"><input type="hidden" name="operation" value="job-delete">'
+                . '<input type="hidden" name="jobid" value="' . $esc($jobId) . '">'
+                . '<button class="guardian-button guardian-button-muted" type="submit">Loeschen</button></form>';
+        } else {
+            $html .= '<span class="guardian-small">laeuft</span>';
+        }
+        $html .= '</td></tr>';
     }
-    return $html . '</tbody></table></div>';
+    $html .= '</tbody></table></div>';
+    if ($finishedCount > 0) {
+        $html .= '<form method="post" action="' . $actionUrl . '" onsubmit="return confirm(\'Alle abgeschlossenen Auftraege mit Protokoll dauerhaft loeschen? Laufende Auftraege bleiben erhalten.\');">'
+            . '<input type="hidden" name="csrf" value="' . $esc($csrf) . '"><input type="hidden" name="operation" value="jobs-delete-finished">'
+            . '<button class="guardian-button guardian-button-muted" type="submit">Alle abgeschlossenen Auftraege loeschen</button></form>';
+    }
+    return $html;
 };
 $form = function ($operation, array $fields, $label, $confirmation = '') use ($esc) {
     echo '<form method="post" action="' . $esc(pm_Context::getActionUrl('index', 'manage')) . '"';
@@ -221,6 +242,28 @@ $domainSelect = function () use ($esc) {
   </tbody></table></div>
 
   </section>
+  <section class="guardian-card guardian-subsection" id="guardian-webshield-domains">
+  <h3>Domains · Schutzaktionen</h3>
+  <p class="guardian-small">Alle gehosteten Domains mit direkten Aktionen. Die Plesk-WAF wirkt pro Domain; der PHP-Anmeldeschutz deckt nur die PHP-Anmeldepfade ab.</p>
+  <?php if (empty($this->domains)): ?>
+    <p>Keine gehosteten Domains gefunden.</p>
+  <?php else: ?>
+    <div class="guardian-scroll"><table><thead><tr><th>Domain</th><th>Plesk-WAF</th><th>PHP-Anmeldeschutz</th></tr></thead><tbody>
+    <?php foreach ($this->domains as $domain): $domainFields = ['domain' => $domain]; ?>
+      <tr><td><?= $esc($domain) ?></td>
+        <td><div class="guardian-inline-actions">
+          <?php $form('waf-engine', $domainFields + ['mode' => 'detection-only'], 'Nur Erkennung', 'Plesk-WAF dieser Domain auf "Nur Erkennung" setzen?');
+                $form('waf-engine', $domainFields + ['mode' => 'on'], 'WAF aktiv', 'Plesk-WAF dieser Domain aktivieren?');
+                $form('waf-engine', $domainFields + ['mode' => 'off'], 'WAF aus', 'Plesk-WAF dieser Domain ausschalten?'); ?>
+        </div></td>
+        <td><div class="guardian-inline-actions">
+          <?php $form('bots-set', $domainFields + ['mode' => 'on'], 'Anmeldeschutz an', 'PHP-Anmeldeschutz via .user.ini fuer diese Domain aktivieren? XML-RPC/API-Clients koennen blockiert werden.');
+                $form('bots-set', $domainFields + ['mode' => 'off'], 'Anmeldeschutz aus', 'PHP-Anmeldeschutz fuer diese Domain deaktivieren?'); ?>
+        </div></td></tr>
+    <?php endforeach; ?>
+    </tbody></table></div>
+  <?php endif; ?>
+  </section>
   <section class="guardian-card guardian-subsection" id="guardian-webshield-config">
   <h3>WAF und HTTP-Botlimits</h3>
   <p>Verwaltet eine Guardian-Regeldatei fuer genau eine ausgewaehlte Domain. Bestehende Regeln bleiben erhalten. Benoetigt Apache ModSecurity v2 mit SecDataDir. Ein neues Ziel ersetzt das bisherige Guardian-Ziel. Hinter Proxies muss REMOTE_ADDR bereits die korrekte Besucher-IP enthalten.</p>
@@ -267,10 +310,7 @@ $domainSelect = function () use ($esc) {
     <?php $form('crs-rollback', ['sha256' => $crs['active_sha256']], 'OWASP CRS sicher zurueckrollen', 'Guardian-CRS-Include entfernen bzw. die vorherige Guardian-Konfiguration wiederherstellen? Apache wird nach Konfigurationstest neu geladen.'); ?>
   <?php endif; ?>
   </section>
-  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Plesk-WAF-Modus dieser Domain aendern?');">
-    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="waf-engine">
-    <?php $domainSelect(); ?><select name="mode"><option value="detection-only">Nur Erkennung</option><option value="on">WAF aktiv</option><option value="off">WAF aus</option></select><button>WAF-Modus setzen</button>
-  </form>
+  <p class="guardian-small">Modus pro Domain: siehe Tabelle „Domains · Schutzaktionen“.</p>
   <h4>CrowdSec AppSec · WAF und Bot-Challenge</h4>
   <p>Optionaler Open-Source-Baustein. Guardian erkennt die lokale Konfiguration, installiert oder aktiviert aber weder CrowdSec noch das Apache-Modul. Statuspruefung ist kein Nachweis fuer wirksame HTTP-Pruefung; erst auf einer Testdomain kontrollieren.</p>
   <ul class="guardian-checklist">
@@ -289,10 +329,13 @@ $domainSelect = function () use ($esc) {
   <p>AbuseIPDB: <?= !empty($cloud['abuseipdb_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?> · Turnstile: <?= !empty($cloud['turnstile_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?></p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" autocomplete="off">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cloud-save">
-    <label>AbuseIPDB API-Key <input type="password" name="abuseipdb_key" maxlength="200" autocomplete="new-password"></label>
-    <label>Turnstile Site-Key <input type="text" name="turnstile_sitekey" maxlength="200"></label>
-    <label>Turnstile Secret <input type="password" name="turnstile_secret" maxlength="200" autocomplete="new-password"></label>
-    <p>Leere Schluesselfelder behalten gespeicherte Werte.</p>
+    <label>AbuseIPDB API-Key <input type="password" name="abuseipdb_key" maxlength="200" autocomplete="new-password"
+      placeholder="<?= !empty($cloud['abuseipdb_configured']) ? '************ (gespeichert)' : 'nicht gesetzt' ?>"></label>
+    <label>Turnstile Site-Key <input type="text" name="turnstile_sitekey" maxlength="200"
+      placeholder="<?= !empty($cloud['turnstile_configured']) ? '************ (gespeichert)' : 'nicht gesetzt' ?>"></label>
+    <label>Turnstile Secret <input type="password" name="turnstile_secret" maxlength="200" autocomplete="new-password"
+      placeholder="<?= !empty($cloud['turnstile_configured']) ? '************ (gespeichert)' : 'nicht gesetzt' ?>"></label>
+    <p class="guardian-small">Leere Schluesselfelder behalten gespeicherte Werte. Gespeicherte Schluessel werden nie angezeigt, nur als Platzhalter markiert.</p>
     <label><input type="checkbox" name="consent" value="1" <?= !empty($cloud['consent']) ? 'checked' : '' ?>> IP-Reputationsabfragen an AbuseIPDB und Browserpruefungen ueber Cloudflare erlauben</label>
     <label><input type="checkbox" name="clear" value="1"> Gespeicherte Schluessel loeschen</label><button>Speichern</button>
   </form>
@@ -307,10 +350,7 @@ $domainSelect = function () use ($esc) {
   </section>
   <section class="guardian-card guardian-subsection" id="guardian-turnstile">
   <h3>PHP-Anmeldeschutz mit Turnstile</h3>
-  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('PHP-Anmeldeschutz via .user.ini aendern? Benoetigt HTTPS, PHP-cURL und passende Turnstile-Hostnamen. XML-RPC/API-Clients koennen dadurch blockiert werden.');">
-    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="bots-set"><?php $domainSelect(); ?>
-    <select name="mode"><option value="on">Aktivieren</option><option value="off">Deaktivieren</option></select><button>PHP-Anmeldeschutz setzen</button>
-  </form>
+  <p class="guardian-small">Anmeldeschutz pro Domain: siehe Tabelle „Domains · Schutzaktionen“.</p>
   <p>Schuetzt ausgewaehlte PHP-Anmeldepfade via auto_prepend_file. Statische Dateien und andere Endpunkte werden nicht abgedeckt. Aktivierung kann wegen PHP-INI-Cache bis zu 5 Minuten benoetigen.</p>
   <?= $renderResult('Challenge-Status', $management['bots'] ?? []) ?>
 
@@ -378,7 +418,7 @@ $domainSelect = function () use ($esc) {
   <section class="guardian-card guardian-subsection" id="guardian-cms-integrity">
   <h3>Auftragsstatus</h3>
   <p class="guardian-small">Die 10 letzten Scans mit Status, Laufzeit und Funden. Laufende Auftraege aktualisieren sich automatisch.</p>
-  <?= $renderJobs(is_array($management['jobs'] ?? null) ? $management['jobs'] : []) ?>
+  <?= $renderJobs(is_array($management['jobs'] ?? null) ? $management['jobs'] : [], $this->csrf) ?>
   <h3>Cronjob-Sicherheitspruefung</h3>
   <p>Prueft uebliche System- und Benutzer-Cronpfade read-only mit Heuristiken und, wenn ClamAV verfuegbar ist, zusaetzlich mit lokalen Malware-Signaturen. Dateien werden fuer den Scan in ein privates temporaeres Verzeichnis kopiert und danach entfernt. Kein vollstaendiger Malware-Nachweis; Guardian aendert oder loescht keine Cronjobs. Gesamtlimit: 4 MiB und 45 Sekunden.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">

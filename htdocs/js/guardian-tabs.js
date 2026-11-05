@@ -39,7 +39,7 @@
         ['guardian-malware-repair', 'Baselines & Wiederherstellung'],
         ['guardian-malware-ignore', 'Ignore List'], ['guardian-cms-integrity', 'CMS- & Cron-Prüfung']]},
       {id: 'more', label: 'Webschutz & PHP', items: [['guardian-webshield', 'HTTP-Botlimits'],
-        ['guardian-webshield-config', 'WAF-Regeln'], ['guardian-turnstile', 'Login-Challenge'],
+        ['guardian-webshield-domains', 'Domains · Schutzaktionen'], ['guardian-webshield-config', 'WAF-Regeln'], ['guardian-turnstile', 'Login-Challenge'],
         ['guardian-runtime', 'PHP Runtime · Schutzstatus'], ['guardian-php-config', 'Handler & Rollback'],
         ['guardian-reputation', 'IP-Reputation']]},
       {id: 'settings', label: 'Verwaltung', items: [['guardian-management', 'Firewall-Debugausgabe'],

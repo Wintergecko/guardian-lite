@@ -18,7 +18,7 @@ class TabsTests(unittest.TestCase):
         for name in ids:
             self.assertEqual(view.count('id="' + name + '"'), 1, name)
         management = (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
-        for name in ('guardian-php-config', 'guardian-webshield-config', 'guardian-turnstile',
+        for name in ('guardian-php-config', 'guardian-webshield-config', 'guardian-webshield-domains', 'guardian-turnstile',
                      'guardian-reputation', 'guardian-malware-repair', 'guardian-malware-ignore',
                      'guardian-cms-integrity', 'guardian-settings-storage',
                      'guardian-service-keys', 'guardian-management-diagnostics'):
@@ -79,7 +79,7 @@ class TabsTests(unittest.TestCase):
 
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.26')
+        self.assertEqual(version, '0.28.27')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('<span>v' + version + '</span>',

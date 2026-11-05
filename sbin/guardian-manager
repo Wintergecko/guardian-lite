@@ -551,7 +551,7 @@ def crs_fetch(url, limit):
     current = url
     for _ in range(5):
         try:
-            request = urllib.request.Request(current, headers={'User-Agent': 'Guardian-Lite/0.28.26 OWASP-CRS'})
+            request = urllib.request.Request(current, headers={'User-Agent': 'Guardian-Lite/0.28.27 OWASP-CRS'})
             with opener.open(request, timeout=20) as response:
                 if response.getcode() != 200:
                     raise ValueError('CRS-Download lieferte keinen HTTP-200-Status.')
@@ -1255,6 +1255,42 @@ def backup_delete(token):
                    'Administrator hat ein %s-Wiederherstellungsbackup dauerhaft geloescht: %s' % (kind, token))
     invalidate_storage_cache()
     return {'message': 'Backup geloescht und Speicher freigegeben.', 'id': token}
+
+
+FINISHED_JOB_STATES = ('finished', 'error', 'interrupted')
+
+
+def _remove_job_files(token):
+    for path in (root() / 'jobs' / (token + '.json'), root() / 'jobs' / (token + '.log')):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def job_delete(token):
+    if not re.fullmatch(r'[a-f0-9]{32}', token):
+        raise ValueError('Ungueltige Job-ID.')
+    item = h.read_json(root() / 'jobs' / (token + '.json'), {})
+    if not item:
+        raise ValueError('Auftrag nicht gefunden.')
+    if item.get('status') not in FINISHED_JOB_STATES:
+        raise ValueError('Laufende oder wartende Auftraege koennen nicht geloescht werden.')
+    _remove_job_files(token)
+    invalidate_storage_cache()
+    return {'message': 'Auftrag geloescht.', 'id': token}
+
+
+def jobs_delete_finished():
+    removed = 0
+    for path in (root() / 'jobs').glob('*.json'):
+        item = h.read_json(path, {})
+        token = path.stem
+        if re.fullmatch(r'[a-f0-9]{32}', token) and item.get('status') in FINISHED_JOB_STATES:
+            _remove_job_files(token)
+            removed += 1
+    invalidate_storage_cache()
+    return {'message': '%d abgeschlossene Auftraege geloescht.' % removed, 'count': removed}
 
 
 def _retention_epoch(value):
@@ -2727,7 +2763,7 @@ def wordpress_theme_fetch(url, max_bytes):
     parts = urllib.parse.urlsplit(url)
     if not allowed_target(url) or parts.fragment:
         raise ValueError('Theme-Pruefung akzeptiert nur HTTPS von WordPress.org.')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.26 theme-integrity'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.27 theme-integrity'})
     class AllowedRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not allowed_target(newurl):
@@ -3275,6 +3311,10 @@ def _dispatch(request):
             return baseline_delete(request.get('baseline_id', ''), request.get('domain', ''))
         if action == 'backup-delete':
             return backup_delete(request.get('backup', ''))
+        if action == 'job-delete':
+            return job_delete(request.get('jobid', ''))
+        if action == 'jobs-delete-finished':
+            return jobs_delete_finished()
         if action == 'retention-preview':
             return {'plan': retention_plan(request.get('days', 90))}
         if action == 'retention-prune':

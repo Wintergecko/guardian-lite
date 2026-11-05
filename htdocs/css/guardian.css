@@ -19,7 +19,7 @@
 .guardian input[type=text]{display:block;box-sizing:border-box;width:100%;min-width:0;border:1px solid #cad4e0;border-radius:7px;padding:10px 12px;margin-bottom:12px}
 .guardian form label{display:block;font-weight:600;margin:12px 0 7px}
 .guardian form select{max-width:100%;margin:0 0 9px}
-.guardian-small-button{font-size:11px!important;padding:7px 10px!important;white-space:nowrap}
+.guardian-small-button{font-size:11px!important;padding:7px 10px!important;white-space:nowrap}.guardian-inline-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.guardian-inline-actions form{margin:0}
 .guardian-danger{background:#a93335!important}
 .guardian-important{margin-bottom:16px}
 .guardian td small{font-size:11px;color:#667}
