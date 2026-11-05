@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.25.0';
+    private const GUARDIAN_VERSION = '0.26.0';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -282,6 +282,7 @@ class IndexController extends pm_Controller_Action
         $this->view->realtime = [];
         $this->view->incidents = [];
         $this->view->alerts = ['enabled' => false, 'recipient' => ''];
+        $this->view->alertDelivery = ['pending' => 0, 'failed' => 0, 'error' => ''];
         $this->view->waf = [];
         $this->view->wafError = null;
         $this->view->domains = [];
@@ -320,6 +321,7 @@ class IndexController extends pm_Controller_Action
             $this->view->realtime = isset($status['realtime']) ? $status['realtime'] : [];
             $this->view->incidents = isset($status['incidents']) ? $status['incidents'] : [];
             $this->view->alerts = isset($status['alerts']) ? $status['alerts'] : ['enabled' => false, 'recipient' => ''];
+            $this->view->alertDelivery = isset($status['alert_delivery']) ? $status['alert_delivery'] : $this->view->alertDelivery;
             $reportId = (string)$this->getRequest()->getQuery('report', '');
             if (preg_match('/^[a-f0-9]{32}$/', $reportId)) {
                 $report = $this->helper(['report', $reportId]);
@@ -495,6 +497,12 @@ class IndexController extends pm_Controller_Action
     {
         $this->verifyPost();
         $this->finishAction(['alerts-test'], 'Testmail an den lokalen Mail-Transport uebergeben.');
+    }
+
+    public function alertsRetryAction()
+    {
+        $this->verifyPost();
+        $this->finishAction(['alerts-retry'], 'Ausstehende E-Mail-Warnungen werden erneut versucht.');
     }
 
     public function incidentsExportAction()

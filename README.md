@@ -1,4 +1,4 @@
-# Guardian Lite 0.25.0 – Plesk Security (Linux)
+# Guardian Lite 0.26.0 – Plesk Security (Linux)
 
 Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf Linux, Python >=3.8. Beta: aktive Schutzfunktionen zuerst auf einem separaten Testserver pruefen. Keine offizielle Plesk-/Imunify360-Software.
 
@@ -12,7 +12,7 @@ Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf L
 | Quarantaene | Manuelles Verschieben verifizierter Funde und Wiederherstellen | Fingerprint-Kontrolle; kein Ueberschreiben; gleiches Dateisystem erforderlich |
 | Dateiwache | Opt-in-inotify und gezielte ClamAV-Einzeldateipruefung | Maximal 5 Domains / 450 Verzeichnisse je Domain; keine Ausfuehrungsblockade |
 | Metadatenvergleich | Periodische Stichprobe fuer Domains mit Scanplanung | Bis 1500 Dateien; keine vollstaendige Integritaetspruefung |
-| Incidents / E-Mail | Privates Ereignisprotokoll, JSON-Export, gedrosselte Warnungen | Mailtransport lokal erforderlich; Uebergabe ist kein Zustellnachweis |
+| Incidents / E-Mail | Privates Ereignisprotokoll, JSON-Export, gedrosselte Malwarewarnungen mit begrenzter Outbox, Wiederholungen und sichtbarem Fehlerstatus | Mailtransport lokal erforderlich; lokale Annahme ist kein Zustellnachweis; maximal 100 offene Warnungen und sechs Versuche |
 | Fail2Ban | Status bestehender Jails und manuelle IP-Sperren/-Freigaben | `fail2ban-client` und konfigurierte Jails; erstellt keine Jails oder globale Firewall-Policies |
 | Plesk Firewall | Guardian-IP-Sperren mit TTL, kommentierte Guardian-IP-Ausnahmen und manuelle Plesk-Portfreigaben/-sperren fuer einzelne Quell-IPs; Plesk-60-Sekunden-Rollback und explizite Bestaetigung | Plesk Firewall installiert/aktiv; IP-Ausnahmen schuetzen nur vor kuenftigen Guardian-Sperren und heben keine Plesk-/Provider-Regeln auf; globale Port-Policies und Greylist fehlen |
 | WAF | ModSecurity-Loganzeige, Domain-Modus und Guardian-Regelverwaltung | Apache ModSecurity v2, `mod_unique_id` und `SecDataDir` erforderlich; Plesk-WAF muss fuer Blockieren aktiv sein |
@@ -45,9 +45,9 @@ Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.25.0.zip
+plesk bin extension -i /root/guardian-lite-0.26.0.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.25.0.zip
+plesk bin extension -g /root/guardian-lite-0.26.0.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
@@ -74,7 +74,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.25.0
+python3 tools/build_release.py --tag v0.26.0
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.
