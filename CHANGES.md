@@ -1,3 +1,8 @@
+## 0.28.28 – Status pro Domain
+
+- Der Tab „Webschutz & PHP“ zeigt pro Domain den aktuellen Plesk-WAF-Modus und den PHP-Anmeldeschutz (aktiv/aus) direkt neben den Schaltflächen.
+- Neue schreibgeschützte Verwaltungsaktion `domain-status`; sie ändert nichts an Plesk oder an der Konfiguration.
+
 ## 0.28.27 – Bedienung von Aufträgen und Domain-Schutz
 
 - Abgeschlossene, fehlerhafte und unterbrochene Aufträge lassen sich einzeln oder gesammelt aus dem Tab „Verwaltung“ löschen. Laufende Aufträge bleiben erhalten.

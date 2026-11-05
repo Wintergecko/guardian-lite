@@ -243,6 +243,7 @@ $view->management = ['handlers' => [['version' => '8.3', 'sha256' => str_repeat(
 $view->managementError = '';
 $view->managementResult = [];
 $view->domains = ['example.com'];
+$view->domainStatus = ['example.com' => ['waf' => 'detection-only', 'bots' => 'on']];
 $view->csrf = 'test-token';
 $view->overview = ['firewall' => ['debug_enabled' => false, 'debug_log_bytes' => 0,
     'debug_log_limit_bytes' => 262144, 'debug_events' => []]];
@@ -260,6 +261,7 @@ $render = function () {
 };
 $html = $render->call($view);
 checkManagement(strpos($html, 'guardian-management') !== false, 'Management partial did not render');
+checkManagement(strpos($html, '<strong>Nur Erkennung</strong>') !== false && strpos($html, '<strong>aktiv</strong>') !== false, 'Domain status is not rendered');
 checkManagement(strpos($html, 'Guardian-Moduldiagnose') !== false, 'Management tab lacks module-wide debug controls');
 checkManagement(strpos($html, 'guardian-job-table') !== false && strpos($html, '<span class="guardian-state is-good">Abgeschlossen</span>') !== false, 'Job status table lacks finished badge');
 checkManagement(strpos($html, 'Scan-Fehler: clamscan nicht gefunden') !== false && strpos($html, '<span class="guardian-state is-bad">Fehler</span>') !== false, 'Job status table lacks error details');

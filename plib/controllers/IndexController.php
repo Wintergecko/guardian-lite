@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.28.27';
+    private const GUARDIAN_VERSION = '0.28.28';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -311,6 +311,7 @@ class IndexController extends pm_Controller_Action
         $this->view->waf = [];
         $this->view->wafError = null;
         $this->view->domains = [];
+        $this->view->domainStatus = [];
         $this->view->scanSelectedDomain = '';
         $this->view->updateRepo = $this->updateRepository();
         $this->view->updateResult = null;
@@ -383,6 +384,14 @@ class IndexController extends pm_Controller_Action
             sort($this->view->domains, SORT_NATURAL | SORT_FLAG_CASE);
             $remembered = (string)pm_Settings::get('guardian_scan_selected_domain');
             $this->view->scanSelectedDomain = in_array($remembered, $this->view->domains, true) ? $remembered : '';
+            $this->view->domainStatus = [];
+            try {
+                $statusData = $this->manager(['action' => 'domain-status', 'domains' => $this->view->domains]);
+                $this->view->domainStatus = isset($statusData['result']['domains']) && is_array($statusData['result']['domains'])
+                    ? $statusData['result']['domains'] : [];
+            } catch (Exception $e) {
+                $this->view->domainStatus = [];
+            }
         } catch (Exception $e) {
             $this->view->helperError = 'Domainliste konnte nicht gelesen werden: ' . $e->getMessage();
         }

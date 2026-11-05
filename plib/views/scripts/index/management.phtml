@@ -249,14 +249,24 @@ $domainSelect = function () use ($esc) {
     <p>Keine gehosteten Domains gefunden.</p>
   <?php else: ?>
     <div class="guardian-scroll"><table><thead><tr><th>Domain</th><th>Plesk-WAF</th><th>PHP-Anmeldeschutz</th></tr></thead><tbody>
-    <?php foreach ($this->domains as $domain): $domainFields = ['domain' => $domain]; ?>
+    <?php
+    $wafLabels = ['on' => 'WAF aktiv', 'off' => 'WAF aus', 'detection-only' => 'Nur Erkennung', 'unbekannt' => 'unbekannt'];
+    $botLabels = ['on' => 'aktiv', 'off' => 'aus'];
+    foreach ($this->domains as $domain):
+        $domainFields = ['domain' => $domain];
+        $state = $this->domainStatus[$domain] ?? ['waf' => 'unbekannt', 'bots' => 'off'];
+        $wafState = $wafLabels[$state['waf']] ?? 'unbekannt';
+        $botState = $botLabels[$state['bots']] ?? 'aus';
+    ?>
       <tr><td><?= $esc($domain) ?></td>
-        <td><div class="guardian-inline-actions">
+        <td><div class="guardian-small">Status: <strong><?= $esc($wafState) ?></strong></div>
+        <div class="guardian-inline-actions">
           <?php $form('waf-engine', $domainFields + ['mode' => 'detection-only'], 'Nur Erkennung', 'Plesk-WAF dieser Domain auf "Nur Erkennung" setzen?');
                 $form('waf-engine', $domainFields + ['mode' => 'on'], 'WAF aktiv', 'Plesk-WAF dieser Domain aktivieren?');
                 $form('waf-engine', $domainFields + ['mode' => 'off'], 'WAF aus', 'Plesk-WAF dieser Domain ausschalten?'); ?>
         </div></td>
-        <td><div class="guardian-inline-actions">
+        <td><div class="guardian-small">Status: <strong><?= $esc($botState) ?></strong></div>
+        <div class="guardian-inline-actions">
           <?php $form('bots-set', $domainFields + ['mode' => 'on'], 'Anmeldeschutz an', 'PHP-Anmeldeschutz via .user.ini fuer diese Domain aktivieren? XML-RPC/API-Clients koennen blockiert werden.');
                 $form('bots-set', $domainFields + ['mode' => 'off'], 'Anmeldeschutz aus', 'PHP-Anmeldeschutz fuer diese Domain deaktivieren?'); ?>
         </div></td></tr>
