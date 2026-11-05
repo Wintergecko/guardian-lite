@@ -50,6 +50,8 @@ DOMAIN_LABEL = re.compile(r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$', re.I)
 JAIL_NAME = re.compile(r'^[a-zA-Z0-9_.-]{1,80}$')
 JOB_ID = re.compile(r'^[a-f0-9]{32}$')
 MAX_JAILS = 24
+MAX_FAIL2BAN_IPS_PER_JAIL = 100
+MAX_FAIL2BAN_IPS_TOTAL = 300
 MAX_HISTORY = 30
 MAX_FINDINGS = 50
 MAX_SCAN_QUEUE = 100
@@ -200,11 +202,32 @@ def fail2ban_status():
     names = [name for name in names if JAIL_NAME.fullmatch(name)]
     result['jail_count'] = len(names)
     result['jails_limited'] = len(names) > MAX_JAILS
+    listed_total = 0
     for name in names[:MAX_JAILS]:
         details = execute([cli, 'status', name], timeout=3)
-        match = re.search(r'Currently banned:\s*(\d+)', details.stdout) if details and not details.returncode else None
+        output = details.stdout if details and not details.returncode else ''
+        match = re.search(r'Currently banned:\s*(\d+)', output)
         count = int(match.group(1)) if match else 0
-        result['jails'].append({'name': name, 'banned': count})
+        ip_match = re.search(r'Banned IP list:\s*([^\r\n]*)', output, re.I)
+        addresses = []
+        if ip_match:
+            for token in re.split(r'[,\s]+', ip_match.group(1).strip()):
+                if not token:
+                    continue
+                try:
+                    address = str(ipaddress.ip_address(token))
+                except ValueError:
+                    continue
+                if address not in addresses:
+                    addresses.append(address)
+        remaining = max(0, MAX_FAIL2BAN_IPS_TOTAL - listed_total)
+        limit = min(MAX_FAIL2BAN_IPS_PER_JAIL, remaining)
+        visible_addresses = addresses[:limit]
+        listed_total += len(visible_addresses)
+        result['jails'].append({'name': name, 'banned': count,
+                                'banned_ips': visible_addresses,
+                                'banned_ips_available': ip_match is not None,
+                                'banned_ips_truncated': len(addresses) > len(visible_addresses)})
         result['banned_total'] += count
     return result
 
@@ -2519,7 +2542,8 @@ def manual_ban(jail, address, operation):
         raise ValueError('Ungueltige Fail2Ban-Aktion.')
     try:
         addr = ipaddress.ip_address(address)
-        if addr.is_loopback or addr.is_unspecified or addr.is_multicast or addr.is_link_local:
+        if operation == 'ban' and (addr.is_loopback or addr.is_unspecified or
+                                   addr.is_multicast or addr.is_link_local):
             raise ValueError('Diese Adresse darf nicht gesperrt werden.')
         normalized = str(addr)
     except ValueError:

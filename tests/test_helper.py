@@ -57,13 +57,16 @@ class GuardianTests(unittest.TestCase):
         def fake_execute(args, timeout=5):
             if args[-1] == 'status':
                 return subprocess.CompletedProcess(args, 0, 'Status\n`- Jail list:\tsshd, plesk-login\n', '')
-            return subprocess.CompletedProcess(args, 0, 'Currently banned:\t2\n', '')
+            return subprocess.CompletedProcess(args, 0,
+                'Currently banned:\t2\nBanned IP list:\t192.0.2.10, 2001:db8::10, not-an-ip\n', '')
         with mock.patch.object(helper, 'binary', return_value='/usr/bin/fail2ban-client'), \
              mock.patch.object(helper, 'execute', side_effect=fake_execute):
             result = helper.fail2ban_status()
         self.assertTrue(result['running'])
         self.assertEqual(result['jail_count'], 2)
         self.assertEqual(result['banned_total'], 4)
+        self.assertEqual(result['jails'][0]['banned_ips'], ['192.0.2.10', '2001:db8::10'])
+        self.assertTrue(result['jails'][0]['banned_ips_available'])
 
     def test_firewall_detects_installed_but_inactive_plesk_firewall(self):
         with tempfile.TemporaryDirectory() as tmp:

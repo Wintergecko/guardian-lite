@@ -265,6 +265,8 @@ class NewFeatureTests(unittest.TestCase):
              mock.patch.object(h, 'execute', fake):
             self.assertTrue(h.manual_ban('sshd', '8.8.8.8', 'ban')['ok'])
             fake.assert_called_with(['/usr/bin/fail2ban-client', 'set', 'sshd', 'banip', '8.8.8.8'], 8)
+            self.assertTrue(h.manual_ban('sshd', '127.0.0.1', 'unban')['ok'])
+            fake.assert_called_with(['/usr/bin/fail2ban-client', 'set', 'sshd', 'unbanip', '127.0.0.1'], 8)
             with self.assertRaises(ValueError):
                 h.manual_ban('sshd', '127.0.0.1', 'ban')
             with self.assertRaises(ValueError):

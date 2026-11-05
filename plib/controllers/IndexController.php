@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.28.4';
+    private const GUARDIAN_VERSION = '0.28.5';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -530,9 +530,17 @@ class IndexController extends pm_Controller_Action
         $jail = (string)$this->getRequest()->getPost('jail', '');
         $ip = (string)$this->getRequest()->getPost('ip', '');
         $operation = (string)$this->getRequest()->getPost('operation', '');
-        if (!preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $jail) ||
-            !filter_var($ip, FILTER_VALIDATE_IP) || !in_array($operation, ['ban', 'unban'], true)) {
+        if (!filter_var($ip, FILTER_VALIDATE_IP) ||
+            !in_array($operation, ['ban', 'unban', 'permanent'], true) ||
+            ($operation !== 'permanent' && !preg_match('/^[A-Za-z0-9_.-]{1,80}$/', $jail))) {
             throw new pm_Exception('Ungueltige IP-Sperraktion.');
+        }
+        if ($operation === 'permanent') {
+            $remote = isset($_SERVER['REMOTE_ADDR']) && is_string($_SERVER['REMOTE_ADDR'])
+                ? $_SERVER['REMOTE_ADDR'] : '';
+            $this->finishAction(['firewall-action', 'ban', $ip, $remote, '0'],
+                'Dauerhafte Plesk-Sperre vorbereitet. Separaten Zugriff testen und danach bestaetigen.');
+            return;
         }
         $this->finishAction(['ip-action', $jail, $ip, $operation], 'Fail2Ban-IP-Aktion bearbeitet.');
     }

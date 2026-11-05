@@ -78,6 +78,16 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn('$this->verifyPost();', action)
         self.assertIn("getElementById('guardian-firewall-inventory')", js)
 
+    def test_fail2ban_lists_current_bans_and_offers_safe_actions(self):
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        controller = (ROOT / 'plib/controllers/IndexController.php').read_text()
+        helper = (ROOT / 'sbin/guardian-helper').read_text()
+        self.assertIn("$jailInfo['banned_ips']", view)
+        self.assertIn('name="operation" value="unban"', view)
+        self.assertIn('value="permanent"', view)
+        self.assertIn("['firewall-action', 'ban', $ip, $remote, '0']", controller)
+        self.assertIn("'banned_ips_available': ip_match is not None", helper)
+
     def test_imunify_style_menus_group_existing_guardian_features(self):
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
         self.assertIn("['guardian-fail2ban', 'Fail2Ban']", js)
@@ -103,6 +113,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.4')
+        self.assertEqual(version, '0.28.5')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())

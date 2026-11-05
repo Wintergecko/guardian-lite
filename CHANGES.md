@@ -1,3 +1,8 @@
+## 0.28.5 – Fail2Ban-Sperren und Dropdown-Lesbarkeit
+- Zeigt aktuell von Fail2Ban gebannte IP-Adressen je Jail; begrenzt die sichtbare Liste und markiert fehlende oder gekuerzte Listen.
+- Ermoeglicht die Freigabe einzelner IPs aus dem passenden Jail. Permanentes Sperren nutzt die Plesk-Firewall mit 60-Sekunden-Rueckfall und bestaetigungspflichtigem Verbindungstest.
+- Macht die Text- und Hintergrundfarbe nativer Auswahlfelder explizit, damit Plesk-Themes die Auswahl nicht weiss auf weiss darstellen.
+
 ## 0.28.4 – Sanfte Navigationseffekte
 - Modulansichten und Dropdowns erscheinen mit kurzen Einblendungen und dezenter Bewegung.
 - Dropdown-Pfeile reagieren auf den Menuezustand; Menuepunkte erhalten eine kurze Hover-Bewegung.

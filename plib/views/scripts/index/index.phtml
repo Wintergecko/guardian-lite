@@ -19,12 +19,12 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.4" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.5" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sicherheitsübersicht <span>v0.28.4</span></h1>
+      <h1>Sicherheitsübersicht <span>v0.28.5</span></h1>
       <p>Malware-Scans · Firewall · Incidents · Webschutz</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -235,8 +235,37 @@ $action = static function ($name) use ($esc) {
     <section class="guardian-card" id="guardian-fail2ban">
       <h2>IP manuell mit Fail2Ban verwalten</h2>
       <p class="guardian-alert">Vorsicht: Du kannst deine eigene Administrator-IP sperren. Keine automatische IP-Reputation oder Bot-Challenge.</p>
+      <?php $listedBans = 0; foreach (($f2b['jails'] ?? []) as $jailInfo) { $listedBans += count($jailInfo['banned_ips'] ?? []); } ?>
+      <h3>Aktuelle Fail2Ban-Sperren</h3>
       <?php if (!empty($f2b['jails'])): ?>
-        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'ip')) ?>" onsubmit="return confirm('Fail2Ban-Aktion wirklich ausfuehren? Eigene Admin-IP kontrollieren!');">
+        <?php if ($listedBans > 0): ?>
+          <div class="guardian-scroll"><table><thead><tr><th>Jail</th><th>Gesperrte IP</th><th>Aktionen</th></tr></thead><tbody>
+          <?php foreach ($f2b['jails'] as $jailInfo): foreach (($jailInfo['banned_ips'] ?? []) as $bannedIp): ?>
+            <tr><td><?= $esc($jailInfo['name']) ?></td><td><code><?= $esc($bannedIp) ?></code></td><td>
+              <div class="guardian-formline">
+                <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'ip')) ?>" onsubmit="return confirm('Diese IP aus dem Fail2Ban-Jail freigeben?');">
+                  <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="jail" value="<?= $esc($jailInfo['name']) ?>" /><input type="hidden" name="ip" value="<?= $esc($bannedIp) ?>" /><input type="hidden" name="operation" value="unban" /><button class="guardian-small-button" type="submit">Freigeben</button>
+                </form>
+                <?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?>
+                  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'ip')) ?>" onsubmit="return confirm('Diese IP dauerhaft in der Plesk-Firewall sperren? Die Aenderung muss danach aus einer getrennten Verbindung getestet und bestaetigt werden.');">
+                    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="ip" value="<?= $esc($bannedIp) ?>" /><input type="hidden" name="operation" value="permanent" /><button class="guardian-small-button guardian-danger" type="submit">Dauerhaft sperren</button>
+                  </form>
+                <?php else: ?><span class="guardian-small">Plesk-Firewall nicht fuer Dauer-Sperren verfuegbar</span><?php endif; ?>
+              </div>
+            </td></tr>
+          <?php endforeach; endforeach; ?>
+          </tbody></table></div>
+        <?php else: ?>
+          <?php if ((int)($f2b['banned_total'] ?? 0) > 0): ?><p class="guardian-alert">Fail2Ban meldet <?= (int)$f2b['banned_total'] ?> aktive Sperren, liefert aber keine IP-Adressen zum Anzeigen. Nutze die manuelle Freigabe unten mit bekanntem Jail und IP.</p>
+          <?php else: ?><p class="guardian-small">Keine aktuell gesperrten IP-Adressen.</p><?php endif; ?>
+        <?php endif; ?>
+        <?php if (!empty($f2b['jails_limited']) || array_reduce($f2b['jails'], static function ($carry, $item) { return $carry || !empty($item['banned_ips_truncated']); }, false)): ?>
+          <p class="guardian-small">Die angezeigte Liste ist begrenzt; Fail2Ban kann weitere aktuelle Sperren enthalten.</p>
+        <?php endif; ?>
+      <?php else: ?><p class="guardian-small">Kein aktives Fail2Ban-Jail gefunden; aktuelle Sperren koennen nicht ausgelesen werden.</p><?php endif; ?>
+      <p class="guardian-small">„Freigeben“ entfernt die IP aus dem jeweiligen Jail. „Dauerhaft sperren“ bereitet eine Plesk-Firewallregel vor; sie wird erst nach einem getrennten Verbindungstest bestaetigt. Fail2Ban-Sperren laufen nach der Jail-Bannzeit ab.</p>
+      <?php if (!empty($f2b['jails'])): ?>
+        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'ip')) ?>" onsubmit="return confirm('Aktion wirklich ausfuehren? Bei permanenter Plesk-Sperre anschliessend getrennte Verbindung testen und im Firewall-Menue bestaetigen.');">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
           <label for="guardian-jail">Jail</label>
           <select name="jail" id="guardian-jail" required>
@@ -245,7 +274,7 @@ $action = static function ($name) use ($esc) {
           <label for="guardian-ip">IPv4 oder IPv6</label>
           <input id="guardian-ip" type="text" name="ip" placeholder="198.51.100.23" required maxlength="45" />
           <label for="guardian-operation">Aktion</label>
-          <select name="operation" id="guardian-operation"><option value="ban">Sperren</option><option value="unban">Entsperren</option></select>
+          <select name="operation" id="guardian-operation"><option value="ban">Mit Fail2Ban sperren (Jail-Bannzeit)</option><option value="unban">Aus Fail2Ban freigeben</option><?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?><option value="permanent">Dauerhaft in Plesk-Firewall sperren</option><?php endif; ?></select>
           <button type="submit">Aktion ausfuehren</button>
         </form>
       <?php else: ?><p>Kein aktives Fail2Ban-Jail gefunden.</p><?php endif; ?>
@@ -366,7 +395,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.4</h2>
+    <h2>GitHub-Updater · v0.28.5</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -556,6 +585,6 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.4" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.5" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>
