@@ -1,3 +1,10 @@
+## 0.28.23 – Cron-Audit: Fehlalarm bei mktemp behoben
+
+- Die Heuristik `temporary-executable` meldet keine Zeilen mehr, in denen ein /tmp-Pfad nur als Ziel von `mktemp`, `mktemp -d`, `mkdir` oder `touch` vorkommt. Plesks eigenes `/etc/cron.weekly/fail2ban-vacuum` war ein Fehlalarm.
+- Ausführung eines Skripts aus /tmp in Cron-Einträgen wird weiterhin gemeldet.
+- WAF-Engine: Der vorherige Plesk-Modus wird jetzt auch im Abschnittsformat (`[waf-rule-engine]` mit Wert in der nächsten Zeile) erkannt. Vorher brach das Umschalten mit "konnte nicht eindeutig ermittelt werden" ab.
+- Tests für beide Fälle ergänzt.
+
 ## 0.28.22 – Navigation und Chevron-Ausrichtung
 - Behebt einen weißen Abstand über der Seitennavigation: das Menü sitzt jetzt bündig unter der grünen Kopfleiste.
 - Richtet die Chevrons der aufklappbaren Navigationsgruppen rechts aus; Beschriftungen stehen linksbündig.

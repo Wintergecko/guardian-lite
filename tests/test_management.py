@@ -299,6 +299,25 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(source.read_bytes(), content)
         self.assertTrue(link.is_symlink())
 
+    def test_cron_audit_ignores_mktemp_targets_but_flags_tmp_execution(self):
+        cron_root = self.base / 'cron-tmp'
+        cron_root.mkdir()
+        vendor = cron_root / 'vendor-cleanup'
+        vendor.write_text('outfile=`mktemp /tmp/vacuum.XXXXXX`\n')
+        malicious = cron_root / 'malicious'
+        malicious.write_text('0 * * * * root /tmp/payload.sh\n')
+        with mock.patch.object(m, 'CRON_FILES', ()), \
+                mock.patch.object(m, 'CRON_DIRS', (cron_root,)):
+            result = m.cron_audit()
+        rules = [(item['source'].rsplit('/', 1)[-1], item['rule']) for item in result['findings']]
+        self.assertEqual(rules, [('malicious', 'temporary-executable')])
+
+    def test_waf_engine_mode_parses_plesk_section_and_key_value_output(self):
+        self.assertEqual(m.waf_engine_mode('[waf-rule-engine]\non\n'), 'on')
+        self.assertEqual(m.waf_engine_mode('[waf-rule-engine]\nDetectionOnly\n'), 'detection-only')
+        self.assertEqual(m.waf_engine_mode('waf-rule-engine: off'), 'off')
+        self.assertEqual(m.waf_engine_mode('mode = detection-only'), 'detection-only')
+
     def test_cron_audit_scans_captured_files_with_clamav_without_modifying_them(self):
         cron_root = self.base / 'cron'
         cron_root.mkdir()
