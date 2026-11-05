@@ -82,12 +82,14 @@
 @media(max-width:800px){.guardian-roadmap-grid{grid-template-columns:1fr;gap:0}.guardian-menu{position:relative}.guardian-brand{min-width:130px;font-size:18px}.guardian-mark{font-size:30px}.guardian .guardian-tab{min-height:46px;padding:0 8px}}
 
 /* Plesk skins can otherwise render an inherited white select text on white. */
-.guardian select,.guardian form select,#guardian-domain{
+.guardian select,.guardian form select,#guardian-domain,#guardian-jail,#guardian-operation{
   color:#162c43!important;background-color:#fff!important;
   -webkit-text-fill-color:#162c43!important;color-scheme:light;
-  font:inherit;line-height:1.5;
+  font:14px/1.5 Arial,sans-serif!important;line-height:1.5!important;
+  text-indent:0!important;letter-spacing:normal!important;opacity:1!important;
+  visibility:visible!important;-webkit-appearance:menulist;appearance:auto;
 }
-.guardian select option{color:#162c43!important;background:#fff!important}
+.guardian select option,#guardian-jail option,#guardian-operation option{color:#162c43!important;background:#fff!important;-webkit-text-fill-color:#162c43!important}
 .guardian-action-feedback{border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px;line-height:1.6}
 .guardian-action-feedback.is-ok{background:#e1f7ed;color:#145c38;border:1px solid #a9dec0}
 .guardian-action-feedback.is-error{background:#fff0ed;color:#8f2929;border:1px solid #efb1ab}

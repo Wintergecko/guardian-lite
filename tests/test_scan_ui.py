@@ -20,6 +20,8 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn('id="guardian-domain"', view)
         self.assertIn('guardian-domain-selection-value', view)
         self.assertIn('color:#162c43!important', css)
+        self.assertIn('#guardian-jail,#guardian-operation', css)
+        self.assertIn('class="guardian-native-select"', view)
         self.assertIn("domainSelect.addEventListener('change', showSelectedDomain)", js)
 
     def test_schedule_result_persists_and_returns_to_tab(self):
@@ -113,6 +115,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.5')
+        self.assertEqual(version, '0.28.6')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())

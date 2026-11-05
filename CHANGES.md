@@ -1,3 +1,6 @@
+## 0.28.6 – Sichtbare Fail2Ban-Auswahlfelder
+- Verstaerkt die Kontrastregeln fuer Jail- und Aktionsauswahl mit ID-spezifischen CSS-Regeln und expliziten Feldstilen, damit Plesk-Formularregeln den ausgewaehlten Text nicht unsichtbar machen.
+
 ## 0.28.5 – Fail2Ban-Sperren und Dropdown-Lesbarkeit
 - Zeigt aktuell von Fail2Ban gebannte IP-Adressen je Jail; begrenzt die sichtbare Liste und markiert fehlende oder gekuerzte Listen.
 - Ermoeglicht die Freigabe einzelner IPs aus dem passenden Jail. Permanentes Sperren nutzt die Plesk-Firewall mit 60-Sekunden-Rueckfall und bestaetigungspflichtigem Verbindungstest.
