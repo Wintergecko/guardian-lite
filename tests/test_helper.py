@@ -76,9 +76,13 @@ class GuardianTests(unittest.TestCase):
             {'scope': 'username', 'value': 'root', 'type': 'ban'},
             {'scope': 'ip', 'value': 'not-an-ip', 'type': 'ban'}]
         def fake_execute(args, timeout=5):
-            self.assertEqual(args[1:4], ['decisions', 'list', '--output'])
             self.assertEqual(timeout, 5)
-            return subprocess.CompletedProcess(args, 0, json.dumps(payload), '')
+            if args[1:3] == ['decisions', 'list']:
+                self.assertEqual(args[1:4], ['decisions', 'list', '--output'])
+                return subprocess.CompletedProcess(args, 0, json.dumps(payload), '')
+            if args[1:3] == ['is-active', 'crowdsec']:
+                return subprocess.CompletedProcess(args, 3, 'inactive\n', '')
+            return subprocess.CompletedProcess(args, 0, '', '')
         with mock.patch.object(helper, 'binary', return_value='/usr/bin/cscli'), \
              mock.patch.object(helper, 'execute', side_effect=fake_execute):
             result = helper.crowdsec_status()
