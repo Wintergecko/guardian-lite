@@ -68,6 +68,41 @@ class GuardianTests(unittest.TestCase):
         self.assertEqual(result['jails'][0]['banned_ips'], ['192.0.2.10', '2001:db8::10'])
         self.assertTrue(result['jails'][0]['banned_ips_available'])
 
+    def test_crowdsec_decisions_are_bounded_and_validated(self):
+        payload = [{
+            'scope': 'Ip', 'value': '198.51.100.23', 'type': 'ban',
+            'scenario': 'crowdsecurity/ssh-bf', 'origin': 'crowdsec', 'duration': '4h'},
+            {'scope': 'range', 'value': '2001:db8::/64', 'type': 'ban'},
+            {'scope': 'username', 'value': 'root', 'type': 'ban'},
+            {'scope': 'ip', 'value': 'not-an-ip', 'type': 'ban'}]
+        def fake_execute(args, timeout=5):
+            self.assertEqual(args[1:4], ['decisions', 'list', '--output'])
+            self.assertEqual(timeout, 5)
+            return subprocess.CompletedProcess(args, 0, json.dumps(payload), '')
+        with mock.patch.object(helper, 'binary', return_value='/usr/bin/cscli'), \
+             mock.patch.object(helper, 'execute', side_effect=fake_execute):
+            result = helper.crowdsec_status()
+        self.assertTrue(result['installed'])
+        self.assertTrue(result['available'])
+        self.assertEqual(result['decision_count'], 4)
+        self.assertEqual(len(result['decisions']), 2)
+        self.assertEqual(result['decisions'][0]['ip'], '198.51.100.23')
+        self.assertEqual(result['decisions'][1]['network'], '2001:db8::/64')
+        self.assertEqual(result['decisions'][1]['ip'], '')
+
+    def test_crowdsec_unavailable_or_invalid_json_is_not_reported_as_empty(self):
+        with mock.patch.object(helper, 'binary', return_value='/usr/bin/cscli'), \
+             mock.patch.object(helper, 'execute', return_value=subprocess.CompletedProcess(
+                 ['/usr/bin/cscli'], 1, '', 'permission denied')):
+            failed = helper.crowdsec_status()
+        with mock.patch.object(helper, 'binary', return_value='/usr/bin/cscli'), \
+             mock.patch.object(helper, 'execute', return_value=subprocess.CompletedProcess(
+                 ['/usr/bin/cscli'], 0, 'not json', '')):
+            invalid = helper.crowdsec_status()
+        self.assertTrue(failed['installed'])
+        self.assertFalse(failed['available'])
+        self.assertFalse(invalid['available'])
+
     def test_firewall_detects_installed_but_inactive_plesk_firewall(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings = pathlib.Path(tmp) / 'settings'

@@ -30,6 +30,7 @@ PLESK_BINARIES = ('/usr/sbin/plesk', '/usr/bin/plesk')
 MODSEC_LOG = pathlib.Path('/var/log/modsec_audit.log')
 CLAM_PATHS = ('/usr/bin/clamscan', '/usr/local/bin/clamscan', '/bin/clamscan')
 FAIL2BAN_PATHS = ('/usr/bin/fail2ban-client', '/usr/local/bin/fail2ban-client', '/bin/fail2ban-client')
+CROWDSEC_PATHS = ('/usr/bin/cscli', '/usr/local/bin/cscli', '/usr/sbin/cscli')
 SYSTEMCTL_PATHS = ('/usr/bin/systemctl', '/bin/systemctl')
 FIREWALL_SETTINGS = pathlib.Path('/usr/local/psa/bin/modules/firewall/settings')
 FIREWALL_UNITS = ('plesk-firewall', 'psa-firewall')
@@ -52,6 +53,7 @@ JOB_ID = re.compile(r'^[a-f0-9]{32}$')
 MAX_JAILS = 24
 MAX_FAIL2BAN_IPS_PER_JAIL = 100
 MAX_FAIL2BAN_IPS_TOTAL = 300
+MAX_CROWDSEC_DECISIONS = 50
 MAX_HISTORY = 30
 MAX_FINDINGS = 50
 MAX_SCAN_QUEUE = 100
@@ -229,6 +231,62 @@ def fail2ban_status():
                                 'banned_ips_available': ip_match is not None,
                                 'banned_ips_truncated': len(addresses) > len(visible_addresses)})
         result['banned_total'] += count
+    return result
+
+
+def crowdsec_status():
+    """Read bounded local CrowdSec decisions; Guardian never installs or enforces CrowdSec."""
+    cli = binary(CROWDSEC_PATHS)
+    result = {'installed': bool(cli), 'available': False, 'decision_count': 0,
+              'decisions': [], 'decisions_limited': False}
+    if cli is None:
+        return result
+    run = execute([cli, 'decisions', 'list', '--output', 'json', '--limit',
+                   str(MAX_CROWDSEC_DECISIONS), '--color', 'no'], timeout=5)
+    if run is None or run.returncode or len(run.stdout) > 256 * 1024:
+        return result
+    try:
+        decoded = json.loads(run.stdout)
+    except (ValueError, TypeError):
+        return result
+    if isinstance(decoded, dict):
+        decoded = decoded.get('decisions', decoded.get('items', []))
+    if not isinstance(decoded, list):
+        return result
+    result['available'] = True
+    result['decision_count'] = len(decoded)
+    result['decisions_limited'] = len(decoded) >= MAX_CROWDSEC_DECISIONS
+    for item in decoded[:MAX_CROWDSEC_DECISIONS]:
+        if not isinstance(item, dict):
+            continue
+        value = item.get('value', item.get('Value', ''))
+        scope = item.get('scope', item.get('Scope', 'ip'))
+        try:
+            if not isinstance(value, str) or len(value) > 80:
+                continue
+            if str(scope).lower() in ('ip', 'ipv4', 'ipv6'):
+                address = str(ipaddress.ip_address(value))
+                network = address
+            elif str(scope).lower() in ('range', 'cidr'):
+                network = str(ipaddress.ip_network(value, strict=False))
+                address = ''
+            else:
+                continue
+        except ValueError:
+            continue
+        decision_type = item.get('type', item.get('Type', 'ban'))
+        if not isinstance(decision_type, str):
+            decision_type = 'ban'
+        decision_type = decision_type[:32]
+        scenario = item.get('scenario', item.get('Scenario', item.get('reason', '')))
+        origin = item.get('origin', item.get('Origin', ''))
+        duration = item.get('duration', item.get('Duration', ''))
+        result['decisions'].append({
+            'network': network, 'ip': address,
+            'scope': str(scope)[:16], 'type': decision_type,
+            'scenario': scenario[:120] if isinstance(scenario, str) else '',
+            'origin': origin[:40] if isinstance(origin, str) else '',
+            'duration': duration[:40] if isinstance(duration, str) else ''})
     return result
 
 
@@ -2596,6 +2654,7 @@ def status():
     firewall.update(firewall_debug_status())
     return {'ok': True,
             'services': {'fail2ban': fail2ban_status(),
+                         'crowdsec': crowdsec_status(),
                          'clamav': {'installed': bool(binary(CLAM_PATHS)),
                                     'database_age_days': clam_database_age()},
                          'firewall': firewall, 'waflog': waf_status(),

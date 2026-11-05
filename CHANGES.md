@@ -1,3 +1,9 @@
+## 0.28.9 – Optionale CrowdSec-Entscheidungen
+- Zeigt aktive lokale CrowdSec-Entscheidungen begrenzt und validiert im Firewall-Bereich an.
+- Einzelne IP-Entscheidungen vom Typ `ban` koennen manuell in Guardians bestaetigten Plesk-Firewallablauf uebernommen werden; Bereiche bleiben reine Anzeige.
+- Installations-/Lizenzgrenzen dokumentiert; Guardian installiert weder CrowdSec noch einen Firewall-Bouncer und blockiert nicht automatisch.
+- Tests fuer JSON-Auswertung, ungueltige Eintraege, Fehlerstatus und UI-Verknuepfung hinzugefuegt.
+
 ## 0.28.8 – Dropdowns im gesamten Modul
 - Vereinheitlicht Kontrast, Schriftgroesse, Hoehe und Breite aller nativen Auswahlfelder in Hauptansicht und Verwaltung.
 - Laesst Auswahlfelder in Aktionszeilen responsiv umbrechen und kuerzt lange Firewall-Aktionsnamen.

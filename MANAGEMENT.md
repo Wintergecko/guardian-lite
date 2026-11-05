@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.8 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.9 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -16,6 +16,7 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 |---|---|
 | Scans, Historie, Quarantaene, Baselines/Reparatur | ClamAV `clamscan` und aktuelle Signaturen, z. B. unter Debian/Ubuntu `apt install clamav clamav-freshclam`; Signaturen mit `freshclam` aktualisieren. |
 | Fail2Ban-Anzeige und IP-Aktionen | Fail2Ban (`fail2ban-client`) und mindestens ein konfiguriertes Jail. Guardian erstellt keine Jails. |
+| CrowdSec-Entscheidungen | Optional CrowdSec (MIT) mit laufendem lokalen Dienst und lesbarem `cscli`; Guardian liest maximal 50 aktive Entscheidungen. Keine Installation/Registrierung, Community-Listen oder Bouncer durch Guardian. Einzelne IP-`ban`-Entscheidungen lassen sich in den Plesk-Bestaetigungsablauf uebernehmen. |
 | E-Mail-Warnungen | Lokaler Sendmail-kompatibler Mailtransport oder in Plesk funktionierender Mailtransport. |
 
 Fehlgeschlagene Malware-Warnungen werden bis zu 100 Eintraege root-privat gespeichert und beim stuendlichen Plesk-Task mit wachsendem Abstand bis zu sechs Mal erneut uebergeben. Der Administrator kann den Versuch manuell starten. Plesk zeigt Warteschlangenstand und letzten Transportfehler; eine erfolgreiche lokale Annahme belegt nicht die Zustellung zum Empfaenger.

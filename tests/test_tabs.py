@@ -73,11 +73,22 @@ class TabsTests(unittest.TestCase):
 
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.8')
+        self.assertEqual(version, '0.28.9')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('<span>v' + version + '</span>',
                       (ROOT / 'plib/views/scripts/index/index.phtml').read_text())
+
+    def test_optional_crowdsec_panel_is_read_only_and_uses_guardian_firewall_flow(self):
+        helper = (ROOT / 'sbin/guardian-helper').read_text()
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        self.assertIn("'crowdsec': crowdsec_status()", helper)
+        self.assertIn("'decisions', 'list', '--output', 'json'", helper)
+        self.assertIn('freie IDS-Entscheidungen', view)
+        self.assertIn("getActionUrl('index', 'ip')", view)
+        self.assertIn('name="operation" value="permanent"', view)
+        self.assertIn('Kostenlose CrowdSec-Installation fuer Linux', view)
+        self.assertIn('Guardian installiert keinen zweiten Firewall-Bouncer', view)
 
 
 if __name__ == '__main__':

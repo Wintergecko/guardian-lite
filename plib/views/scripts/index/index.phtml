@@ -2,6 +2,7 @@
 $esc = static function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); };
 $services = is_array($this->overview) ? $this->overview : [];
 $f2b = isset($services['fail2ban']) && is_array($services['fail2ban']) ? $services['fail2ban'] : [];
+$crowdsec = isset($services['crowdsec']) && is_array($services['crowdsec']) ? $services['crowdsec'] : [];
 $clam = isset($services['clamav']) && is_array($services['clamav']) ? $services['clamav'] : [];
 $fw = isset($services['firewall']) && is_array($services['firewall']) ? $services['firewall'] : [];
 $runtime = isset($services['php_runtime']) && is_array($services['php_runtime']) ? $services['php_runtime'] : [];
@@ -19,12 +20,12 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.8" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.9" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sicherheitsübersicht <span>v0.28.8</span></h1>
+      <h1>Sicherheitsübersicht <span>v0.28.9</span></h1>
       <p>Malware-Scans · Firewall · Incidents · Webschutz</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -306,6 +307,26 @@ $action = static function ($name) use ($esc) {
         </tbody></table></div>
         <?php if (empty($fw['inventory'])): ?><p class="guardian-small">Plesk hat keine Firewall-Regeln zurueckgegeben.</p><?php endif; ?>
       <?php endif; ?>
+      <h3>CrowdSec · freie IDS-Entscheidungen</h3>
+      <p>CrowdSec ist eine optionale MIT-lizenzierte Erkennung aus Server-Logs. Guardian zeigt lokale Sperrentscheidungen nur an und sperrt nichts automatisch. Einzelne IPv4-/IPv6-Adressen koennen nach Admin-Klick als Plesk-Regel vorbereitet werden; dann gelten der getrennte Verbindungstest und Plesks Rueckfall.</p>
+      <?php if (empty($crowdsec['installed'])): ?>
+        <p class="guardian-small">CrowdSec ist nicht installiert. <a href="https://docs.crowdsec.net/u/getting_started/installation/linux/" target="_blank" rel="noopener noreferrer">Kostenlose CrowdSec-Installation fuer Linux</a>. Guardian installiert keinen zweiten Firewall-Bouncer.</p>
+      <?php elseif (empty($crowdsec['available'])): ?>
+        <p class="guardian-alert">CrowdSec wurde gefunden, aber die lokale Entscheidungenliste ist nicht lesbar.</p>
+      <?php elseif (!empty($crowdsec['decisions'])): ?>
+        <div class="guardian-scroll"><table><thead><tr><th>IP / Netz</th><th>Typ</th><th>Erkennung</th><th>Quelle</th><th>Dauer</th><th>Aktion</th></tr></thead><tbody>
+        <?php foreach ($crowdsec['decisions'] as $decision): ?><tr>
+          <td><code><?= $esc($decision['network'] ?? '') ?></code></td><td><?= $esc($decision['type'] ?? '') ?></td>
+          <td><?= $esc($decision['scenario'] ?? '') ?></td><td><?= $esc($decision['origin'] ?? '') ?></td><td><?= $esc($decision['duration'] ?? '') ?></td><td>
+            <?php if (!empty($decision['ip']) && ($decision['type'] ?? '') === 'ban' && !empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?>
+              <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'ip')) ?>" onsubmit="return confirm('CrowdSec hat diese IP als ban markiert. Plesk-Firewallregel vorbereiten? Sie braucht danach einen getrennten Verbindungstest und eine Bestaetigung.');">
+                <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="ip" value="<?= $esc($decision['ip']) ?>" /><input type="hidden" name="operation" value="permanent" /><button class="guardian-small-button guardian-danger" type="submit">Plesk-Sperre vorbereiten</button>
+              </form>
+            <?php else: ?><span class="guardian-small">Nur Anzeige</span><?php endif; ?>
+          </td></tr><?php endforeach; ?>
+        </tbody></table></div>
+        <?php if (!empty($crowdsec['decisions_limited'])): ?><p class="guardian-small">Anzeige auf <?= (int)($crowdsec['decision_count'] ?? 0) ?> Eintraege begrenzt.</p><?php endif; ?>
+      <?php else: ?><p class="guardian-small">CrowdSec laeuft und meldet derzeit keine aktiven Sperrentscheidungen.</p><?php endif; ?>
       <details class="guardian-debug">
         <summary>Firewall-Debugausgabe · <?= !empty($fw['debug_enabled']) ? 'aktiv' : 'deaktiviert' ?></summary>
         <p>Bei Aktivierung protokolliert Guardian Plesk-CLI-Aufrufe mit Ergebniscode, Dauer und Ausgabegroesse. Die root-private Datei ist auf 256 KiB begrenzt; Regelargumente und Firewall-Ausgaben werden nicht gespeichert. Standard: deaktiviert.</p>
@@ -395,7 +416,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.8</h2>
+    <h2>GitHub-Updater · v0.28.9</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -585,6 +606,6 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.8" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.9" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>
