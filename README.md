@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.30 – Plesk Security (Linux)
+# Guardian Lite 0.28.31 – Plesk Security (Linux)
 
 Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf Linux, Python >=3.8. Beta: aktive Schutzfunktionen zuerst auf einem separaten Testserver pruefen. Keine offizielle Plesk-Software.
 
@@ -34,7 +34,7 @@ Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf L
 | WordPress-Core | Manuelle WordPress.org-Pruefsummenverifikation via WP-CLI und HTTPS | Root-eigene WP-CLI-Binary und ausgehendes HTTPS; keine Plugins, Themes oder automatische Reparatur |
 | WordPress.org-Plugins | Manuelle Pruefung mit WP-CLI, nicht abgedeckte Plugins werden als uebersprungen aufgefuehrt | Nur Plugins mit WordPress.org-Pruefsummen; kommerzielle/eigene Plugins bleiben ungeprueft; keine Reparatur |
 | WordPress.org-Themes | Read-only Dateivergleich mit HTTPS-Archiv der exakt installierten Version; Abweichungen als Incident | Nur passende WordPress.org-Versionen; keine signierte Herstellerpruefsumme, eigene/kommerzielle Themes ungeprueft, keine Reparatur |
-| CMS-Datenbank | WordPress-SQL-Heuristik; optionaler WordPress-Export via WP-CLI und statisch ausgelesene Joomla-/Magento-Konfiguration mit `mysqldump`; alle Exporte direkt per Pipe zu lokalen ClamAV-Signaturen | WP-CLI fuer WordPress; `mysqldump`/`mariadb-dump` fuer Joomla/Magento; nur statische PHP-Konfiguration und MySQL/MariaDB; keine MDS-Herstellersignaturen, Exportgrenze 512 MiB, keine Dumps gespeichert, Bereinigung oder Aenderungen |
+| CMS-Datenbank | WordPress-SQL-Heuristik; optionaler WordPress-Export via WP-CLI und statisch ausgelesene Joomla-/Magento-Konfiguration mit `mysqldump`; alle Exporte direkt per Pipe zu lokalen ClamAV-Signaturen | WP-CLI fuer WordPress; `mysqldump`/`mariadb-dump` fuer Joomla/Magento; nur statische PHP-Konfiguration und MySQL/MariaDB; keine Herstellersignaturen, Exportgrenze 512 MiB, keine Dumps gespeichert, Bereinigung oder Aenderungen |
 | GitHub-Updater | Oeffentliche Releases pruefen und nach Admin-Klick installieren | Passendes ZIP und GitHub-SHA-256 erforderlich; keine stillen Updates |
 
 Alle neuen aktiven Funktionen sind standardmaessig aus. Details zu Aktivierung, Grenzen, Voraussetzungen und Fehlerfaellen stehen in [MANAGEMENT.md](MANAGEMENT.md).
@@ -49,9 +49,9 @@ Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.28.30.zip
+plesk bin extension -i /root/guardian-lite-0.28.31.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.28.30.zip
+plesk bin extension -g /root/guardian-lite-0.28.31.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
@@ -78,7 +78,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.28.30
+python3 tools/build_release.py --tag v0.28.31
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.

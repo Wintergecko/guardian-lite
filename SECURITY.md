@@ -1,4 +1,4 @@
-# Guardian Lite v0.28.30 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.31 – Sicherheitsmodell und Grenzen
 
 ## 0.28.16 – Lokale IP-Länderkarte
 

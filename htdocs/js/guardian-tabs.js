@@ -29,10 +29,11 @@
     if (!root || root.querySelector('.guardian-menu-enhanced')) return;
     var sections = [
       {id: 'overview', label: 'Dashboard', items: [['guardian-dashboard-top', 'Angriffskarte & Status'], ['guardian-overview', 'Systemstatus']]},
-      {id: 'incidents', label: 'Incidents', items: [['guardian-waf-events', 'WAF-Ereignisse'],
+      {id: 'incidents', label: 'Incidents', items: [['guardian-waf-events', 'Events'],
         ['guardian-incidents', 'Meldungen & Audit-Log']]},
-      {id: 'firewall', label: 'Firewall', items: [['guardian-fail2ban', 'Fail2Ban'],
-        ['guardian-firewall', 'Plesk Firewall']]},
+      {id: 'firewall', label: 'Firewall', items: [['guardian-fail2ban', 'Alle Listen'],
+        ['guardian-firewall', 'Plesk-Regeln'], ['guardian-ip-rules', 'IP-Regeln'],
+        ['guardian-ports', 'Ports'], ['guardian-crowdsec', 'CrowdSec & Diagnose']]},
       {id: 'malware', label: 'Malware Scanner', items: [['guardian-scan-start', 'Scan starten'],
         ['guardian-scan-report', 'Letzter Bericht'], ['guardian-changes', 'Dateiänderungen'],
         ['guardian-monitor', 'Live-Dateiwache'], ['guardian-history', 'Scan-Historie'],

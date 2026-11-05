@@ -1,3 +1,11 @@
+## 0.28.31 – Firewall in Tabs, Ports und Events
+
+- Die Firewall ist in Tabs aufgeteilt: Alle Listen, Plesk-Regeln, IP-Regeln, Ports sowie CrowdSec & Diagnose.
+- Der Port-Bereich hat eine eigene Tabelle und ein eigenes Formular.
+- Über der Liste „Alle Listen“ zeigt ein Zähler Weiß- und Schwarz-Einträge.
+- Der Tab „WAF-Ereignisse“ heißt jetzt „Events“ und zeigt Anzahl, blockierte Ereignisse und die häufigsten Quell-IPs.
+- Die Herstellersignatur-Bezeichnung in der Dokumentation ist neutral als „Herstellersignaturen“ formuliert.
+
 ## 0.28.30 – Firewall als Listen-Übersicht
 
 - Der Tab „Firewall“ heißt jetzt „Alle Listen“ und zeigt die Sperren in Prioritätsreihenfolge: Weiß (Guardian-Allow-Regeln) schlägt Schwarz (Fail2Ban, CrowdSec, Deny-Regeln).

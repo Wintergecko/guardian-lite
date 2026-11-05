@@ -131,10 +131,13 @@ class ScanUiTests(unittest.TestCase):
     def test_menus_group_existing_guardian_features(self):
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
         management = (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
-        self.assertIn("['guardian-fail2ban', 'Fail2Ban']", js)
+        self.assertIn("['guardian-fail2ban', 'Alle Listen']", js)
         self.assertIn('class="guardian-select"', management)
-        self.assertIn("['guardian-firewall', 'Plesk Firewall']", js)
-        self.assertIn("['guardian-waf-events', 'WAF-Ereignisse']", js)
+        self.assertIn("['guardian-firewall', 'Plesk-Regeln']", js)
+        self.assertIn("['guardian-ip-rules', 'IP-Regeln']", js)
+        self.assertIn("['guardian-ports', 'Ports']", js)
+        self.assertIn("['guardian-crowdsec', 'CrowdSec & Diagnose']", js)
+        self.assertIn("['guardian-waf-events', 'Events']", js)
         self.assertIn("['guardian-incidents', 'Meldungen & Audit-Log']", js)
         self.assertIn("['guardian-malware-repair', 'Baselines & Wiederherstellung']", js)
         self.assertIn("['guardian-malware-ignore', 'Ignore List']", js)
@@ -167,6 +170,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.30')
+        self.assertEqual(version, '0.28.31')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())
