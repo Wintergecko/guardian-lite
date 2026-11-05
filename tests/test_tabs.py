@@ -64,9 +64,16 @@ class TabsTests(unittest.TestCase):
         self.assertIn('details:not([open])>ul{display:none!important}',
                       (ROOT / 'htdocs/css/guardian.css').read_text())
 
+    def test_navigation_animations_respect_reduced_motion(self):
+        css = (ROOT / 'htdocs/css/guardian.css').read_text()
+        self.assertIn('@keyframes guardian-menu-enter', css)
+        self.assertIn('@keyframes guardian-view-enter', css)
+        self.assertIn('@media(prefers-reduced-motion:reduce)', css)
+        self.assertIn('.guardian-module-view:not([hidden])', css)
+
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.3')
+        self.assertEqual(version, '0.28.4')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('<span>v' + version + '</span>',

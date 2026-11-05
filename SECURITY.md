@@ -1,4 +1,8 @@
-# Guardian Lite v0.28.3 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.4 – Sicherheitsmodell und Grenzen
+
+## 0.28.4 – Bewegungseinstellungen
+- Kurzanimationen sind dekorativ und veraendern keine Sicherheitsaktionen oder deren Bestaetigung.
+- `prefers-reduced-motion: reduce` deaktiviert Animationen und Navigationstransitionen.
 
 ## 0.28.3 – Modulnavigation
 - Statische Menue-Fallbacks verbergen Untermenues ausdruecklich, solange ihr `details`-Element geschlossen ist.

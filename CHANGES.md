@@ -1,3 +1,8 @@
+## 0.28.4 – Sanfte Navigationseffekte
+- Modulansichten und Dropdowns erscheinen mit kurzen Einblendungen und dezenter Bewegung.
+- Dropdown-Pfeile reagieren auf den Menuezustand; Menuepunkte erhalten eine kurze Hover-Bewegung.
+- Betriebssystemeinstellung fuer reduzierte Bewegung deaktiviert alle neu hinzugefuegten Animationen.
+
 ## 0.28.3 – Einzelansichten und kompaktere Navigation
 - Navigationspunkte zeigen jeweils nur das gewaehlte Modul; zusammengehoerige Funktionen bleiben unter Malware Scanner, Incidents, Firewall, Webschutz & PHP sowie Verwaltung gruppiert.
 - Malware-Scanstart und letzter Bericht sind eigene Ansichten; umfangreiche Modulbereiche muessen nicht mehr als lange Gesamtliste durchsucht werden.
