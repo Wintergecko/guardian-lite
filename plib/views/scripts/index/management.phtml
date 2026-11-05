@@ -62,6 +62,46 @@ $renderValue = function ($value, $depth = 0) use (&$renderValue, $esc, $resultLa
 $renderResult = static function ($title, $data) use ($esc, $renderValue) {
     return '<div class="guardian-result-block"><h4>' . $esc($title) . '</h4>' . $renderValue($data) . '</div>';
 };
+$jobStatusLabels = [
+    'queued' => ['Wartet', 'is-neutral'], 'starting' => ['Startet', 'is-warn'], 'running' => ['Laeuft', 'is-warn'],
+    'finished' => ['Abgeschlossen', 'is-good'], 'error' => ['Fehler', 'is-bad'], 'interrupted' => ['Unterbrochen', 'is-bad'],
+];
+$formatJobTime = static function ($value) {
+    if (!is_string($value) || $value === '') { return '–'; }
+    try {
+        return (new DateTimeImmutable($value))->setTimezone(new DateTimeZone(date_default_timezone_get()))->format('d.m.Y H:i:s');
+    } catch (Exception $e) {
+        return $value;
+    }
+};
+$renderJobs = static function (array $jobs) use ($esc, $jobStatusLabels, $formatJobTime) {
+    $jobs = array_values(array_filter($jobs, 'is_array'));
+    if (!$jobs) {
+        return '<p class="guardian-small">Noch keine Auftraege vorhanden. Gestartete Scans erscheinen hier mit Status.</p>';
+    }
+    $html = '<div class="guardian-scroll guardian-job-table"><table><thead><tr>'
+        . '<th>Domain</th><th>Ausloeser</th><th>Status</th><th>Start / Einreihung</th><th>Ende</th><th>Funde</th>'
+        . '</tr></thead><tbody>';
+    foreach (array_slice($jobs, 0, 10) as $job) {
+        $status = (string)($job['status'] ?? '');
+        [$label, $class] = $jobStatusLabels[$status] ?? [$status !== '' ? $status : 'Unbekannt', 'is-neutral'];
+        $active = in_array($status, ['queued', 'starting', 'running'], true);
+        $html .= '<tr><td>' . $esc($job['domain'] ?? '–') . '</td>'
+            . '<td>' . (($job['trigger'] ?? '') === 'schedule' ? 'Zeitplan' : 'Manuell') . '</td>'
+            . '<td><span class="guardian-state ' . $class . '">' . $esc($label) . '</span>';
+        if ($active) {
+            $html .= '<div class="guardian-busy is-active" role="progressbar" aria-label="Auftrag laeuft" data-guardian-scan-running>'
+                . '<div class="guardian-busy-track"><span></span></div></div>';
+        }
+        if (!empty($job['error'])) {
+            $html .= '<div class="guardian-small">' . $esc($job['error']) . '</div>';
+        }
+        $html .= '</td><td>' . $esc($formatJobTime($job['started_at'] ?? $job['queued_at'] ?? '')) . '</td>'
+            . '<td>' . $esc($formatJobTime($job['finished_at'] ?? '')) . '</td>'
+            . '<td>' . (isset($job['infected']) ? $esc((int)$job['infected']) : '–') . '</td></tr>';
+    }
+    return $html . '</tbody></table></div>';
+};
 $form = function ($operation, array $fields, $label, $confirmation = '') use ($esc) {
     echo '<form method="post" action="' . $esc(pm_Context::getActionUrl('index', 'manage')) . '"';
     if ($confirmation !== '') { echo ' onsubmit="return confirm(' . $esc(json_encode($confirmation)) . ');"'; }
@@ -336,7 +376,9 @@ $domainSelect = function () use ($esc) {
 
   </section>
   <section class="guardian-card guardian-subsection" id="guardian-cms-integrity">
-  <h3>Auftraege</h3><?= $renderResult('Auftragsstatus', $management['jobs'] ?? []) ?>
+  <h3>Auftragsstatus</h3>
+  <p class="guardian-small">Die 10 letzten Scans mit Status, Laufzeit und Funden. Laufende Auftraege aktualisieren sich automatisch.</p>
+  <?= $renderJobs(is_array($management['jobs'] ?? null) ? $management['jobs'] : []) ?>
   <h3>Cronjob-Sicherheitspruefung</h3>
   <p>Prueft uebliche System- und Benutzer-Cronpfade read-only mit Heuristiken und, wenn ClamAV verfuegbar ist, zusaetzlich mit lokalen Malware-Signaturen. Dateien werden fuer den Scan in ein privates temporaeres Verzeichnis kopiert und danach entfernt. Kein vollstaendiger Malware-Nachweis; Guardian aendert oder loescht keine Cronjobs. Gesamtlimit: 4 MiB und 45 Sekunden.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
