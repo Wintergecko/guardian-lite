@@ -111,6 +111,28 @@ $domainSelect = function () use ($esc) {
   <?php foreach ($management['backups'] ?? [] as $backup): if (($backup['kind'] ?? '') === 'waf') {
       $form('waf-restore', ['backup' => $backup['id'], 'sha256' => $management['waf_sha256'] ?? ''], 'WAF-Rollback ' . $backup['created_at'], 'Guardian-WAF-Regeln aus diesem Backup wiederherstellen und Apache neu laden?');
   } endforeach; ?>
+  <h4>OWASP Core Rule Set · signierte Regelbasis</h4>
+  <?php $crs = is_array($management['crs'] ?? null) ? $management['crs'] : []; ?>
+  <p>Guardian kann das offizielle CRS-4-Minimalpaket herunterladen und dessen GPG-Signatur gegen den fest gepinnten OWASP-Fingerprint pruefen. Bereitstellen aendert noch keine Apache-Konfiguration. Aktivierung erfolgt separat nach Apache-Konfigurationstest; zuerst Plesk-ModSecurity auf einer Testdomain im Erkennungsmodus pruefen. Benoetigt Apache ModSecurity v2, mod_unique_id und gnupg.</p>
+  <p>Status: <strong><?= !empty($crs['active_version']) ? 'CRS ' . $esc($crs['active_version']) . ' aktiv' : (!empty($crs['managed']) ? 'Guardian-Regeldatei erkannt, Zustand stimmt nicht ueberein' : 'nicht aktiv') ?></strong>
+    <?php if (!empty($crs['active_sha256'])): ?><br><small>Aktive Konfiguration SHA-256: <?= $esc($crs['active_sha256']) ?></small><?php endif; ?></p>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Offizielles OWASP-CRS-Release herunterladen und GPG-Signatur pruefen? Es wird nur bereitgestellt, noch nicht aktiviert.');">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="crs-stage">
+    <button>Neueste OWASP-CRS-Version signaturgeprueft bereitstellen</button>
+  </form>
+  <?php if (!empty($crs['staged']) && is_array($crs['staged'])): ?>
+    <div class="guardian-scroll"><table><thead><tr><th>Bereitgestellte Version</th><th>Dateien / Archiv-SHA-256</th><th>Aktion</th></tr></thead><tbody>
+      <?php foreach ($crs['staged'] as $release): if (!is_array($release) || !preg_match('/^4\.\d{1,3}\.\d{1,3}$/D', (string)($release['version'] ?? '')) || !preg_match('/^[a-f0-9]{64}$/D', (string)($release['archive_sha256'] ?? ''))) { continue; } ?>
+        <tr><td><?= $esc($release['version']) ?><br><small><?= $esc($release['staged_at'] ?? '') ?></small></td>
+          <td><?= (int)($release['files'] ?? 0) ?> Dateien<br><small><?= $esc($release['archive_sha256']) ?></small></td><td>
+            <?php if (($crs['active_version'] ?? '') !== $release['version']): $form('crs-activate', ['version' => $release['version'], 'sha256' => $release['archive_sha256']], 'CRS aktivieren', 'OWASP CRS ' . $release['version'] . ' als Apache-Include aktivieren? Vorher sicherstellen, dass ModSecurity aktiv ist und die Testdomain im Erkennungsmodus laeuft. Apache wird nur nach erfolgreichem Konfigurationstest neu geladen.'); ?><?php else: ?>Aktiv<?php endif; ?>
+          </td></tr>
+      <?php endforeach; ?>
+    </tbody></table></div>
+  <?php else: ?><p class="guardian-small">Noch keine signaturgepruefte CRS-Version bereitgestellt.</p><?php endif; ?>
+  <?php if (!empty($crs['active_version']) && !empty($crs['active_sha256'])): ?>
+    <?php $form('crs-rollback', ['sha256' => $crs['active_sha256']], 'OWASP CRS sicher zurueckrollen', 'Guardian-CRS-Include entfernen bzw. die vorherige Guardian-Konfiguration wiederherstellen? Apache wird nach Konfigurationstest neu geladen.'); ?>
+  <?php endif; ?>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" onsubmit="return confirm('Plesk-WAF-Modus dieser Domain aendern?');">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="waf-engine">
     <?php $domainSelect(); ?><select name="mode"><option value="detection-only">Nur Erkennung</option><option value="on">WAF aktiv</option><option value="off">WAF aus</option></select><button>WAF-Modus setzen</button>

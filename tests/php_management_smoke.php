@@ -193,6 +193,9 @@ $view->management = ['handlers' => [['version' => '8.3', 'sha256' => str_repeat(
     'backups' => [['kind' => 'php', 'identity' => '8.3', 'id' => str_repeat('b', 32), 'created_at' => 'test'],
                   ['kind' => 'waf', 'id' => str_repeat('c', 32), 'created_at' => 'test']],
     'waf_sha256' => str_repeat('d', 64),
+    'crs' => ['active_version' => '', 'active_sha256' => '', 'managed' => false,
+        'staged' => [['version' => '4.30.0', 'archive_sha256' => str_repeat('c', 64), 'files' => 42,
+            'staged_at' => '2026-11-05T00:00:00Z']]],
     'storage' => ['areas' => ['backups' => ['bytes' => 1, 'files' => 2], 'baselines' => ['bytes' => 3, 'files' => 1],
         'repair-journals' => ['bytes' => 0, 'files' => 0], 'jobs' => ['bytes' => 4, 'files' => 3]],
         'managed_bytes' => 8, 'baseline_quota_bytes' => 536870912, 'backup_quota_bytes' => 268435456,
@@ -220,6 +223,8 @@ $render = function () {
 $html = $render->call($view);
 checkManagement(strpos($html, 'guardian-management') !== false, 'Management partial did not render');
 checkManagement(strpos($html, 'Firewall-Debugausgabe aktivieren') !== false, 'Management tab lacks firewall debug toggle');
+checkManagement(strpos($html, 'OWASP Core Rule Set') !== false, 'Management tab lacks OWASP CRS controls');
+checkManagement(strpos($html, 'crs-activate') !== false, 'Management tab lacks staged CRS activation');
 checkManagement(strpos($html, 'name="operation" value="debug-on"') !== false, 'Management debug toggle uses wrong operation');
 checkManagement(strpos($html, 'name="csrf"') !== false, 'Management forms lack CSRF');
 checkManagement(strpos($html, '<script>test</script>') === false, 'Finding path was not escaped');

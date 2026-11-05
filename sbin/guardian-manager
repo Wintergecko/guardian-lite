@@ -19,6 +19,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import threading
 import time
@@ -40,6 +41,11 @@ HEX = re.compile(r'^[a-f0-9]{64}$')
 BASELINE_QUOTA_BYTES = 512 * 1024 * 1024
 BACKUP_QUOTA_BYTES = 256 * 1024 * 1024
 MAX_BACKUPS = 200
+CRS_GPG_FINGERPRINT = '36006F0E0BA167832158821138EEACA1AB8A6E72'
+CRS_ARCHIVE_MAX_BYTES = 8 * 1024 * 1024
+CRS_EXPANDED_MAX_BYTES = 16 * 1024 * 1024
+CRS_MAX_FILES = 250
+CRS_VERSION = re.compile(r'^4\.\d{1,3}\.\d{1,3}$')
 STORAGE_CACHE_TTL = 15
 WP_DB_SCAN_MAX_FINDINGS = 100
 WP_DB_SCAN_MAX_OUTPUT = 2 * 1024 * 1024
@@ -103,7 +109,7 @@ def prepare():
         raise ValueError('Root-Rechte erforderlich.')
     h.prepare_dir()
     h.ensure_private_dir(root())
-    for name in ('backups', 'baselines', 'repair-journals', 'jobs'):
+    for name in ('backups', 'baselines', 'repair-journals', 'jobs', 'crs-staged'):
         h.ensure_private_dir(root() / name)
 
 
@@ -506,9 +512,418 @@ def waf_restore(token, expected):
     return {'message': 'Guardian-WAF-Backup wiederhergestellt.', 'backup': backup['id']}
 
 
+def crs_root():
+    """CRS files live below Plesk's readable ModSecurity include directory."""
+    return waf_file().parent / 'guardian-crs'
+
+
+def crs_config_file():
+    return waf_file().parent / 'zz-guardian-crs.conf'
+
+
+def crs_fetch(url, limit):
+    parts = urllib.parse.urlsplit(url)
+    allowed_hosts = {'github.com', 'release-assets.githubusercontent.com',
+                     'objects.githubusercontent.com', 'coreruleset.org', 'www.coreruleset.org'}
+    if (parts.scheme != 'https' or parts.hostname not in allowed_hosts or parts.username or
+            parts.password or parts.port not in (None, 443) or not isinstance(limit, int) or limit < 1):
+        raise ValueError('Unsichere CRS-Downloadadresse.')
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), CRSRedirect())
+    current = url
+    for _ in range(5):
+        try:
+            request = urllib.request.Request(current, headers={'User-Agent': 'Guardian-Lite/0.28.12 OWASP-CRS'})
+            with opener.open(request, timeout=20) as response:
+                if response.getcode() != 200:
+                    raise ValueError('CRS-Download lieferte keinen HTTP-200-Status.')
+                raw = response.read(limit + 1)
+                if len(raw) > limit:
+                    raise ValueError('CRS-Download ueberschreitet das Groessenlimit.')
+                return raw
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (301, 302, 303, 307, 308) or not exc.headers.get('Location'):
+                raise ValueError('CRS-Download antwortet mit HTTP %d.' % exc.code) from None
+            next_url = urllib.parse.urljoin(current, exc.headers['Location'])
+            next_parts = urllib.parse.urlsplit(next_url)
+            if (next_parts.scheme != 'https' or next_parts.hostname not in allowed_hosts or
+                    next_parts.username or next_parts.password or next_parts.port not in (None, 443)):
+                raise ValueError('Unsichere Weiterleitung beim CRS-Download.')
+            current = next_url
+        except urllib.error.URLError:
+            raise ValueError('CRS-Download nicht erreichbar; ausgehendes HTTPS pruefen.') from None
+    raise ValueError('Zu viele CRS-Downloadweiterleitungen.')
+
+
+def crs_release_asset(release, version, suffix):
+    name = 'coreruleset-%s-minimal.tar.gz%s' % (version, suffix)
+    matches = [asset for asset in release.get('assets', [])
+               if isinstance(asset, dict) and asset.get('name') == name]
+    if len(matches) != 1:
+        raise ValueError('Das signierte OWASP-CRS-Release enthaelt nicht genau ein erwartetes Archiv/Signaturpaar.')
+    asset = matches[0]
+    expected_url = 'https://github.com/coreruleset/coreruleset/releases/download/v%s/%s' % (version, name)
+    if asset.get('browser_download_url') != expected_url or not isinstance(asset.get('size'), int):
+        raise ValueError('Ungueltige Asset-Metadaten im OWASP-CRS-Release.')
+    max_size = CRS_ARCHIVE_MAX_BYTES if suffix == '' else 32 * 1024
+    if not 1 <= asset['size'] <= max_size:
+        raise ValueError('OWASP-CRS-Releaseasset ueberschreitet das Groessenlimit.')
+    return expected_url
+
+
+def crs_signature_fingerprint(status_output):
+    """Return true only for a GPG VALIDSIG bound to the pinned CRS primary key."""
+    for line in status_output.splitlines():
+        if not line.startswith('[GNUPG:] VALIDSIG '):
+            continue
+        fields = line.split()
+        if len(fields) < 3:
+            continue
+        signing_fingerprint = fields[2].upper()
+        primary_fingerprint = fields[-1].upper() if len(fields) >= 12 else signing_fingerprint
+        if CRS_GPG_FINGERPRINT in (signing_fingerprint, primary_fingerprint):
+            return True
+    return False
+
+
+def crs_verify_signature(archive, signature, public_key):
+    gpg = h.binary(('/usr/bin/gpg', '/usr/local/bin/gpg'))
+    if not gpg:
+        raise ValueError('GPG fehlt. Fuer die CRS-Signaturpruefung gnupg installieren.')
+    with tempfile.TemporaryDirectory(prefix='guardian-crs-gpg-', dir=str(root())) as temp:
+        home = pathlib.Path(temp) / 'gnupg'
+        home.mkdir(mode=0o700)
+        key_path = pathlib.Path(temp) / 'crs-signing-key.asc'
+        key_path.write_bytes(public_key)
+        os.chmod(key_path, 0o600)
+        imported = subprocess.run([gpg, '--batch', '--homedir', str(home), '--import', str(key_path)],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, check=False,
+                                  env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C'})
+        if imported.returncode:
+            raise ValueError('Der heruntergeladene CRS-Signierschluessel ist ungueltig.')
+        listed = subprocess.run([gpg, '--batch', '--homedir', str(home), '--with-colons',
+                                 '--fingerprint', '--list-keys'], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=20, check=False,
+                                env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C'})
+        fingerprints = [line.split(':')[9].upper() for line in
+                        listed.stdout.decode('utf-8', 'replace').splitlines()
+                        if line.startswith('fpr:') and len(line.split(':')) > 9]
+        if listed.returncode or CRS_GPG_FINGERPRINT not in fingerprints:
+            raise ValueError('CRS-Signierschluessel stimmt nicht mit dem fest hinterlegten OWASP-Fingerprint ueberein.')
+        archive_path = pathlib.Path(temp) / 'coreruleset.tar.gz'
+        signature_path = pathlib.Path(temp) / 'coreruleset.tar.gz.asc'
+        archive_path.write_bytes(archive)
+        signature_path.write_bytes(signature)
+        verified = subprocess.run([gpg, '--batch', '--homedir', str(home), '--status-fd', '1',
+                                   '--verify', str(signature_path), str(archive_path)],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, check=False,
+                                  env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C'})
+        status = verified.stdout.decode('utf-8', 'replace')
+        if verified.returncode or not crs_signature_fingerprint(status):
+            raise ValueError('OWASP-CRS-Archiv hat keine gueltige Signatur des festgelegten Projektschluessels.')
+    return CRS_GPG_FINGERPRINT
+
+
+def crs_archive_members(archive, version):
+    prefix = 'coreruleset-' + version + '/'
+    files = {}
+    expanded = 0
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive), mode='r:gz') as bundle:
+            members = bundle.getmembers()
+            if len(members) > CRS_MAX_FILES + 20:
+                raise ValueError('CRS-Archiv enthaelt zu viele Eintraege.')
+            for member in members:
+                raw_name = member.name
+                name = raw_name.rstrip('/')
+                if name == 'coreruleset-' + version and member.isdir():
+                    continue
+                raw_parts = raw_name.split('/')
+                path_parts = raw_parts[:-1] if raw_name.endswith('/') else raw_parts
+                if (not name.startswith(prefix) or '\\' in name or '\x00' in name or
+                        any(part in ('', '.', '..') for part in path_parts)):
+                    raise ValueError('CRS-Archiv enthaelt einen unsicheren Dateipfad.')
+                relative = name[len(prefix):]
+                if not relative or len(relative) > 240:
+                    raise ValueError('CRS-Archivpfad ist ungueltig oder zu lang.')
+                if member.isdir():
+                    continue
+                if not member.isfile() or member.size < 0 or member.size > 4 * 1024 * 1024:
+                    raise ValueError('CRS-Archiv enthaelt Links, Sonderdateien oder uebergrosse Dateien.')
+                expanded += member.size
+                if expanded > CRS_EXPANDED_MAX_BYTES or len(files) >= CRS_MAX_FILES:
+                    raise ValueError('CRS-Archiv ueberschreitet die Extraktionslimits.')
+                source = bundle.extractfile(member)
+                if source is None:
+                    raise ValueError('CRS-Archivdatei ist unvollstaendig.')
+                data = source.read(member.size + 1)
+                if len(data) != member.size:
+                    raise ValueError('CRS-Archivdatei hat eine unerwartete Groesse.')
+                if relative in files:
+                    raise ValueError('CRS-Archiv enthaelt doppelte Dateipfade.')
+                files[relative] = data
+    except (tarfile.TarError, OSError, EOFError) as exc:
+        raise ValueError('OWASP-CRS-Archiv ist beschaedigt oder kein gueltiges gzip-tar.') from exc
+    required = ('crs-setup.conf.example', 'rules/REQUEST-901-INITIALIZATION.conf',
+                'rules/REQUEST-949-BLOCKING-EVALUATION.conf', 'LICENSE')
+    if any(name not in files for name in required) or len([name for name in files if name.startswith('rules/') and name.endswith('.conf')]) < 30:
+        raise ValueError('OWASP-CRS-Archiv ist unvollstaendig oder entspricht nicht dem erwarteten Paketformat.')
+    files['crs-setup.conf'] = files['crs-setup.conf.example']
+    return files
+
+
+def crs_staged_manifest(version):
+    if not CRS_VERSION.fullmatch(version):
+        raise ValueError('Ungueltige OWASP-CRS-Version.')
+    manifest = h.read_json(root() / 'crs-staged' / (version + '.json'), {})
+    if (not isinstance(manifest, dict) or manifest.get('version') != version or
+            not HEX.fullmatch(str(manifest.get('archive_sha256', ''))) or
+            manifest.get('signer_fingerprint') != CRS_GPG_FINGERPRINT):
+        raise ValueError('Verifizierter OWASP-CRS-Stagingnachweis fehlt oder ist ungueltig.')
+    return manifest
+
+
+def crs_release_directory(version, manifest=None):
+    if not CRS_VERSION.fullmatch(version):
+        raise ValueError('Ungueltige OWASP-CRS-Version.')
+    base = crs_root()
+    if base.is_symlink():
+        raise ValueError('OWASP-CRS-Verzeichnis darf kein Symlink sein.')
+    path = base / version
+    try:
+        base_stat = base.lstat()
+        if not stat.S_ISDIR(base_stat.st_mode) or base_stat.st_uid != 0 or base_stat.st_mode & 0o022:
+            raise ValueError('Unsichere Rechte am OWASP-CRS-Verzeichnis.')
+        path_stat = path.lstat()
+        if not stat.S_ISDIR(path_stat.st_mode) or path_stat.st_uid != 0 or path_stat.st_mode & 0o022:
+            raise ValueError('Unsichere Rechte am gestagten CRS-Paket.')
+    except FileNotFoundError:
+        raise ValueError('Diese OWASP-CRS-Version wurde noch nicht signaturgeprueft bereitgestellt.')
+    manifest = manifest or crs_staged_manifest(version)
+    expected_files = manifest.get('files')
+    if not isinstance(expected_files, dict) or len(expected_files) > CRS_MAX_FILES + 1:
+        raise ValueError('CRS-Dateiliste im Stagingnachweis ist ungueltig.')
+    actual_files = set()
+    for parent, directories, filenames in os.walk(path, followlinks=False):
+        parent_path = pathlib.Path(parent)
+        for name in directories:
+            info = (parent_path / name).lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+                raise ValueError('Unsicheres CRS-Verzeichnis oder Symlink erkannt.')
+        for name in filenames:
+            actual_files.add((parent_path / name).relative_to(path).as_posix())
+    if actual_files != set(expected_files):
+        raise ValueError('CRS-Verzeichnis enthaelt fehlende oder nicht signaturgepruefte Dateien.')
+    for name, expected in expected_files.items():
+        rel = pathlib.PurePosixPath(name)
+        if (not isinstance(name, str) or not name or rel.is_absolute() or
+                any(part in ('', '.', '..') for part in rel.parts) or not HEX.fullmatch(str(expected))):
+            raise ValueError('Ungueltiger Pfad im CRS-Stagingnachweis.')
+        file_path = path.joinpath(*rel.parts)
+        current = path
+        for part in rel.parts[:-1]:
+            current = current / part
+            info = current.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+                raise ValueError('Unsicheres CRS-Unterverzeichnis erkannt.')
+        data, _ = checked(file_path, 4 * 1024 * 1024)
+        if digest(data) != expected:
+            raise ValueError('Gestagte CRS-Datei wurde nach Signaturpruefung veraendert.')
+    return path
+
+
+def crs_stage_latest():
+    release = api_json('https://api.github.com/repos/coreruleset/coreruleset/releases/latest',
+                       {'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'})
+    tag = release.get('tag_name', '')
+    version = tag[1:] if isinstance(tag, str) and tag.startswith('v') else ''
+    if (not CRS_VERSION.fullmatch(version) or release.get('draft') or release.get('prerelease') or
+            release.get('html_url') != 'https://github.com/coreruleset/coreruleset/releases/tag/v' + version):
+        raise ValueError('GitHub lieferte kein stabiles, gueltiges OWASP-CRS-v4-Release.')
+    archive_url = crs_release_asset(release, version, '')
+    signature_url = crs_release_asset(release, version, '.asc')
+    archive = crs_fetch(archive_url, CRS_ARCHIVE_MAX_BYTES)
+    signature = crs_fetch(signature_url, 32 * 1024)
+    public_key = crs_fetch('https://coreruleset.org/security.asc', 128 * 1024)
+    signer = crs_verify_signature(archive, signature, public_key)
+    files = crs_archive_members(archive, version)
+    base = crs_root()
+    base.mkdir(mode=0o755, parents=True, exist_ok=True)
+    base_stat = base.lstat()
+    if not stat.S_ISDIR(base_stat.st_mode) or base_stat.st_uid != 0 or base_stat.st_mode & 0o022:
+        raise ValueError('Unsichere Rechte am OWASP-CRS-Verzeichnis.')
+    target = base / version
+    manifest_path = root() / 'crs-staged' / (version + '.json')
+    if target.exists() or target.is_symlink():
+        existing = crs_staged_manifest(version)
+        crs_release_directory(version, existing)
+        return {'message': 'Diese OWASP-CRS-Version ist bereits signaturgeprueft bereitgestellt.',
+                'version': version, 'archive_sha256': existing['archive_sha256'], 'files': len(existing['files'])}
+    staging = base / ('.guardian-staging-' + uuid.uuid4().hex)
+    staging.mkdir(mode=0o755)
+    try:
+        for name, data in files.items():
+            rel = pathlib.PurePosixPath(name)
+            destination = staging.joinpath(*rel.parts)
+            destination.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+            if destination.parent.is_symlink():
+                raise ValueError('Symlink im CRS-Stagingpfad erkannt.')
+            fd = os.open(str(destination), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+            with os.fdopen(fd, 'wb') as output:
+                os.fchown(output.fileno(), 0, 0)
+                os.fchmod(output.fileno(), 0o644)
+                output.write(data)
+                output.flush()
+                os.fsync(output.fileno())
+        os.chown(staging, 0, 0)
+        os.chmod(staging, 0o755)
+        os.replace(str(staging), str(target))
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    file_hashes = {name: digest(data) for name, data in files.items()}
+    manifest = {'version': version, 'archive_sha256': digest(archive),
+                'signer_fingerprint': signer, 'files': file_hashes,
+                'staged_at': h.utc_now()}
+    h.write_json(manifest_path, manifest)
+    return {'message': 'OWASP CRS wurde geladen, mit fest gepinntem GPG-Schluessel verifiziert und nur bereitgestellt; noch nicht aktiv.',
+            'version': version, 'archive_sha256': manifest['archive_sha256'],
+            'signer_fingerprint': signer, 'files': len(files)}
+
+
+def crs_status(settings=None):
+    settings = settings if isinstance(settings, dict) else config()
+    state = settings.get('crs', {}) if isinstance(settings.get('crs', {}), dict) else {}
+    try:
+        active_path = crs_config_file()
+        active_data = checked(active_path, 256 * 1024)[0] if active_path.exists() else b''
+        active_hash = digest(active_data)
+        active_owned = active_data.startswith(b'# Guardian managed OWASP CRS\n')
+    except (OSError, ValueError):
+        active_hash, active_owned = '', False
+    staged = []
+    for path in sorted((root() / 'crs-staged').glob('4.*.json'), reverse=True)[:8]:
+        item = h.read_json(path, {})
+        if isinstance(item, dict) and CRS_VERSION.fullmatch(str(item.get('version', ''))):
+            staged.append({'version': item['version'], 'archive_sha256': item.get('archive_sha256', ''),
+                           'files': len(item.get('files', {})) if isinstance(item.get('files'), dict) else 0,
+                           'staged_at': item.get('staged_at', '')})
+    return {'active_version': state.get('version', '') if active_owned and state.get('active_sha256') == active_hash else '',
+            'active_sha256': active_hash, 'managed': active_owned, 'staged': staged,
+            'rollback_available': bool(state.get('rollback'))}
+
+
+def crs_activate(version, expected_archive_sha256):
+    if not HEX.fullmatch(expected_archive_sha256):
+        raise ValueError('CRS-Archivfingerprint fehlt.')
+    manifest = crs_staged_manifest(version)
+    if manifest.get('archive_sha256') != expected_archive_sha256:
+        raise ValueError('Bereitgestelltes CRS-Archiv hat sich geaendert; Ansicht neu laden.')
+    release_dir = crs_release_directory(version, manifest)
+    ctl = h.binary(('/usr/sbin/apache2ctl', '/usr/sbin/apachectl', '/usr/bin/apachectl'))
+    systemctl = h.binary(h.SYSTEMCTL_PATHS)
+    if not ctl or not systemctl:
+        raise ValueError('Apache-Konfigurationstest oder systemctl fehlt.')
+    modules = run([ctl, '-M'], timeout=12)
+    if 'security2_module' not in modules:
+        raise ValueError('Apache ModSecurity v2 ist nicht geladen; CRS bleibt inaktiv.')
+    if 'unique_id_module' not in modules:
+        raise ValueError('Apache mod_unique_id fehlt; CRS bleibt inaktiv.')
+    path = crs_config_file()
+    current = checked(path, 256 * 1024)[0] if path.exists() else b''
+    if current and not current.startswith(b'# Guardian managed OWASP CRS\n'):
+        raise ValueError('Vorhandene CRS-Konfigurationsdatei wird nicht ueberschrieben.')
+    settings = config()
+    previous_state = settings.get('crs', {}) if isinstance(settings.get('crs', {}), dict) else {}
+    if previous_state.get('version') == version and previous_state.get('active_sha256') == digest(current):
+        raise ValueError('Diese CRS-Version ist bereits aktiv.')
+    rollback = {'file_existed': bool(current), 'previous_state': previous_state}
+    if current:
+        rollback['backup'] = make_backup('waf-crs', str(previous_state.get('version', '')), path)['id']
+    else:
+        rollback['backup'] = ''
+    directives = ('# Guardian managed OWASP CRS\n'
+                  '# Signature verified: %s\n'
+                  'Include %s\n'
+                  'Include %s\n') % (
+                      CRS_GPG_FINGERPRINT, release_dir / 'crs-setup.conf', release_dir / 'rules/*.conf')
+    rendered = directives.encode('ascii')
+    atomic(path, rendered, 0o644)
+    try:
+        run([ctl, '-t'], timeout=30)
+        includes = run([ctl, '-t', '-D', 'DUMP_INCLUDES'], timeout=30)
+        if str(path) not in includes:
+            raise ValueError('Guardian-CRS-Include wird von Apache nicht geladen; CRS bleibt inaktiv.')
+        run([systemctl, 'reload', 'apache2' if 'apache2' in str(ctl) else 'httpd'], timeout=30)
+    except Exception:
+        if current:
+            atomic(path, current, 0o644)
+        else:
+            path.unlink(missing_ok=True)
+        try:
+            run([ctl, '-t'], timeout=30)
+        except Exception:
+            pass
+        raise
+    settings['crs'] = {'version': version, 'archive_sha256': expected_archive_sha256,
+                       'active_sha256': digest(rendered), 'rollback': rollback,
+                       'updated_at': h.utc_now()}
+    save_config(settings)
+    h.incident_log('operator', 'warning', detail='OWASP CRS %s aktiviert (Konfigurationstest und Apache-Reload erfolgreich)' % version)
+    return {'message': 'OWASP CRS %s aktiviert; Apache-Konfigurationstest und Reload erfolgreich. Webrequests im DetectionOnly-Modus pruefen.' % version,
+            'version': version, 'archive_sha256': expected_archive_sha256,
+            'backup': rollback['backup']}
+
+
+def crs_rollback(expected):
+    if not HEX.fullmatch(expected):
+        raise ValueError('CRS-Konfigurationsfingerprint ungueltig.')
+    path = crs_config_file()
+    current, _ = checked(path, 256 * 1024)
+    settings = config()
+    state = settings.get('crs', {}) if isinstance(settings.get('crs', {}), dict) else {}
+    rollback = state.get('rollback', {}) if isinstance(state.get('rollback', {}), dict) else {}
+    if (not current.startswith(b'# Guardian managed OWASP CRS\n') or digest(current) != expected or
+            state.get('active_sha256') != expected or not rollback):
+        raise ValueError('Aktive CRS-Konfiguration wurde geaendert oder besitzt keinen sicheren Rollback.')
+    ctl = h.binary(('/usr/sbin/apache2ctl', '/usr/sbin/apachectl', '/usr/bin/apachectl'))
+    systemctl = h.binary(h.SYSTEMCTL_PATHS)
+    if not ctl or not systemctl:
+        raise ValueError('Apache-Konfigurationstest oder systemctl fehlt.')
+    backup_data = b''
+    if rollback.get('file_existed') is True:
+        token = rollback.get('backup', '')
+        if not re.fullmatch(r'[a-f0-9]{32}', token):
+            raise ValueError('Vorherige CRS-Regeldatei hat kein gueltiges Backup.')
+        meta = h.read_json(root() / 'backups' / (token + '.json'), {})
+        backup_data, _ = checked(root() / 'backups' / (token + '.bin'), 256 * 1024)
+        if meta.get('kind') != 'waf-crs' or digest(backup_data) != meta.get('sha256') or not backup_data.startswith(b'# Guardian managed OWASP CRS\n'):
+            raise ValueError('Vorheriges CRS-Backup ist ungueltig.')
+    atomic(path, backup_data, 0o644) if backup_data else path.unlink()
+    try:
+        run([ctl, '-t'], timeout=30)
+        run([systemctl, 'reload', 'apache2' if 'apache2' in str(ctl) else 'httpd'], timeout=30)
+    except Exception:
+        atomic(path, current, 0o644)
+        raise
+    previous_state = rollback.get('previous_state', {})
+    if isinstance(previous_state, dict) and previous_state.get('version'):
+        settings['crs'] = previous_state
+    else:
+        settings.pop('crs', None)
+    save_config(settings)
+    h.incident_log('operator', 'warning', detail='OWASP CRS zur vorherigen Guardian-Konfiguration zurueckgerollt')
+    return {'message': 'OWASP-CRS-Konfiguration zurueckgerollt; Apache-Konfigurationstest und Reload erfolgreich.'}
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         raise ValueError('API-Weiterleitung abgelehnt.')
+
+
+class CRSRedirect(urllib.request.HTTPRedirectHandler):
+    """Expose redirects as HTTPError so crs_fetch can validate every hop."""
+    def redirect_request(self, *args, **kwargs):
+        return None
 
 
 def api_json(url, headers, data=None):
@@ -2181,7 +2596,7 @@ def wordpress_theme_fetch(url, max_bytes):
     parts = urllib.parse.urlsplit(url)
     if not allowed_target(url) or parts.fragment:
         raise ValueError('Theme-Pruefung akzeptiert nur HTTPS von WordPress.org.')
-    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.11 theme-integrity'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Guardian-Lite/0.28.12 theme-integrity'})
     class AllowedRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             if not allowed_target(newurl):
@@ -2535,6 +2950,7 @@ def public_status():
     if not isinstance(theme_checksum_reports, dict):
         theme_checksum_reports = {}
     return {'ok': True, 'handlers': handlers, 'backups': backups, 'waf': settings.get('waf', {}),
+            'crs': crs_status(settings),
             'waf_sha256': waf_sha, 'cloud': {'consent': bool(settings.get('cloud_consent')),
             'abuseipdb_configured': bool(settings.get('abuseipdb_key')),
             'turnstile_configured': bool(settings.get('turnstile_sitekey') and settings.get('turnstile_secret'))},
@@ -2563,6 +2979,9 @@ def public_status():
 def uninstall_cleanup():
     # Removing an extension must undo its own active policies, not leave orphaned guards.
     settings = config()
+    crs_state = settings.get('crs', {}) if isinstance(settings.get('crs', {}), dict) else {}
+    if crs_state.get('version'):
+        raise ValueError('OWASP CRS ist aktiv. Zuerst im Tab Verwaltung sicher zurueckrollen, dann deinstallieren.')
     firewall = h.firewall_rules()
     if h.FIREWALL_SETTINGS.is_file() and not firewall.get('available'):
         raise ValueError('Plesk Firewall ist installiert, aber Guardian kann ihre Regeln nicht sicher auflisten. Deinstallation abgebrochen, damit keine Guardian-Regel als verwaiste Sperre bestehen bleibt.')
@@ -2659,6 +3078,8 @@ def run_job(token):
                     result = baseline(item['domain'], True)
                 finally:
                     os.close(scanlock)
+            elif item['action'] == 'crs-stage':
+                result = crs_stage_latest()
             else:
                 raise ValueError('Unbekannter Hintergrundauftrag.')
             item.update(status='finished', result=result)
@@ -2692,6 +3113,12 @@ def dispatch(request):
             return waf_engine(request.get('domain', ''), request.get('mode', ''))
         if action == 'waf-restore':
             return waf_restore(request.get('backup', ''), request.get('sha256', ''))
+        if action == 'crs-stage':
+            return start_job({'action': action})
+        if action == 'crs-activate':
+            return crs_activate(request.get('version', ''), request.get('sha256', ''))
+        if action == 'crs-rollback':
+            return crs_rollback(request.get('sha256', ''))
         if action == 'cloud-save':
             return cloud_save(request)
         if action in ('ignore-add', 'ignore-remove'):

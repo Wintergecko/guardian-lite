@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.28.11';
+    private const GUARDIAN_VERSION = '0.28.12';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -96,7 +96,7 @@ class IndexController extends pm_Controller_Action
                     'global-ignore-add', 'global-ignore-remove', 'baseline-create', 'baseline-delete',
                     'repair-set', 'repair', 'repair-rollback', 'bots-set', 'diagnostics', 'cron-audit',
                     'wp-checksum-audit', 'wp-plugin-checksum-audit', 'wp-db-scan', 'wp-db-clamav-scan', 'cms-db-clamav-scan', 'backup-delete'];
-        $allowed[] = 'wp-theme-checksum-audit';
+        $allowed = array_merge($allowed, ['wp-theme-checksum-audit', 'crs-stage', 'crs-activate', 'crs-rollback']);
         if (!in_array($operation, $allowed, true)) {
             throw new pm_Exception('Unbekannte Verwaltungsaktion.');
         }

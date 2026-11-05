@@ -118,8 +118,20 @@ class ScanUiTests(unittest.TestCase):
         self.assertIn("getActionUrl('index', 'alerts-retry')", view)
         self.assertIn("$this->verifyPost();", controller.split('public function alertsRetryAction()', 1)[1])
 
+    def test_owasp_crs_controls_require_explicit_stage_activation_and_rollback(self):
+        view = (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
+        controller = (ROOT / 'plib/controllers/IndexController.php').read_text()
+        manager = (ROOT / 'sbin/guardian-manager').read_text()
+        self.assertIn('OWASP Core Rule Set', view)
+        self.assertIn('crs-stage', controller)
+        self.assertIn('crs-activate', controller)
+        self.assertIn('crs-rollback', controller)
+        self.assertIn('crs_verify_signature', manager)
+        self.assertIn('crs_activation_configuration_failure_restores_previous_file',
+                      (ROOT / 'tests/test_management.py').read_text())
+
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.11')
+        self.assertEqual(version, '0.28.12')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())

@@ -1,4 +1,12 @@
-# Guardian Lite v0.28.11 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.12 – Sicherheitsmodell und Grenzen
+
+## 0.28.12 – Signaturgepruefte OWASP-CRS-Verwaltung
+
+- Guardian laedt nur das offizielle CRS-v4-Minimalarchiv aus GitHub-Releases und prueft die OpenPGP-Signatur gegen den fest im Code gepinnten OWASP-Projektschluessel-Fingerprint. Die HTTPS-Keyquelle allein gilt nicht als Vertrauensanker.
+- Archivgroesse, Dateianzahl, expandierte Groesse und Pfade sind begrenzt. Symlinks, Hardlinks, Sonderdateien, doppelte Pfade, unerwartete Dateien und veraenderte Dateien werden vor Aktivierung abgelehnt.
+- Bereitstellen aktiviert keine Regeln. Aktivierung schreibt nur Guardians eigene Apache-Include-Datei, testet Syntax und Include-Aufloesung und laedt Apache erst danach neu; Fehler stellen die vorigen Bytes wieder her.
+- Vorherige Guardian-Includes werden mit Digest gesichert und koennen nur bei unveraendertem aktuellen Digest zurueckgerollt werden. Aktives CRS verhindert eine Deinstallation, die Regeln zuruecklassen koennte.
+- CRS-Regeln koennen legitime Anfragen blockieren. Guardian setzt keinen Plesk-WAF-Modus; Betreiber muessen eine Testdomain im Erkennungsmodus pruefen und den gewuenschten Blockmodus separat konfigurieren.
 
 ## 0.28.4 – Bewegungseinstellungen
 - Kurzanimationen sind dekorativ und veraendern keine Sicherheitsaktionen oder deren Bestaetigung.

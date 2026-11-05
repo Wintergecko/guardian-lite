@@ -8,6 +8,7 @@ import os
 import pathlib
 import subprocess
 import shlex
+import tarfile
 import tempfile
 import time
 import unittest
@@ -54,6 +55,86 @@ class ManagementTests(unittest.TestCase):
                   'epoch': time.time(), 'started_at': m.h.utc_now(), 'findings': []}
         m.h.save_job(report)
         return report
+
+    def crs_archive(self, version='4.30.0', extra=None):
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode='w:gz') as archive:
+            def add(name, data=b'x', kind=None):
+                info = tarfile.TarInfo('coreruleset-' + version + '/' + name)
+                info.size = len(data)
+                if kind == 'symlink':
+                    info.type = tarfile.SYMTYPE
+                    info.linkname = '../../outside'
+                archive.addfile(info, io.BytesIO(data) if info.isfile() else None)
+            add('crs-setup.conf.example', b'# setup')
+            add('rules/REQUEST-901-INITIALIZATION.conf')
+            add('rules/REQUEST-949-BLOCKING-EVALUATION.conf')
+            add('LICENSE', b'license')
+            for number in range(30):
+                add('rules/REQUEST-%03d-TEST.conf' % number)
+            if extra:
+                add(*extra)
+        return buffer.getvalue()
+
+    def test_crs_archive_validation_and_pinned_signature(self):
+        files = m.crs_archive_members(self.crs_archive(), '4.30.0')
+        self.assertEqual(files['crs-setup.conf'], b'# setup')
+        self.assertEqual(len([name for name in files if name.startswith('rules/')]), 32)
+        with self.assertRaisesRegex(ValueError, 'Pfad'):
+            m.crs_archive_members(self.crs_archive(extra=('../escape.conf', b'bad')), '4.30.0')
+        with self.assertRaisesRegex(ValueError, 'Links'):
+            m.crs_archive_members(self.crs_archive(extra=('rules/evil.conf', b'', 'symlink')), '4.30.0')
+        valid = '[GNUPG:] VALIDSIG %s 20261105 1 0 4 0 1 10 00 %s\n' % (
+            'a' * 40, m.CRS_GPG_FINGERPRINT)
+        self.assertTrue(m.crs_signature_fingerprint(valid))
+        self.assertFalse(m.crs_signature_fingerprint(valid.replace(m.CRS_GPG_FINGERPRINT, 'b' * 40)))
+
+    def test_crs_release_asset_requires_exact_github_asset(self):
+        name = 'coreruleset-4.30.0-minimal.tar.gz'
+        release = {'assets': [{'name': name,
+                               'browser_download_url': 'https://github.com/coreruleset/coreruleset/releases/download/v4.30.0/' + name,
+                               'size': 100}]}
+        self.assertTrue(m.crs_release_asset(release, '4.30.0', '').endswith(name))
+        release['assets'][0]['browser_download_url'] = 'https://attacker.invalid/' + name
+        with self.assertRaisesRegex(ValueError, 'Metadaten'):
+            m.crs_release_asset(release, '4.30.0', '')
+
+    def test_crs_activation_configuration_failure_restores_previous_file(self):
+        version = '4.30.0'
+        release_root = self.base / 'crs-root'
+        release_dir = release_root / version
+        release_dir.mkdir(parents=True)
+        source_files = {'crs-setup.conf': b'# setup\n'}
+        for number in range(30):
+            source_files['rules/REQUEST-%03d-TEST.conf' % number] = b'# rule\n'
+        for name, data in source_files.items():
+            target = release_dir.joinpath(*pathlib.PurePosixPath(name).parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        archive_sha = 'a' * 64
+        m.h.write_json(m.root() / 'crs-staged' / (version + '.json'), {
+            'version': version, 'archive_sha256': archive_sha,
+            'signer_fingerprint': m.CRS_GPG_FINGERPRINT,
+            'files': {name: m.digest(data) for name, data in source_files.items()}})
+        config_path = self.base / 'zz-guardian-crs.conf'
+        previous = b'# Guardian managed OWASP CRS\n# old version\n'
+        config_path.write_bytes(previous)
+        def binary(candidates):
+            return '/usr/sbin/apache2ctl' if '/usr/sbin/apache2ctl' in candidates else '/usr/bin/systemctl'
+        def run(argv, **kwargs):
+            if argv[-1] == '-M':
+                return ' security2_module (shared)\n unique_id_module (shared)'
+            if argv[-1] == '-t':
+                raise ValueError('Apache-Konfigurationstest fehlgeschlagen')
+            return ''
+        with mock.patch.object(m, 'crs_root', return_value=release_root), \
+             mock.patch.object(m, 'crs_config_file', return_value=config_path), \
+             mock.patch.object(m.h, 'binary', side_effect=binary), \
+             mock.patch.object(m, 'run', side_effect=run):
+            with self.assertRaisesRegex(ValueError, 'Konfigurationstest'):
+                m.crs_activate(version, archive_sha)
+        self.assertEqual(config_path.read_bytes(), previous)
+        self.assertNotIn('crs', m.config())
 
     def malware_report(self, data=b'BAD'):
         self.write_site('index.php', data)

@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.11 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.12 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -26,6 +26,7 @@ Fehlgeschlagene Malware-Warnungen werden bis zu 100 Eintraege root-privat gespei
 
 Die kommentierte Guardian-IP-Ausnahmeliste verhindert nur kuenftige Guardian-eigene Sperren fuer eingetragene Netze. Sie ist keine Freischaltung in der Plesk-, Betriebssystem- oder Provider-Firewall.
 | Guardian-WAF/HTTP-Limits | Apache-ModSecurity **v2**, geladenes `mod_unique_id`, `SecDataDir` und Plesk-WAF fuer wirksames Blockieren. In Plesk ueber Installer/Komponentenverwaltung einrichten und danach Guardian-Vorschau pruefen. |
+| OWASP CRS | `gnupg` (GPG-Signaturpruefung), Apache ModSecurity v2 und geladenes `mod_unique_id`. CRS wird signaturgeprueft bereitgestellt, erst nach ausdruecklicher Admin-Aktion eingebunden und vor Reload per Apache-Konfigurationstest geprueft. |
 | Snuffleupagus | Pro verwaltetem Plesk-PHP-FPM-Handler das passende Entwicklerpaket, z. B. `plesk-php83-dev`, ausserdem `git`, `gcc`, `make`, `autoconf`; Handler-Version 8.0–8.5. Beispiel Debian/Ubuntu: `apt install plesk-php83-dev git gcc make autoconf`. |
 | Turnstile-Bot-Challenge | PHP-cURL fuer genau den ausgewählten Plesk-PHP-Handler, HTTPS-Ausgangsverbindung und eigene Cloudflare-Site-/Secret-Keys. Kein globales `php-curl`, falls die Domain einen separaten Plesk-Handler nutzt. |
 | WordPress-Core-Pruefsummen | WP-CLI als root-eigene Datei unter `/usr/local/bin/wp`, `/usr/bin/wp` oder `/bin/wp`; systemweite PHP-CLI und ausgehender HTTPS-Zugriff auf WordPress.org. Guardian installiert WP-CLI nicht. |
@@ -99,6 +100,14 @@ Guardian verwaltet ausschliesslich `zz-guardian.conf` in einem unterstuetzten Ap
 - **WAF-Rollback** stellt ein Guardian-Backup nach Fingerprint-Pruefung wieder her.
 
 Apache muss ModSecurity v2 und `mod_unique_id` geladen haben und ein vorhandenes `SecDataDir` verwenden. Guardian prueft Syntax und tatsaechliche Einbindung, bevor Apache neu geladen wird. Die Plesk-WAF muss fuer wirksames Blockieren eingeschaltet sein. Der Domain-WAF-Modus wird ueber die dokumentierte Plesk-CLI gesetzt.
+
+### OWASP Core Rule Set verwalten
+
+Unter **Verwaltung → WAF und HTTP-Botlimits** kann das aktuelle OWASP CRS-v4-Minimalrelease signaturgeprueft bereitgestellt werden. Dafuer muss `gnupg` installiert sein (Debian: `apt install gnupg`). Guardian laedt ausschliesslich das offizielle Releasearchiv samt `.asc`-Signatur und akzeptiert nur den im Programm fest hinterlegten CRS-Fingerprint `36006F0E0BA167832158821138EEACA1AB8A6E72`; die HTTPS-Keydatei allein wird nicht als Vertrauensanker verwendet. Archivgroesse, Inhaltsmenge und Pfade sind begrenzt; Links und Sonderdateien werden abgelehnt.
+
+Bereitstellen aktiviert nichts. Die separate Aktivierung bindet `crs-setup.conf` und die CRS-Regeln global in Apache ein. Sie verlangt geladenes ModSecurity v2 und `mod_unique_id`, prueft Apache-Konfiguration und aufgeloesten Include-Pfad und fuehrt erst danach einen Apache-Reload aus. Bei einem Fehler schreibt Guardian die vorherige Guardian-Include-Datei wieder zurueck. Vorhandene Guardian-Konfigurationen werden mit Fingerprint-gebundenem Backup gesichert; ein manueller Rollback stellt sie nach erneutem Syntaxcheck wieder her. Fremde gleichnamige Dateien werden nicht ueberschrieben.
+
+Das CRS kann legitime Anfragen blockieren und seine Aktivierung ist **serverweit**. Zuerst in einer Testumgebung und mit Plesk-ModSecurity im Erkennungsmodus auswerten, insbesondere Login, APIs, Uploads, Checkout und groessere POST-Anfragen. Guardian aendert den Plesk-WAF-Modus nicht und aktiviert keine Blockierung automatisch. Ein aktives CRS muss vor der Erweiterungsdeinstallation ueber Guardian zurueckgerollt werden.
 
 Hinter CDN/Reverse-Proxy muss die vertrauenswuerdige Real-IP-Konfiguration bereits stimmen. Guardian interpretiert keine ungeprueften Forwarded-Header. NAT-Nutzer teilen sich ein Limit. Andere Aliase als der gewaehlte Hostname, statische NGINX-Antworten und volumetrische DDoS-Angriffe koennen ausserhalb dieser Apache-Regeln liegen.
 

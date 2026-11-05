@@ -1,3 +1,9 @@
+## 0.28.12 – OWASP CRS-Verwaltung
+- Stellt offizielle OWASP CRS-v4-Minimal-Releases nach Downloadbegrenzung, Archivpfadpruefung und GPG-Signaturpruefung gegen einen fest gepinnten Fingerprint bereit.
+- Verlangt separate Admin-Aktivierung; Apache-ModSecurity-/mod_unique_id-Erkennung, Konfigurationstest, Include-Pruefung, Reload und transaktionaler Rollback schuetzen vor fehlerhaften Includes.
+- Zeigt bereitgestellte Versionen, aktive Konfiguration und Rollback im Verwaltungstab; aktive CRS-Konfiguration blockiert die Deinstallation bis zum Rollback.
+- Fuegt Tests fuer manipulierte Archive/Assets, Fingerprintbindung und Konfigurationsfehler mit Wiederherstellung hinzu.
+
 ## 0.28.11 – Incident-Zeitreihe und Filter
 - Erweitert die Incident-Ansicht auf bis zu 200 gespeicherte Ereignisse.
 - Fuegt 24-Stunden-, 7-Tage- und 30-Tage-Filter, Kennzahlen, Ereignisverlauf sowie Suche und Schweregradfilter hinzu.
