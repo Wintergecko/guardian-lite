@@ -358,3 +358,16 @@ Auf dem Testserver erfolgreich fuer PHP 8.4 geprueft: sechs dedizierte FPM-Diens
 - UI zeigt den Geltungsbereich, erlaubt gezieltes Hinzufuegen/Entfernen und warnt vor domainuebergreifender Wirkung; Grenze 2.000 globale Eintraege.
 - Tests pruefen Wirkung auf unterschiedliche Domains, sichtbare Treffer, Reparatursperre, Ruecknahme und Controller-Routing.
 
+## 0.28.16 – Dashboard und Sperr-IP-Länderkarte
+
+- Ergaenzt eine Imunify-inspirierte Dashboard-Kopfkarte mit Statusring, lokalen Schutzkomponenten und kompakten Kennzahlen.
+- Zeigt aktuelle sichtbare Fail2Ban-/CrowdSec-Sperren und blockierte WAF-IP-Adressen in einer interaktiven Laenderkarte sowie als Rangliste.
+- Geolokalisierung laeuft ausschliesslich lokal mit DB-IP Lite; die Karte kennzeichnet ungefaehre Standorte und begrenzte Ereignisquellen.
+- Verwendet eine vereinfachte Natural-Earth-Weltkarte und nennt die Datenquellen direkt im Dashboard.
+
+## 0.28.17 – Lesbare Ergebnisse und Kontrast
+
+- Ersetzt rohe JSON-Ausgaben in Reputation, Diagnose, Schutzverwaltung und CMS-Pruefungen durch strukturierte, begrenzte Ergebnisfelder.
+- Erhoeht Textkontraste in Hinweisen, Statusfeldern, Ergebnisdetails und Protokollbloecken.
+- Entfernt die Opazitaetsanimation beim Seitenwechsel, damit Inhalte sofort vollstaendig lesbar sind.
+

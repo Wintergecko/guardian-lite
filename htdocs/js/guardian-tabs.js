@@ -3,9 +3,32 @@
   'use strict';
   function init() {
     var root = document.querySelector('.guardian');
+    document.querySelectorAll('.guardian-world-map').forEach(function (mapObject) {
+      function paintMap() {
+        try {
+          var counts = JSON.parse(mapObject.getAttribute('data-country-counts') || '{}');
+          var mapDocument = mapObject.contentDocument;
+          if (!mapDocument) return;
+          var maximum = Math.max.apply(Math, Object.keys(counts).map(function (key) { return Number(counts[key]) || 0; }).concat([1]));
+          Object.keys(counts).forEach(function (code) {
+            var country = mapDocument.querySelector('[data-country="' + code.replace(/[^A-Z]/gi, '') + '"]');
+            if (!country) return;
+            var count = Number(counts[code]) || 0;
+            var strength = Math.max(0.28, Math.min(1, count / maximum));
+            country.style.fill = 'rgb(' + Math.round(112 - strength * 72) + ',' + Math.round(155 - strength * 91) + ',' + Math.round(224 - strength * 50) + ')';
+            country.style.stroke = '#ffffff';
+            country.style.strokeWidth = '0.55';
+            country.setAttribute('data-blocked-count', String(count));
+            country.setAttribute('title', code + ': ' + count + ' gesperrte IP' + (count === 1 ? '' : 's'));
+          });
+        } catch (e) { /* Map enhancement is optional; the country list remains available. */ }
+      }
+      mapObject.addEventListener('load', paintMap);
+      try { if (mapObject.contentDocument && mapObject.contentDocument.readyState === 'complete') paintMap(); } catch (e) { /* object may still be loading */ }
+    });
     if (!root || root.querySelector('.guardian-menu-enhanced')) return;
     var sections = [
-      {id: 'overview', label: 'Dashboard', items: [['guardian-overview', 'Systemstatus']]},
+      {id: 'overview', label: 'Dashboard', items: [['guardian-dashboard-top', 'Angriffskarte & Status'], ['guardian-overview', 'Systemstatus']]},
       {id: 'incidents', label: 'Incidents', items: [['guardian-waf-events', 'WAF-Ereignisse'],
         ['guardian-incidents', 'Meldungen & Audit-Log']]},
       {id: 'firewall', label: 'Firewall', items: [['guardian-fail2ban', 'Fail2Ban'],

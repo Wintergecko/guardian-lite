@@ -1,4 +1,11 @@
-# Guardian Lite v0.28.15 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.17 – Sicherheitsmodell und Grenzen
+
+## 0.28.16 – Lokale IP-Länderkarte
+
+- Dashboard aggregiert bis zu 500 sichtbare öffentliche IP-Adressen aus aktiven Fail2Ban-/CrowdSec-Entscheidungen und aktuellen blockierten WAF-Logeinträgen nach Land.
+- Geolokalisierung erfolgt lokal mit DB-IP Lite; die IP-Adressen werden dafür nicht an einen externen Dienst gesendet.
+- DB-IP Lite ist eine reduzierte, monatlich aktualisierte Country-Datenbank unter CC BY 4.0. Die Karte zeigt ungefähre IP-Standorte; VPN, Proxy, Mobilfunk und Anycast können den Provider-Standort statt des Besuchers anzeigen.
+- Die Karte ist optional. Ohne Datenbank oder Python-Modul bleibt der Rest des Dashboards verfügbar.
 
 ## 0.28.15 – Aufbewahrungsbereinigung
 

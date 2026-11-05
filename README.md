@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.15 – Plesk Security (Linux)
+# Guardian Lite 0.28.17 – Plesk Security (Linux)
 
 Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf Linux, Python >=3.8. Beta: aktive Schutzfunktionen zuerst auf einem separaten Testserver pruefen. Keine offizielle Plesk-/Imunify360-Software.
 
@@ -17,6 +17,7 @@ Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf L
 | CrowdSec | Optionaler, begrenzter Read-only-Status lokaler Entscheidungen und AppSec-Bereitschaft; einzelne `ban`-IP-Adressen koennen per Admin-Klick im bestehenden Plesk-Firewall-Bestaetigungsablauf vorbereitet werden | CrowdSec (MIT) und Apache-Bouncer muessen separat installiert werden; Guardian installiert/aktiviert sie nicht und misst keinen echten HTTP-Schutz |
 | Plesk Firewall | Guardian-IP-Sperren mit TTL, kommentierte Guardian-IP-Ausnahmen und manuelle Plesk-Portfreigaben/-sperren fuer einzelne Quell-IPs; Plesk-60-Sekunden-Rollback und explizite Bestaetigung | Plesk Firewall installiert/aktiv; IP-Ausnahmen schuetzen nur vor kuenftigen Guardian-Sperren und heben keine Plesk-/Provider-Regeln auf; globale Port-Policies und Greylist fehlen |
 | Firewall-Dashboard | Zaehler, Suche/Filter und Anzeige von Plesks Erlauben-/Sperrregeln; globaler Modul-Debugschalter fuer Helper, Verwaltungsmanager, Updater und Firewall, standardmaessig aus | Greylist, Bot-Challenge, externe Reputation und Aenderung fremder Regeln fehlen; nur Plesk-native Regeln werden gelesen |
+| Dashboard-Karte fuer Sperr-IP-Adressen | Laenderkarte fuer aktuell sichtbare Fail2Ban-/CrowdSec-IP-Sperren und die letzten blockierten WAF-IP-Adressen; rein lokale DB-IP-Lite-Abfrage | Benötigt `python3-maxminddb` und die monatlich aktualisierte DB-IP-Lite Country MMDB unter `/var/lib/guardian-lite/management/dbip-country-lite.mmdb`; Listen sind begrenzt und Geo-IP-Standorte ungenau, insbesondere bei VPN/Proxy/Anycast |
 | WAF | ModSecurity-Loganzeige, Domain-Modus und Guardian-Regelverwaltung | Apache ModSecurity v2, `mod_unique_id` und `SecDataDir` erforderlich; Plesk-WAF muss fuer Blockieren aktiv sein |
 | OWASP Core Rule Set | Signaturgeprueftes CRS-v4-Minimalpaket bereitstellen, getrennt aktivieren und zur vorherigen Guardian-Konfiguration zurueckrollen | `gnupg`, Apache ModSecurity v2 und `mod_unique_id`; Aktivierung ist eine globale Apache-Regelquelle und muss zuerst im Erkennungsmodus auf einer Testdomain geprueft werden; Guardian schaltet keine Plesk-WAF-Modi um |
 | HTTP-Botlimits | Guardian-Regeln fuer einen Zielhost, Vorschau, Erkennen/429-Sperren, Rollback | Korrekte Real-IP-Konfiguration; kein Netzwerk-DDoS-Schutz |
@@ -42,15 +43,15 @@ Der systematische Funktionsabgleich und die Plesk-spezifische Umsetzungsreihenfo
 
 ## Installation und Upgrade
 
-Nur bei Bedarf installieren: ClamAV samt aktuellen Signaturen (`apt install clamav clamav-freshclam`), Fail2Ban (`fail2ban`), sowie die passenden Plesk-Komponenten fuer ModSecurity und PHP-Handler. Plesk-Firewall ist optional und wird getrennt aktiviert. Vollstaendigen Snapshot und externe Backups vorhalten. Die Paketliste je Funktion steht in [MANAGEMENT.md](MANAGEMENT.md).
+Nur bei Bedarf installieren: ClamAV samt aktuellen Signaturen (`apt install clamav clamav-freshclam`), Fail2Ban (`fail2ban`), sowie die passenden Plesk-Komponenten fuer ModSecurity und PHP-Handler. Fuer die Laenderkarte kommen `python3-maxminddb` und die kostenfreie DB-IP-Lite Country MMDB hinzu; die Datenbank wird getrennt monatlich bereitgestellt. Plesk-Firewall ist optional und wird getrennt aktiviert. Vollstaendigen Snapshot und externe Backups vorhalten. Die Paketliste je Funktion steht in [MANAGEMENT.md](MANAGEMENT.md).
 
 Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/guardian-lite/releases). Als root installieren oder aktualisieren:
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.28.15.zip
+plesk bin extension -i /root/guardian-lite-0.28.17.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.28.15.zip
+plesk bin extension -g /root/guardian-lite-0.28.17.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
@@ -77,7 +78,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.28.15
+python3 tools/build_release.py --tag v0.28.17
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.

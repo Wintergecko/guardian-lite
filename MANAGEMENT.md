@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.15 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.17 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -23,8 +23,17 @@ Fehlgeschlagene Malware-Warnungen werden bis zu 100 Eintraege root-privat gespei
 | Dateiwache | Linux `inotify` (Kernel-Schnittstelle); kein zusaetzliches PHP-Modul. |
 | Plesk-Firewall-Status | Optionale Plesk-Erweiterung **Firewall**. Die Installation allein aktiviert keine Regeln. Die Erweiterung ist keine Voraussetzung fuer andere Guardian-Funktionen. |
 | Plesk-Firewall-Regeln | Plesk Firewall muss installiert und aktiv sein; Plesk-CLI `plesk ext firewall` und der dazugehoerige Dienst muessen funktionieren. `firewalld` darf laut Plesk nicht parallel betrieben werden. |
+| Dashboard-Laenderkarte | Debian 13/Ubuntu: `python3-maxminddb` plus DB-IP-Lite Country MMDB unter `/var/lib/guardian-lite/management/dbip-country-lite.mmdb`; die Datei wird monatlich aktualisiert und ist nicht im Erweiterungs-ZIP enthalten. |
 
 Die kommentierte Guardian-IP-Ausnahmeliste verhindert nur kuenftige Guardian-eigene Sperren fuer eingetragene Netze. Sie ist keine Freischaltung in der Plesk-, Betriebssystem- oder Provider-Firewall.
+
+### Laenderkarte gesperrter IP-Adressen
+
+Das Dashboard zeigt lokal geortete, eindeutige oeffentliche IPs aus den begrenzt gelesenen aktiven Fail2Ban-/CrowdSec-Sperren und den letzten blockierten WAF-Auditereignissen. Es gibt keine GeoIP-Netzwerkanfrage und keine vollstaendige Langzeitstatistik. CrowdSec-CIDR-Netze werden nicht in einzelne IP-Adressen expandiert. Die Anzeige ist auf maximal 500 IPs, die WAF-Logauswertung auf den vorhandenen kleinen aktuellen Logausschnitt begrenzt.
+
+Auf Debian/Ubuntu benoetigt die optionale Karte `python3-maxminddb` und die aktuelle [DB-IP Lite Country MMDB](https://db-ip.com/db/lite.php) im genannten Pfad. DB-IP Lite ist kostenfrei unter CC BY 4.0, hat weniger Genauigkeit/Abdeckung als kommerzielle Daten und muss monatlich aktualisiert werden. Nach dem Abruf die GZIP-Datei testen, entpackte MMDB-Datei root-eigen mit Modus `0600` ablegen und eine root-private `dbip-country-lite.license` mit mindestens `Provider: DB-IP Lite`, `Release: YYYY-MM` und `License: CC BY 4.0` daneben ablegen. Auf der Downloadseite steht die aktuelle Datei. `python3-maxminddb` kann mit `python3 -c 'import maxminddb; print(maxminddb.open_database("/var/lib/guardian-lite/management/dbip-country-lite.mmdb").metadata())'` geprueft werden. Ist Datei, Metadaten oder Modul nicht verfuegbar, zeigt Guardian einen Hinweis statt einer leeren oder erfundenen Karte.
+
+Die Laenderzuordnung ist nur ein ungefaehrer Netzstandort: VPNs, Forward-Proxies, Mobilfunk und Anycast-/CDN-Adressen koennen den Standort des Providers ausweisen. Sie identifiziert keine Person oder den tatsaechlichen Besucherort. Der Dashboard-Fuss nennt DB-IP und Natural Earth.
 | Guardian-WAF/HTTP-Limits | Apache-ModSecurity **v2**, geladenes `mod_unique_id`, `SecDataDir` und Plesk-WAF fuer wirksames Blockieren. In Plesk ueber Installer/Komponentenverwaltung einrichten und danach Guardian-Vorschau pruefen. |
 | OWASP CRS | `gnupg` (GPG-Signaturpruefung), Apache ModSecurity v2 und geladenes `mod_unique_id`. CRS wird signaturgeprueft bereitgestellt, erst nach ausdruecklicher Admin-Aktion eingebunden und vor Reload per Apache-Konfigurationstest geprueft. |
 | Snuffleupagus | Pro verwaltetem Plesk-PHP-FPM-Handler das passende Entwicklerpaket, z. B. `plesk-php83-dev`, ausserdem `git`, `gcc`, `make`, `autoconf`; Handler-Version 8.0–8.5. Beispiel Debian/Ubuntu: `apt install plesk-php83-dev git gcc make autoconf`. |

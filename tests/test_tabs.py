@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 class TabsTests(unittest.TestCase):
     def test_panel_landmarks_exist(self):
         view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
-        ids = ['guardian-overview', 'guardian-scan', 'guardian-shield',
+        ids = ['guardian-overview', 'guardian-dashboard-top', 'guardian-scan', 'guardian-shield',
                'guardian-scan-start', 'guardian-scan-report',
                'guardian-network', 'guardian-runtime', 'guardian-webshield',
                'guardian-waf-events', 'guardian-fail2ban', 'guardian-firewall',
@@ -43,6 +43,12 @@ class TabsTests(unittest.TestCase):
         self.assertLess(view.index('>Incidents</summary>'), view.index('>Firewall</summary>'))
         self.assertIn('guardian-menu-settings', view)
         self.assertIn('guardian-brand', view)
+        self.assertIn('data-country-counts=', view)
+        self.assertIn('guardian-world-map', view)
+        self.assertIn('IP-Geolokalisierung: DB-IP', view)
+        self.assertIn("['guardian-dashboard-top', 'Angriffskarte & Status']", js)
+        self.assertIn('data-country="' + 'US' + '"',
+                      (ROOT / 'htdocs/img/world-map.svg').read_text())
         self.assertIn('id="guardian-firewall"', view)
         self.assertIn('href="#guardian-malware-repair"', view)
         self.assertIn('id="guardian-malware-repair"',
@@ -73,7 +79,7 @@ class TabsTests(unittest.TestCase):
 
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.15')
+        self.assertEqual(version, '0.28.17')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('<span>v' + version + '</span>',
@@ -82,7 +88,7 @@ class TabsTests(unittest.TestCase):
     def test_optional_crowdsec_panel_is_read_only_and_uses_guardian_firewall_flow(self):
         helper = (ROOT / 'sbin/guardian-helper').read_text()
         view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
-        self.assertIn("'crowdsec': crowdsec_status()", helper)
+        self.assertIn("'crowdsec': crowdsec", helper)
         self.assertIn("'decisions', 'list', '--output', 'json'", helper)
         self.assertIn('freie IDS-Entscheidungen', view)
         self.assertIn("getActionUrl('index', 'ip')", view)
@@ -105,6 +111,30 @@ class TabsTests(unittest.TestCase):
         self.assertIn("'incidents': incident_list(200)", helper)
         self.assertIn('Date.parse(row.getAttribute(\'data-incident-time\')', js)
         self.assertIn('aria-label', js)
+
+    def test_dashboard_has_local_blocked_ip_map_protection_ring_and_trend(self):
+        view = (ROOT / 'plib/views/scripts/index/index.phtml').read_text()
+        helper = (ROOT / 'sbin/guardian-helper').read_text()
+        svg = (ROOT / 'htdocs/img/world-map.svg').read_text()
+        self.assertIn('guardian-protection-ring', view)
+        self.assertIn('guardian-world-map', view)
+        self.assertIn('guardian-dashboard-chart', view)
+        self.assertIn("'blocked_ip_geo': blocked_ip_geo_status(fail2ban, crowdsec, waflog)", helper)
+        self.assertIn('MAX_GEOIP_ADDRESSES = 500', helper)
+        self.assertIn("add(address, 'fail2ban')", helper)
+        self.assertIn("add(event.get('ip', ''), 'waf')", helper)
+        self.assertIn('data-country="US"', svg)
+
+    def test_management_results_are_readable_and_page_transition_does_not_fade(self):
+        management = (ROOT / 'plib/views/scripts/index/management.phtml').read_text()
+        css = (ROOT / 'htdocs/css/guardian.css').read_text()
+        for title in ('Letzte Reputationsergebnisse', 'Diagnoseergebnis',
+                      'Ergebnis der WordPress-Core-Pruefung', 'Ergebnis des CMS-Datenbank-Scans'):
+            self.assertIn(title, management)
+        self.assertNotIn('<pre><?= $esc(json_encode(', management)
+        self.assertIn('.guardian-result-grid', css)
+        self.assertIn('.guardian pre{color:#1e293b!important', css)
+        self.assertNotIn('@keyframes guardian-view-enter{from{opacity:0', css)
 
 
 if __name__ == '__main__':

@@ -7,6 +7,61 @@ $crowdsecAppsec = is_array($crowdsec['appsec'] ?? null) ? $crowdsec['appsec'] : 
 $storage = is_array($management['storage'] ?? null) ? $management['storage'] : [];
 $storageAreas = is_array($storage['areas'] ?? null) ? $storage['areas'] : [];
 $formatBytes = static function ($bytes) { return number_format(max(0, (float)$bytes) / 1048576, 2, ',', '.') . ' MiB'; };
+$resultLabels = [
+    'ok' => 'Ergebnis', 'status' => 'Status', 'operation' => 'Aktion', 'ip' => 'IP-Adresse',
+    'score' => 'Reputationswert (0–100)', 'reports' => 'Meldungen', 'checked_at' => 'Geprueft am',
+    'country' => 'Landescode', 'message' => 'Meldung', 'error' => 'Fehler', 'domain' => 'Domain',
+    'path' => 'Pfad', 'enabled' => 'Aktiv', 'available' => 'Verfuegbar', 'count' => 'Anzahl',
+    'created_at' => 'Erstellt am', 'updated_at' => 'Aktualisiert am', 'mode' => 'Modus',
+    'version' => 'Version', 'result' => 'Ergebnis', 'details' => 'Details', 'reason' => 'Grund',
+    'warnings' => 'Warnungen', 'findings' => 'Befunde', 'files' => 'Dateien', 'bytes' => 'Groesse',
+    'source' => 'Quelle', 'provider' => 'Anbieter', 'release' => 'Release', 'id' => 'Kennung',
+    'type' => 'Typ', 'severity' => 'Stufe', 'message_id' => 'Meldungskennung',
+    'database' => 'Datenbank', 'database_age_days' => 'Alter der Signaturen (Tage)',
+    'score_percent' => 'Reputationswert', 'report_count' => 'Meldungen',
+];
+$resultLabel = static function ($key) use ($resultLabels) {
+    $key = (string)$key;
+    if (isset($resultLabels[$key])) { return $resultLabels[$key]; }
+    $key = preg_replace('/([a-z])([A-Z])/', '$1 $2', $key);
+    return ucfirst(str_replace(['_', '-'], ' ', $key));
+};
+$renderValue = null;
+$renderValue = function ($value, $depth = 0) use (&$renderValue, $esc, $resultLabel) {
+    if (!is_array($value)) {
+        if ($value === null || $value === '') { return '<span class="guardian-result-muted">Keine Angabe</span>'; }
+        if (is_bool($value)) { return '<span class="guardian-result-value">' . ($value ? 'Ja' : 'Nein') . '</span>'; }
+        $text = (string)$value;
+        if (strlen($text) > 1200) { $text = substr($text, 0, 1200) . ' … (gekuerzt)'; }
+        return '<span class="guardian-result-value">' . $esc($text) . '</span>';
+    }
+    if (!$value) { return '<span class="guardian-result-muted">Keine Eintraege vorhanden</span>'; }
+    if ($depth >= 4) { return '<span class="guardian-result-muted">Weitere verschachtelte Details ausgeblendet</span>'; }
+    $keys = array_keys($value);
+    $isList = true;
+    foreach ($keys as $index => $key) { if ($key !== $index) { $isList = false; break; } }
+    if ($isList) {
+        $html = '<ul class="guardian-result-list">';
+        foreach (array_slice($value, 0, 30) as $item) {
+            $html .= '<li>' . $renderValue($item, $depth + 1) . '</li>';
+        }
+        if (count($value) > 30) { $html .= '<li class="guardian-result-muted">Weitere ' . $esc(count($value) - 30) . ' Eintraege ausgeblendet</li>'; }
+        return $html . '</ul>';
+    }
+    $html = '<dl class="guardian-result-grid">';
+    foreach (array_slice($value, 0, 30, true) as $key => $item) {
+        if (in_array((string)$key, ['checked_at', 'created_at', 'updated_at', 'timestamp'], true)
+                && is_numeric($item) && (float)$item >= 1000000000 && (float)$item <= 4102444800) {
+            $item = gmdate('Y-m-d H:i:s', (int)$item) . ' UTC';
+        }
+        $html .= '<div><dt>' . $esc($resultLabel($key)) . '</dt><dd>' . $renderValue($item, $depth + 1) . '</dd></div>';
+    }
+    if (count($value) > 30) { $html .= '<div><dt>Weitere Felder</dt><dd>' . $esc(count($value) - 30) . ' ausgeblendet</dd></div>'; }
+    return $html . '</dl>';
+};
+$renderResult = static function ($title, $data) use ($esc, $renderValue) {
+    return '<div class="guardian-result-block"><h4>' . $esc($title) . '</h4>' . $renderValue($data) . '</div>';
+};
 $form = function ($operation, array $fields, $label, $confirmation = '') use ($esc) {
     echo '<form method="post" action="' . $esc(pm_Context::getActionUrl('index', 'manage')) . '"';
     if ($confirmation !== '') { echo ' onsubmit="return confirm(' . $esc(json_encode($confirmation)) . ');"'; }
@@ -28,7 +83,7 @@ $domainSelect = function () use ($esc) {
   <?php if ($this->managementError): ?><div class="guardian-alert"><?= $esc($this->managementError) ?></div><?php endif; ?>
   <?php if ($this->managementResult): ?>
     <div class="guardian-alert"><strong><?= !empty($this->managementResult['ok']) ? 'Aktion bearbeitet' : 'Aktion fehlgeschlagen' ?></strong>
-      <?php if (($this->managementResult['operation'] ?? '') !== 'retention-preview'): ?><pre><?= $esc(json_encode($this->managementResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre><?php endif; ?>
+      <?php if (($this->managementResult['operation'] ?? '') !== 'retention-preview'): ?><?= $renderResult('Ergebnisdetails', $this->managementResult) ?><?php endif; ?>
     </div>
   <?php endif; ?>
   <section class="guardian-debug-control" aria-labelledby="guardian-debug-title">
@@ -208,7 +263,7 @@ $domainSelect = function () use ($esc) {
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="reputation"><label>Oeffentliche IP <input name="ip" maxlength="45" required></label><button>Reputation abfragen</button>
   </form>
   <p>Keine automatischen Meldungen oder IP-Sperren. Ergebnisse werden eine Stunde zwischengespeichert.</p>
-  <pre><?= $esc(json_encode($management['reputation'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <?= $renderResult('Letzte Reputationsergebnisse', $management['reputation'] ?? []) ?>
   </section>
   <section class="guardian-card guardian-subsection" id="guardian-turnstile">
   <h3>PHP-Anmeldeschutz mit Turnstile</h3>
@@ -217,7 +272,7 @@ $domainSelect = function () use ($esc) {
     <select name="mode"><option value="on">Aktivieren</option><option value="off">Deaktivieren</option></select><button>PHP-Anmeldeschutz setzen</button>
   </form>
   <p>Schuetzt ausgewaehlte PHP-Anmeldepfade via auto_prepend_file. Statische Dateien und andere Endpunkte werden nicht abgedeckt. Aktivierung kann wegen PHP-INI-Cache bis zu 5 Minuten benoetigen.</p>
-  <pre><?= $esc(json_encode($management['bots'] ?? [], JSON_PRETTY_PRINT)) ?></pre>
+  <?= $renderResult('Challenge-Status', $management['bots'] ?? []) ?>
 
   </section>
   <section class="guardian-card guardian-subsection" id="guardian-malware-repair">
@@ -244,7 +299,7 @@ $domainSelect = function () use ($esc) {
     <?php endforeach; ?>
     </tbody></table></div>
   <?php else: ?><p>Noch keine Baselines gespeichert.</p><?php endif; ?>
-  <pre>Aktive Zuordnung: <?= $esc(json_encode(['baselines' => $management['baselines'] ?? [], 'autorepair' => $management['autorepair'] ?? []], JSON_PRETTY_PRINT)) ?></pre>
+  <?= $renderResult('Aktive Zuordnung', ['baselines' => $management['baselines'] ?? [], 'autorepair' => $management['autorepair'] ?? []]) ?>
   <?php if (is_array($this->scan) && !empty($this->scan['findings'])): foreach ($this->scan['findings'] as $i => $finding): ?>
     <?php $currentIgnoreHashes = $management['ignore_hashes'][$this->scan['domain'] ?? ''] ?? [];
       $currentGlobalIgnoreHashes = $management['global_ignore_hashes'] ?? [];
@@ -281,40 +336,40 @@ $domainSelect = function () use ($esc) {
 
   </section>
   <section class="guardian-card guardian-subsection" id="guardian-cms-integrity">
-  <h3>Auftraege</h3><pre><?= $esc(json_encode($management['jobs'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <h3>Auftraege</h3><?= $renderResult('Auftragsstatus', $management['jobs'] ?? []) ?>
   <h3>Cronjob-Sicherheitspruefung</h3>
   <p>Prueft uebliche System- und Benutzer-Cronpfade read-only mit Heuristiken und, wenn ClamAV verfuegbar ist, zusaetzlich mit lokalen Malware-Signaturen. Dateien werden fuer den Scan in ein privates temporaeres Verzeichnis kopiert und danach entfernt. Kein vollstaendiger Malware-Nachweis; Guardian aendert oder loescht keine Cronjobs. Gesamtlimit: 4 MiB und 45 Sekunden.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cron-audit"><button>Cronjobs jetzt pruefen</button>
   </form>
-  <pre><?= $esc(json_encode($management['cron_audit'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <?= $renderResult('Ergebnis der Cronjob-Pruefung', $management['cron_audit'] ?? []) ?>
   <h3>WordPress-Core-Pruefsummen</h3>
   <p>Vergleicht WordPress-Core-Dateien mit WordPress.org-Pruefsummen ueber WP-CLI, laeuft als Website-Benutzer und aendert keine Dateien. Erfordert eine root-eigene WP-CLI-Installation sowie HTTPS-Ausgangszugriff. Diese Core-Aktion prueft keine Plugins, Themes oder eigenen Dateien.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="wp-checksum-audit"><?php $domainSelect(); ?><button>WordPress-Core pruefen</button>
   </form>
-  <pre><?= $esc(json_encode($management['wordpress_checksum'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <?= $renderResult('Ergebnis der WordPress-Core-Pruefung', $management['wordpress_checksum'] ?? []) ?>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="wp-plugin-checksum-audit"><?php $domainSelect(); ?><button>WordPress.org-Plugins pruefen</button>
   </form>
   <p>Plugins ohne WordPress.org-Pruefsummen (z. B. kommerzielle oder eigene Plugins) werden als nicht geprueft aufgelistet. Ein Teilstatus ist kein sauberer Gesamtbefund. Themes und Must-Use-Plugins sind nicht enthalten.</p>
-  <pre><?= $esc(json_encode($management['wordpress_plugin_checksum'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <?= $renderResult('Ergebnis der Plugin-Pruefung', $management['wordpress_plugin_checksum'] ?? []) ?>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="wp-theme-checksum-audit"><?php $domainSelect(); ?><button>WordPress.org-Themes pruefen</button>
   </form>
   <p>Themes werden dateiweise mit einem HTTPS-Archiv der passenden Version aus dem WordPress.org-Verzeichnis verglichen. Eigene/kommerzielle Themes bleiben ungeprueft. Das Archiv ist nicht signiert; Abweichungen sind manuell zu bewerten, Guardian repariert nichts. Symlinks, Sonderdateien und uebergrosse Archive werden abgelehnt.</p>
-  <pre><?= $esc(json_encode($management['wordpress_theme_checksum'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <?= $renderResult('Ergebnis der Theme-Pruefung', $management['wordpress_theme_checksum'] ?? []) ?>
   <h3>WordPress-Datenbankindikatoren</h3>
   <p>Prueft WordPress-Beitragstexte, Metadaten und Optionen read-only mit begrenzten SQL-SELECT-Abfragen. WP-CLI laeuft als Website-Benutzer und nutzt die vorhandenen Zugangsdaten aus wp-config.php; Guardian fragt oder speichert keine Datenbankpasswoerter. Ausgegeben werden nur Tabellenname, numerische Zeilen-ID, Spaltenname und feste Regelkennung, niemals Datenbankinhalte. Die Heuristik sucht kombinierte Verschleierungs- und Ausfuehrungsmuster, ist kein Malware-Vollnachweis und ersetzt weder ClamAV noch Imunify Malware Database Scanner. Es werden keine Daten geaendert oder bereinigt.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="wp-db-scan"><?php $domainSelect(); ?><button>WordPress-Datenbank pruefen</button>
   </form>
-  <pre><?= $esc(json_encode($management['wordpress_db_scans'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <?= $renderResult('Ergebnis der WordPress-Datenbankpruefung', $management['wordpress_db_scans'] ?? []) ?>
   <p>Optional kann ClamAV einen vollstaendigen WordPress-, Joomla- oder Magento-SQL-Export gegen lokale ClamAV-Signaturen pruefen. Guardian erkennt das CMS im Document-Root und liest ausschliesslich statische Datenbankwerte; PHP-Konfigurationen werden nie ausgefuehrt. Der Export wird direkt durch eine Pipe geleitet, nicht als Klartextdatei gespeichert. Ueber 512 MiB, Exportfehler, Zeitueberschreitung oder fehlende Signaturen ergeben keinen sauberen Befund. Das ist kein Imunify-MDS-Ersatz; es gibt keine Bereinigung oder Datenbankaenderung. Dynamische Konfigurationen und andere Datenbanktreiber werden als nicht unterstuetzt abgelehnt.</p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cms-db-clamav-scan"><?php $domainSelect(); ?><button>CMS-Datenbank mit ClamAV pruefen</button>
   </form>
-  <pre><?= $esc(json_encode($management['cms_db_clamav_scans'] ?? $management['wordpress_db_clamav_scans'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <?= $renderResult('Ergebnis des CMS-Datenbank-Scans', $management['cms_db_clamav_scans'] ?? $management['wordpress_db_clamav_scans'] ?? []) ?>
   </section>
   <section class="guardian-card guardian-subsection" id="guardian-management-diagnostics">
   <h3>Diagnose fuer deinen Plesk-Test</h3>
@@ -323,6 +378,6 @@ $domainSelect = function () use ($esc) {
     <label><input type="checkbox" name="http_probe" value="1"> Kurzzeitig eine zufaellig benannte PHP-Testdatei anlegen, per HTTPS abrufen und danach entfernen</label><button>Diagnose ausfuehren</button>
   </form>
   <p><a href="<?= $esc(pm_Context::getActionUrl('index', 'management-export')) ?>">Letztes Diagnoseergebnis als JSON herunterladen</a></p>
-  <pre><?= $esc(json_encode($management['diagnostics'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre>
+  <?= $renderResult('Diagnoseergebnis', $management['diagnostics'] ?? []) ?>
   </section>
 </section>

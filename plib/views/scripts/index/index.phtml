@@ -8,6 +8,7 @@ $fw = isset($services['firewall']) && is_array($services['firewall']) ? $service
 $runtime = isset($services['php_runtime']) && is_array($services['php_runtime']) ? $services['php_runtime'] : [];
 $bots = isset($services['http_flood']) && is_array($services['http_flood']) ? $services['http_flood'] : [];
 $wafLog = isset($services['waflog']) && is_array($services['waflog']) ? $services['waflog'] : [];
+$blockedGeo = isset($services['blocked_ip_geo']) && is_array($services['blocked_ip_geo']) ? $services['blocked_ip_geo'] : [];
 $management = is_array($this->management) ? $this->management : [];
 $scan = is_array($this->scan) ? $this->scan : null;
 $waf = is_array($this->waf) ? $this->waf : [];
@@ -20,12 +21,12 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.15" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.17" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sicherheitsübersicht <span>v0.28.15</span></h1>
+      <h1>Sicherheitsübersicht <span>v0.28.17</span></h1>
       <p>Malware-Scans · Firewall · Incidents · Webschutz</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -37,7 +38,7 @@ $action = static function ($name) use ($esc) {
   <div class="guardian-shell">
     <nav class="guardian-menu guardian-menu-static" aria-label="Guardian Lite Hauptmenue">
       <a class="guardian-brand" href="#guardian-overview"><span class="guardian-mark" aria-hidden="true">✥</span><span>guardian<span>lite</span><small>security</small></span></a>
-      <div class="guardian-menu-group"><details><summary>Dashboard</summary><ul><li><a href="#guardian-overview">Systemstatus</a></li></ul></details></div>
+      <div class="guardian-menu-group"><details><summary>Dashboard</summary><ul><li><a href="#guardian-dashboard-top">Angriffskarte &amp; Status</a></li><li><a href="#guardian-overview">Systemstatus</a></li></ul></details></div>
       <div class="guardian-menu-group"><details><summary>Incidents</summary><ul>
         <li><a href="#guardian-waf-events">WAF-Ereignisse</a></li><li><a href="#guardian-incidents">Meldungen &amp; Audit-Log</a></li></ul></details></div>
       <div class="guardian-menu-group"><details><summary>Firewall</summary><ul>
@@ -58,6 +59,94 @@ $action = static function ($name) use ($esc) {
         <li><a href="#guardian-management-diagnostics">Diagnose</a></li><li><a href="#guardian-roadmap">Funktionsumfang</a></li></ul></details></div>
     </nav>
     <main class="guardian-pages">
+  <?php
+    $protectionParts = [
+        !empty($f2b['running']),
+        !empty($clam['installed']),
+        !empty($fw['plesk_firewall_active']),
+        $mode === 'on'
+    ];
+    $protectionKnown = empty($this->helperError);
+    $protectionActive = count(array_filter($protectionParts));
+    $protectionPercent = (int)round(($protectionActive / count($protectionParts)) * 100);
+    $dashboardNow = time();
+    $dashboardFrom = $dashboardNow - (30 * 86400);
+    $dashboardTrend = array_fill(0, 15, 0);
+    $dashboardIncidentRows = is_array($this->incidents) ? $this->incidents : [];
+    foreach ($dashboardIncidentRows as $dashboardIncident) {
+        $dashboardIncidentTime = strtotime((string)($dashboardIncident['time'] ?? ''));
+        if ($dashboardIncidentTime === false || $dashboardIncidentTime < $dashboardFrom || $dashboardIncidentTime > $dashboardNow) {
+            continue;
+        }
+        $dashboardBucket = min(14, (int)floor(($dashboardIncidentTime - $dashboardFrom) / (2 * 86400)));
+        $dashboardTrend[$dashboardBucket]++;
+    }
+    $dashboardTrendMax = max(1, max($dashboardTrend));
+    $dashboardCritical = count(array_filter($dashboardIncidentRows, static function ($event) { return ($event['severity'] ?? '') === 'critical'; }));
+    $dashboardWarnings = count(array_filter($dashboardIncidentRows, static function ($event) { return ($event['severity'] ?? '') === 'warning'; }));
+  ?>
+  <section class="guardian-dashboard-top" id="guardian-dashboard-top" aria-label="Dashboard und blockierte IP-Adressen">
+    <div class="guardian-protection-panel">
+      <div class="guardian-panel-heading"><div><span class="guardian-eyebrow">SCHUTZSTATUS</span><h2>Systemuebersicht</h2></div><span class="guardian-dashboard-period">Aktueller Status</span></div>
+      <div class="guardian-protection-body">
+        <div class="guardian-protection-ring" style="--guardian-protection: <?= $protectionKnown ? $protectionPercent : 0 ?>%" role="img" aria-label="<?= $protectionKnown ? $protectionActive . ' von 4 Schutzkomponenten aktiv' : 'Status nicht verfuegbar' ?>">
+          <div><strong><?= $protectionKnown ? $protectionActive : '–' ?><small><?= $protectionKnown ? '/4' : '' ?></small></strong><span><?= $protectionKnown ? 'aktiv' : 'unbekannt' ?></span></div>
+        </div>
+        <div class="guardian-protection-copy">
+          <h3><?= !$protectionKnown ? 'Status gerade nicht verfuegbar' : ($protectionActive === 4 ? 'Alle erkannten Komponenten aktiv' : 'Schutzkomponenten im Blick') ?></h3>
+          <p>Die Anzeige prueft vier lokale Dienste. Sie ist keine Aussage ueber vollstaendigen Serversschutz.</p>
+          <div class="guardian-protection-services">
+            <span class="<?= !empty($f2b['running']) ? 'is-running' : '' ?>"><i></i>Fail2Ban</span>
+            <span class="<?= !empty($clam['installed']) ? 'is-running' : '' ?>"><i></i>ClamAV</span>
+            <span class="<?= !empty($fw['plesk_firewall_active']) ? 'is-running' : '' ?>"><i></i>Plesk-Firewall</span>
+            <span class="<?= $mode === 'on' ? 'is-running' : '' ?>"><i></i>ModSecurity</span>
+          </div>
+        </div>
+      </div>
+      <div class="guardian-dashboard-metrics">
+        <div><strong><?= $protectionKnown ? $esc($blockedGeo['blocked_ip_count'] ?? 0) : '–' ?></strong><span>gesperrte oeffentliche IPs</span></div>
+        <div><strong><?= $protectionKnown ? $esc(count($blockedGeo['countries'] ?? [])) : '–' ?></strong><span>erkannte Laender</span></div>
+        <div><strong><?= $protectionKnown ? $esc(count($wafLog['recent_events'] ?? [])) : '–' ?></strong><span>WAF-Ereignisse im Logausschnitt</span></div>
+      </div>
+    </div>
+    <div class="guardian-map-panel" id="guardian-blocked-map">
+      <div class="guardian-panel-heading"><div><span class="guardian-eyebrow">IP-GEODATEN</span><h2>Aktuelle Sperren nach Land</h2></div><span class="guardian-map-chip"><?= $esc($blockedGeo['release'] ?? '') ?></span></div>
+      <?php if (!empty($blockedGeo['available'])): ?>
+        <div class="guardian-map-layout">
+          <object class="guardian-world-map" type="image/svg+xml" data="<?= $esc($this->baseUrl) ?>img/world-map.svg" data-country-counts="<?= $esc(json_encode(array_column($blockedGeo['countries'] ?? [], 'count', 'code'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)) ?>" aria-label="Weltkarte mit gesperrten IPs nach Land"></object>
+          <div class="guardian-map-country-wrap">
+            <?php if (!empty($blockedGeo['countries'])): ?>
+              <ol class="guardian-map-countries">
+                <?php foreach (array_slice($blockedGeo['countries'], 0, 7) as $country): ?>
+                  <li data-country-code="<?= $esc(strtolower($country['code'] ?? '')) ?>"><span class="guardian-country-dot"></span><span><?= $esc($country['name'] ?? '') ?></span><strong><?= $esc($country['count'] ?? 0) ?></strong></li>
+                <?php endforeach; ?>
+              </ol>
+            <?php else: ?><p class="guardian-map-empty">Aktuell keine oeffentlichen Sperr-IP-Adressen aus den erfassten Quellen.</p><?php endif; ?>
+            <p class="guardian-map-legend"><i></i>Mehr gesperrte IPs</p>
+          </div>
+        </div>
+        <div class="guardian-map-footnote"><?= $esc($blockedGeo['mapped_ip_count'] ?? 0) ?> von <?= $esc($blockedGeo['blocked_ip_count'] ?? 0) ?> IPs geortet · Fail2Ban/CrowdSec-Sperren und letzte blockierte WAF-Ereignisse</div>
+      <?php else: ?>
+        <?php if (!empty($this->helperError)) { $blockedGeo['note'] = 'Guardian-Status konnte nicht gelesen werden. Bitte die Helferdiagnose pruefen.'; } ?>
+        <div class="guardian-map-unavailable"><span class="guardian-map-empty-icon" aria-hidden="true">◎</span><strong>Lokale GeoIP-Datenbank nicht verfuegbar</strong><p><?= $esc($blockedGeo['note'] ?? 'DB-IP Lite und python3-maxminddb werden fuer die Laenderkarte benoetigt.') ?></p></div>
+      <?php endif; ?>
+      <p class="guardian-map-disclaimer"><?= $esc($blockedGeo['note'] ?? 'Laenderzuordnung ist ungefaehr; VPN, Proxy, Mobilfunk und Anycast koennen den Provider-Standort zeigen.') ?> <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">IP-Geolokalisierung: DB-IP</a> · Kartenmaterial: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener noreferrer">Natural Earth</a>.</p>
+    </div>
+    <div class="guardian-dashboard-trend">
+      <div class="guardian-panel-heading"><div><span class="guardian-eyebrow">INCIDENTS &amp; ALERTS</span><h2>Gespeicherte Ereignisse · letzte 30 Tage</h2></div><a class="guardian-dashboard-link" href="#guardian-incidents">Alle Vorfaelle anzeigen <span aria-hidden="true">→</span></a></div>
+      <div class="guardian-trend-summary">
+        <div><span>Aufgezeichnet</span><strong><?= $esc(count($dashboardIncidentRows)) ?></strong></div>
+        <div><span>Kritisch</span><strong><?= $esc($dashboardCritical) ?></strong></div>
+        <div><span>Warnungen</span><strong><?= $esc($dashboardWarnings) ?></strong></div>
+        <p>Der Verlauf basiert auf den zuletzt gespeicherten maximal 200 Incident-Metadaten, nicht auf einem vollstaendigen WAF-Zeitreihendienst.</p>
+      </div>
+      <div class="guardian-dashboard-chart" role="img" aria-label="Gespeicherte Ereignisse in 15 Zwei-Tages-Zeitraeumen">
+        <?php foreach ($dashboardTrend as $index => $count): $bucketStart = $dashboardFrom + ($index * 2 * 86400); ?>
+          <div class="guardian-dashboard-chart-column"><span class="guardian-dashboard-bar" style="--bar-height: <?= $count ? max(5, (int)round(($count / $dashboardTrendMax) * 100)) : 0 ?>%" title="<?= $esc(date('d.m.', $bucketStart)) ?> · <?= $esc($count) ?> Ereignisse"></span><small><?= $esc(date('d.m.', $bucketStart)) ?></small></div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </section>
   <div class="guardian-grid" id="guardian-overview">
     <section class="guardian-card">
       <div class="guardian-icon">01</div><h2>Fail2Ban</h2>
@@ -416,7 +505,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.15</h2>
+    <h2>GitHub-Updater · v0.28.17</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -628,6 +717,6 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.15" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.17" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>
