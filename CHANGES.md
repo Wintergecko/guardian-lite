@@ -1,3 +1,8 @@
+## 0.28.18 – Firewall-Konsole und lesbare Regelpflege
+- Ordnet Fail2Ban, Plesk-Firewall, CrowdSec, Guardian-Regeln und IP-Ausnahmen in klar getrennte Bereiche.
+- Ergänzt kompakte Status- und Regelzähler sowie eine responsive Toolbar und lesbare Tabellen für die Firewall-Ansichten.
+- Behält bestehende Firewall-Aktionen, Bestätigungsabläufe und Formularziele bei.
+
 ## 0.28.15 – PHP-Handler-Reload fuer dedizierte Pools
 
 Guardian laedt nach PHP-Runtime-Aenderungen und Rollbacks nun neben dem gemeinsamen Plesk-FPM-Dienst auch alle laufenden dedizierten FPM-Pools derselben PHP-Version neu. Damit erreichen Simulation, Aktivierung und Wiederherstellung auch Websites mit eigenen PHP-FPM-Diensten.

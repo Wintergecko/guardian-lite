@@ -21,12 +21,12 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.17" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.18" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sicherheitsübersicht <span>v0.28.17</span></h1>
+      <h1>Sicherheitsübersicht <span>v0.28.18</span></h1>
       <p>Malware-Scans · Firewall · Incidents · Webschutz</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -322,11 +322,16 @@ $action = static function ($name) use ($esc) {
       </tbody></table></div>
       <?php if (empty($wafLog['recent_events'])): ?><p class="guardian-small">Keine auswertbaren Ereignisse im letzten Log-Ausschnitt.</p><?php endif; ?>
     </section>
-    <section class="guardian-card" id="guardian-fail2ban">
+    <section class="guardian-card guardian-firewall-console" id="guardian-fail2ban">
       <h2>IP manuell mit Fail2Ban verwalten</h2>
       <p class="guardian-alert">Vorsicht: Du kannst deine eigene Administrator-IP sperren. Keine automatische IP-Reputation oder Bot-Challenge.</p>
       <?php $listedBans = 0; foreach (($f2b['jails'] ?? []) as $jailInfo) { $listedBans += count($jailInfo['banned_ips'] ?? []); } ?>
-      <h3>Aktuelle Fail2Ban-Sperren</h3>
+      <div class="guardian-firewall-summary">
+        <div class="guardian-firewall-summary-item"><span>Aktive Sperren</span><strong><?= (int)max($listedBans, (int)($f2b['banned_total'] ?? 0)) ?></strong></div>
+        <div class="guardian-firewall-summary-item"><span>Aktive Jails</span><strong><?= (int)count($f2b['jails'] ?? []) ?></strong></div>
+        <div class="guardian-firewall-summary-item"><span>Verwaltung</span><strong><?= !empty($f2b['jails']) ? 'Bereit' : 'Nicht verfügbar' ?></strong></div>
+      </div>
+      <h3 class="guardian-firewall-section-title">Aktuelle Fail2Ban-Sperren</h3>
       <?php if (!empty($f2b['jails'])): ?>
         <?php if ($listedBans > 0): ?>
           <div class="guardian-scroll"><table><thead><tr><th>Jail</th><th>Gesperrte IP</th><th>Aktionen</th></tr></thead><tbody>
@@ -355,6 +360,8 @@ $action = static function ($name) use ($esc) {
       <?php else: ?><p class="guardian-small">Kein aktives Fail2Ban-Jail gefunden; aktuelle Sperren koennen nicht ausgelesen werden.</p><?php endif; ?>
       <p class="guardian-small">„Freigeben“ entfernt die IP aus dem jeweiligen Jail. „Dauerhaft sperren“ bereitet eine Plesk-Firewallregel vor; sie wird erst nach einem getrennten Verbindungstest bestaetigt. Fail2Ban-Sperren laufen nach der Jail-Bannzeit ab.</p>
       <?php if (!empty($f2b['jails'])): ?>
+        <div class="guardian-firewall-action-panel">
+        <div class="guardian-firewall-section-heading"><div><h3>IP-Aktion</h3><p>Temporär über ein Jail oder – wenn verfügbar – dauerhaft über Plesk sperren.</p></div></div>
         <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'ip')) ?>" onsubmit="return confirm('Aktion wirklich ausfuehren? Bei permanenter Plesk-Sperre anschliessend getrennte Verbindung testen und im Firewall-Menue bestaetigen.');">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
           <label for="guardian-jail">Jail</label>
@@ -367,36 +374,43 @@ $action = static function ($name) use ($esc) {
           <select name="operation" id="guardian-operation"><option value="ban">Temporär sperren</option><option value="unban">Fail2Ban-Freigabe</option><?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?><option value="permanent">Dauerhaft sperren</option><?php endif; ?></select>
           <button type="submit">Aktion ausfuehren</button>
         </form>
+        </div>
       <?php else: ?><p>Kein aktives Fail2Ban-Jail gefunden.</p><?php endif; ?>
     </section>
-    <section class="guardian-card" id="guardian-firewall">
-      <h2>Plesk-Firewall</h2>
-      <p>Regeluebersicht nach dem Firewall-Dashboard von Imunify360. Guardian zeigt Plesks eingehende Erlauben- und Sperren-Regeln, aendert aber nur eigene Regeln. Greylist, Bot-Challenges, Reputation und globale Länderlisten sind keine Plesk-Firewall-Funktionen und werden hier nicht vorgetaeuscht.</p>
+    <section class="guardian-card guardian-firewall-console" id="guardian-firewall">
+      <div class="guardian-firewall-title-row"><div><span class="guardian-eyebrow">REGELBESTAND UND SCHUTZAKTIONEN</span><h2>Plesk-Firewall</h2></div>
+        <?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?><span class="guardian-firewall-status is-ready"><i></i>Aktiv · Regeln lesbar</span>
+        <?php elseif (!empty($fw['installed']) && empty($fw['plesk_firewall_active'])): ?><span class="guardian-firewall-status is-warn"><i></i>Nicht aktiv</span>
+        <?php elseif (!empty($fw['installed'])): ?><span class="guardian-firewall-status is-warn"><i></i>Prüfung erforderlich</span>
+        <?php else: ?><span class="guardian-firewall-status is-off"><i></i>Nicht installiert</span><?php endif; ?>
+      </div>
+      <p class="guardian-firewall-intro">Guardian zeigt Plesks eingehende Erlauben- und Sperrregeln. Verändert werden ausschließlich Guardian-eigene Regeln; Plesk steuert die effektive Priorität. Greylist, Bot-Challenges, Reputation und globale Länderlisten sind keine Plesk-Firewall-Funktionen.</p>
       <?php $fwCounts = isset($fw['counts']) && is_array($fw['counts']) ? $fw['counts'] : []; ?>
       <?php if (!empty($fw['available'])): ?>
-        <div class="guardian-stats" aria-label="Plesk-Firewall-Regelzaehler">
-          <div class="guardian-stat"><strong><?= (int)($fwCounts['input_allow'] ?? 0) ?></strong><span>Erlauben-Regeln</span></div>
-          <div class="guardian-stat"><strong><?= (int)($fwCounts['input_deny'] ?? 0) ?></strong><span>Sperrregeln</span></div>
-          <div class="guardian-stat"><strong><?= (int)($fwCounts['port_allow'] ?? 0) ?></strong><span>Portfreigaben</span></div>
-          <div class="guardian-stat"><strong><?= (int)($fwCounts['port_deny'] ?? 0) ?></strong><span>Portsperren</span></div>
+        <div class="guardian-firewall-summary guardian-firewall-summary-four" aria-label="Plesk-Firewall-Regelzaehler">
+          <div class="guardian-firewall-summary-item"><span>Erlauben-Regeln</span><strong><?= (int)($fwCounts['input_allow'] ?? 0) ?></strong></div>
+          <div class="guardian-firewall-summary-item"><span>Sperrregeln</span><strong><?= (int)($fwCounts['input_deny'] ?? 0) ?></strong></div>
+          <div class="guardian-firewall-summary-item"><span>Portfreigaben</span><strong><?= (int)($fwCounts['port_allow'] ?? 0) ?></strong></div>
+          <div class="guardian-firewall-summary-item"><span>Portsperren</span><strong><?= (int)($fwCounts['port_deny'] ?? 0) ?></strong></div>
         </div>
         <p class="guardian-small">Plesk-Regeln insgesamt: <?= (int)($fwCounts['all'] ?? 0) ?> · Anzeige maximal 300 Regeln. Allow = Plesk-Erlauben-Regel (White List), Deny = Sperrregel (Black List). Die effektive Prioritaet bestimmt Plesk.</p>
         <?php if (!empty($fw['inventory_limited'])): ?><p class="guardian-alert">Die Regelliste ist fuer die Anzeige auf 300 Eintraege begrenzt.</p><?php endif; ?>
-        <div class="guardian-formline">
+        <div class="guardian-firewall-toolbar">
           <label for="guardian-firewall-search">Regeln suchen</label>
           <input id="guardian-firewall-search" type="search" maxlength="120" placeholder="IP, Regelname, Port …" />
           <label for="guardian-firewall-filter">Liste</label>
           <select id="guardian-firewall-filter"><option value="all">Alle Regeln</option><option value="allow">Freigaben</option><option value="deny">Sperren</option></select>
           <span id="guardian-firewall-results" class="guardian-small" aria-live="polite"></span>
         </div>
-        <div class="guardian-scroll"><table id="guardian-firewall-inventory"><thead><tr><th>Liste</th><th>Richtung</th><th>Regel</th><th>Quelle</th><th>Port</th><th>Klasse</th></tr></thead><tbody>
+        <div class="guardian-scroll guardian-firewall-table-wrap"><table id="guardian-firewall-inventory"><thead><tr><th>Liste</th><th>Richtung</th><th>Regel</th><th>Quelle</th><th>Port</th><th>Klasse</th></tr></thead><tbody>
           <?php foreach (isset($fw['inventory']) && is_array($fw['inventory']) ? $fw['inventory'] : [] as $item): ?>
             <tr data-firewall-action="<?= $esc($item['action'] ?? '') ?>"><td><?= ($item['action'] ?? '') === 'allow' ? 'Erlauben / White' : 'Sperren / Black' ?></td><td><?= $esc($item['direction'] ?? '') ?></td><td><?= $esc($item['name'] ?? '') ?></td><td><?= $esc($item['source'] ?? 'Alle') ?></td><td><?= $esc($item['ports'] ?? 'Alle') ?></td><td><?= $esc($item['class'] ?? '') ?></td></tr>
           <?php endforeach; ?>
         </tbody></table></div>
         <?php if (empty($fw['inventory'])): ?><p class="guardian-small">Plesk hat keine Firewall-Regeln zurueckgegeben.</p><?php endif; ?>
       <?php endif; ?>
-      <h3>CrowdSec · freie IDS-Entscheidungen</h3>
+      <div class="guardian-firewall-subpanel">
+      <div class="guardian-firewall-section-heading"><div><span class="guardian-eyebrow">OPTIONALE BEDROHUNGSERKENNUNG</span><h3>CrowdSec-Entscheidungen</h3><p>Lokale, freie IDS-Entscheidungen aus Server-Logs.</p></div><span class="guardian-firewall-status <?= !empty($crowdsec['available']) ? 'is-ready' : 'is-off' ?>"><i></i><?= !empty($crowdsec['available']) ? 'Lokal verfügbar' : 'Nicht verfügbar' ?></span></div>
       <p>CrowdSec ist eine optionale MIT-lizenzierte Erkennung aus Server-Logs. Guardian zeigt lokale Sperrentscheidungen nur an und sperrt nichts automatisch. Einzelne IPv4-/IPv6-Adressen koennen nach Admin-Klick als Plesk-Regel vorbereitet werden; dann gelten der getrennte Verbindungstest und Plesks Rueckfall.</p>
       <?php if (empty($crowdsec['installed'])): ?>
         <p class="guardian-small">CrowdSec ist nicht installiert. <a href="https://docs.crowdsec.net/u/getting_started/installation/linux/" target="_blank" rel="noopener noreferrer">Kostenlose CrowdSec-Installation fuer Linux</a>. Guardian installiert keinen zweiten Firewall-Bouncer.</p>
@@ -416,6 +430,7 @@ $action = static function ($name) use ($esc) {
         </tbody></table></div>
         <?php if (!empty($crowdsec['decisions_limited'])): ?><p class="guardian-small">Anzeige auf <?= (int)($crowdsec['decision_count'] ?? 0) ?> Eintraege begrenzt.</p><?php endif; ?>
       <?php else: ?><p class="guardian-small">CrowdSec laeuft und meldet derzeit keine aktiven Sperrentscheidungen.</p><?php endif; ?>
+      </div>
       <details class="guardian-debug">
         <summary>Guardian-Moduldiagnose · global <?= !empty($fw['debug_enabled']) ? 'aktiv' : 'deaktiviert' ?></summary>
         <p>Dieser globale Schalter protokolliert feste Aktionen aus Guardian-Helper, Verwaltungsmanager, Updater und Plesk-Firewall mit Ergebnis und Laufzeit. Keine Anfrageparameter, API-Schluessel, Dateiinhalte oder CLI-Standardausgaben; gekuerzte Firewall-Fehlerhinweise koennen Details enthalten. Die root-private Logdatei ist auf 256 KiB begrenzt; Standard: deaktiviert. Schalten im Tab Verwaltung.</p>
@@ -434,9 +449,11 @@ $action = static function ($name) use ($esc) {
           </tbody></table></div>
         <?php else: ?><p class="guardian-small">Noch keine Debugereignisse vorhanden.</p><?php endif; ?>
       </details>
-      <h3>Guardian-IP- und Portregeln</h3>
+      <div class="guardian-firewall-subpanel">
+      <div class="guardian-firewall-section-heading"><div><span class="guardian-eyebrow">GUARDIAN-VERWALTETE REGELN</span><h3>IP- und Portregeln</h3></div></div>
       <p>IP-Sperren begrenzen CIDR auf IPv4 /24 und IPv6 /64. Portregeln gelten nur fuer eine einzelne Quell-IP; eine Portfreigabe kann keine andere Plesk- oder Provider-Sperre ueberstimmen.</p>
-      <h3>Guardian-IP-Ausnahmen</h3>
+      <div class="guardian-firewall-action-panel guardian-firewall-allowlist">
+      <div class="guardian-firewall-section-heading"><div><h3>Vertrauenswürdige IPs</h3><p>Ausnahmen für künftige Guardian-Sperren.</p></div><span class="guardian-firewall-count"><?= (int)count($fw['allowlist'] ?? []) ?> / 200</span></div>
       <p>Diese Liste verhindert nur neue Guardian-eigene IP- und Port-Sperren fuer die eingetragenen Netze. Sie schaltet keine IP in Plesk oder beim Provider frei und hebt keine bereits bestehenden Regeln auf. Bestehende Guardian-Sperren muessen vorher entfernt werden.</p>
       <?php if (!empty($fw['allowlist']) && is_array($fw['allowlist'])): foreach ($fw['allowlist'] as $entry): ?>
         <div class="guardian-formline"><p><strong><?= $esc($entry['network'] ?? '') ?></strong> · <?= $esc($entry['comment'] ?? '') ?> · seit <?= $esc($entry['created_at'] ?? '') ?></p>
@@ -454,6 +471,8 @@ $action = static function ($name) use ($esc) {
       <?php elseif (count($fw['allowlist'] ?? []) >= 200): ?><p class="guardian-alert">Die Guardian-IP-Ausnahmeliste hat ihr Limit von 200 Eintraegen erreicht.</p>
       <?php else: ?><p class="guardian-small">Zum Hinzufuegen muss die Plesk-Firewall installiert, aktiv und ihre Regelliste lesbar sein. Vorhandene Ausnahmen koennen entfernt werden.</p><?php endif; ?>
       <?php if (!empty($fw['allowlist_error'])): ?><p class="guardian-alert">Guardian-IP-Ausnahmeliste fehlerhaft: <?= $esc($fw['allowlist_error']) ?> Firewall-Aenderungen bleiben bis zur Behebung gesperrt.</p><?php endif; ?>
+      </div>
+      </div>
       <?php if (empty($fw['installed'])): ?>
         <p class="guardian-alert">Plesk Firewall ist nicht installiert. Guardian installiert oder aktiviert sie nicht.</p>
       <?php elseif (empty($fw['plesk_firewall_active'])): ?>
@@ -501,11 +520,11 @@ $action = static function ($name) use ($esc) {
       <?php elseif (($pendingFirewall['state'] ?? '') === 'expired'): ?>
         <p class="guardian-alert">Das Bestaetigungsfenster ist abgelaufen. Nicht bestaetigte Regeln werden von Plesk zurueckgerollt. Lade die Seite in einigen Sekunden neu, bevor du eine weitere Firewall-Aktion startest.</p>
       <?php endif; ?>
-      <p class="guardian-small">Guardian aktiviert die Plesk-Firewall nicht automatisch und bearbeitet keine fremden Regeln. Der stuendliche Plesk-Scheduler entfernt bis zu zehn abgelaufene Sperren je Lauf. Der Ablauf kann daher mehr als eine Stunde dauern, wenn viele Regeln gleichzeitig faellig sind; verbleibende Regeln werden im Incident-Protokoll gemeldet.</p>
+      <p class="guardian-small guardian-firewall-footnote">Guardian aktiviert die Plesk-Firewall nicht automatisch und bearbeitet keine fremden Regeln. Der stuendliche Plesk-Scheduler entfernt bis zu zehn abgelaufene Sperren je Lauf. Der Ablauf kann daher mehr als eine Stunde dauern, wenn viele Regeln gleichzeitig faellig sind; verbleibende Regeln werden im Incident-Protokoll gemeldet.</p>
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.17</h2>
+    <h2>GitHub-Updater · v0.28.18</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -717,6 +736,6 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.17" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.18" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Imunify verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>
