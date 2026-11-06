@@ -1,4 +1,15 @@
-# Guardian Lite v0.28.53 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.54 – Sicherheitsmodell und Grenzen
+
+## 0.28.54 – Plesk-Regel-Duplikate
+
+- Der Hinweis vergleicht nur sichtbare Aktion, Richtung, Regelklasse, Quelle
+  und Port und verlangt unterschiedliche Plesk-IDs. Andere, eventuell von
+  Plesk gelieferte Regelfelder koennen abweichen; daher ist der Hinweis kein
+  Beweis fuer wirkungsgleiche oder fehlerhafte Regeln.
+- Die Oberflaeche fordert zur manuellen Pruefung im Plesk-Firewall-Modul auf.
+  Es gibt keine automatische Bereinigung oder Aenderung an Plesk-Regeln.
+- Bei einem begrenzten Regelinventar bezieht sich die Auswertung nur auf die
+  angezeigten Eintraege.
 
 ## 0.28.53 – Globale Fail2Ban-Defaults
 

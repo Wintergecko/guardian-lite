@@ -1,4 +1,4 @@
-# Sentinel Security: Liefer- und Pruefstatus 0.28.53
+# Sentinel Security: Liefer- und Pruefstatus 0.28.54
 
 Stand: 6. November 2026. Dieses Paket ist ein Entwicklungsstand der vorhandenen
 Plesk-Erweiterung `guardian-lite`. Der gesamte Entwicklungsauftrag mit zwoelf
@@ -12,6 +12,21 @@ die Komponenten, Vertrauensgrenzen und alle zwoelf Module mit konkreten Luecken.
 Die Erweiterung nutzt weiterhin denselben Plesk-Controller, dieselbe Extension-ID,
 dieselben Datenverzeichnisse sowie die vorhandenen React-/TypeScript- und
 serverseitigen Ansichten. Dieses Update fuehrt keine Datenmigration durch.
+
+## In 0.28.54 ergaenzt
+
+- Die read-only Plesk-Regelliste meldet zusaetzliche Eintraege mit exakt
+  gleichen sichtbaren Merkmalen (Aktion, Richtung, Klasse, Quelle, Port) und
+  unterschiedlichen Plesk-IDs. Das ist ein manuell zu pruefender Hinweis,
+  keine automatische Bereinigung und keine Aussage ueber nicht sichtbare
+  Plesk-Felder.
+- Die aktuell geteilte Plesk-Ansicht zeigte die Firewall als aktiv und lesbar,
+  25 Regeln sowie eine erlaubende SSH-Regel fuer 22/tcp. Zwei benutzerdefinierte
+  Eintraege zeigten identische sichtbare Felder fuer 8123/tcp. Die Ansicht
+  beweist keine externe Erreichbarkeit von SSH; es wurde nichts geaendert.
+- Ein Helper-Test bestaetigt die Erkennung gleicher sichtbarer Regelmerkmale
+  und schliesst Eintraege mit abweichender Quelle/Klasse aus; 30 gezielte
+  UI-/Navigations-/Pakettests, TypeScript-Build und PHP-Smokes sind bestanden.
 
 ## In 0.28.53 ergaenzt
 
@@ -272,9 +287,9 @@ Die bestehenden Teilfunktionen bleiben erhalten. Offen bleiben insbesondere:
    `/var/lib/guardian-lite/` sichern. Das Entwicklungs-ZIP nicht als bereits
    produktionsgeprueft behandeln.
 2. Die SHA-256-Datei zusammen mit dem ZIP auf den Testserver uebertragen und dort
-   mit `sha256sum -c guardian-lite-0.28.53.zip.sha256` pruefen.
-3. Neuinstallation: `plesk bin extension -i /root/guardian-lite-0.28.53.zip`.
-   Update: `plesk bin extension -g /root/guardian-lite-0.28.53.zip`.
+   mit `sha256sum -c guardian-lite-0.28.54.zip.sha256` pruefen.
+3. Neuinstallation: `plesk bin extension -i /root/guardian-lite-0.28.54.zip`.
+   Update: `plesk bin extension -g /root/guardian-lite-0.28.54.zip`.
 4. Als direkt angemeldeter Plesk-Administrator oeffnen, Diagnose ausfuehren und
    vorhandene Routen, Einstellungen, Scans und Wiederherstellungsdaten pruefen.
 5. Firewall-Apply/Confirm/Rollback ausschliesslich auf einem isolierten

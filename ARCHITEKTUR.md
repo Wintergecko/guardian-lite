@@ -1,6 +1,6 @@
 # Sentinel Security – Architektur und Bestandsaufnahme
 
-Stand: Version 0.28.53. Dieses Dokument beschreibt die vorhandene Erweiterung, keine Soll-Implementierung. Die Funktionsangaben sind auf Quellcode, Tests und die dokumentierten Systemvoraussetzungen begrenzt.
+Stand: Version 0.28.54. Dieses Dokument beschreibt die vorhandene Erweiterung, keine Soll-Implementierung. Die Funktionsangaben sind auf Quellcode, Tests und die dokumentierten Systemvoraussetzungen begrenzt.
 
 ## Architektur
 
@@ -46,7 +46,7 @@ Plesk Obsidian (Administrator)
 
 „Teilweise“ bedeutet, dass es eine echte Funktion gibt, aber nicht der vollständige im Auftrag beschriebene Umfang. Nicht vorhandene Funktionen werden nicht als verfügbar dargestellt.
 
-| # | Angefordertes Modul | Stand 0.28.53 | Verifiziert vorhandener Umfang | Wesentliche Lücken |
+| # | Angefordertes Modul | Stand 0.28.54 | Verifiziert vorhandener Umfang | Wesentliche Lücken |
 |---|---|---|---|---|
 | 1 | Security Dashboard | Teilweise | Reale Fail2Ban-, Firewall-, Ereignis- und WAF-Statusdaten; Schutzkennzahlen und IP-Karte, wenn lokale Datenbank und Abhängigkeit vorhanden sind | Dauerhafte, umfassende Statistikhistorie und zusätzliche Datenquellen |
 | 2 | Fail2Ban Manager | Teilweise | Status, aktive Jails, begrenzte Jail-Parameter und globale `[DEFAULT]`-Werte, manuelles Sperren/Freigeben; eigene Override-Datei, Backup, Konfigurationstest, Laufzeitprüfung und Rollback | Erstellen von Jails/Filtern/Aktionen und getestete Plesk-spezifische Jail-Vorlagen |

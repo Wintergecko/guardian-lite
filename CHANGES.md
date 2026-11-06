@@ -1,3 +1,14 @@
+## 0.28.54 – Plesk-Firewall-Duplikat-Hinweis
+
+- Die read-only Regelliste zaehlt Eintraege mit identischen sichtbaren Feldern
+  fuer Aktion, Richtung, Regelklasse, Quelle und Port; unterschiedliche
+  Plesk-Regel-IDs werden vorausgesetzt.
+- Moegliche Duplikate werden nur als Pruefhinweis angezeigt. Sentinel bewertet
+  sie nicht als Fehler und veraendert oder loescht keine Plesk-Regeln.
+- Weitere, von Plesk eventuell gelieferte Felder werden nicht verglichen.
+  Inventargrenzen werden ausgewiesen; die verbindliche Pruefung erfolgt im
+  Plesk-Firewall-Modul.
+
 ## 0.28.53 – Globale Fail2Ban-Defaults
 
 - Ergänzt eine Plesk-geschützte Oberfläche zum Lesen, Sichern, Ändern und

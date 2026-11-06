@@ -27,6 +27,7 @@ type FirewallStatus = {
   available: boolean;
   inventoryLimited: boolean;
   inventoryUnparsed: number;
+  duplicatePolicyEntries: number;
   counts: { all: number; inputAllow: number; inputDeny: number; portAllow: number; portDeny: number };
   inventory: FirewallInventoryItem[];
 };
@@ -208,6 +209,8 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
       filter: 'Aktion', allActions: 'Alle', shown: 'angezeigt', empty: 'Keine Regeln entsprechen dem Filter.',
       limited: 'Die Plesk-Regelliste ist unvollständig oder erreicht die Anzeigegrenze.', noInventory: 'Plesk hat keine Firewall-Regeln zurückgegeben.',
       unparsed: 'Plesk-Regeln konnten wegen fehlender oder ungültiger Felder nicht dargestellt werden.',
+      duplicatePolicies: (count: number) => `${count} zusätzliche Plesk-Einträge haben identische sichtbare Regelmerkmale (Aktion, Richtung, Klasse, Quelle und Port). Das kann beabsichtigt sein; bitte in Plesk prüfen. Sentinel ändert diese Regeln nicht.`,
+      duplicatesLimited: 'Die Prüfung umfasst nur die angezeigten Einträge, da das Regelinventar begrenzt ist.',
       input: 'Eingehend', output: 'Ausgehend', unknown: 'Unbekannt',
     }
     : {
@@ -221,6 +224,8 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
       filter: 'Action', allActions: 'All', shown: 'shown', empty: 'No rules match the filter.',
       limited: 'The Plesk inventory is incomplete or reached the display limit.', noInventory: 'Plesk returned no firewall rules.',
       unparsed: 'Plesk rules could not be displayed because required fields were missing or invalid.',
+      duplicatePolicies: (count: number) => `${count} additional Plesk entries have identical visible rule fields (action, direction, class, source, and port). This may be intentional; verify in Plesk. Sentinel does not change these rules.`,
+      duplicatesLimited: 'The check covers only displayed entries because the inventory is limited.',
       input: 'Inbound', output: 'Outbound', unknown: 'Unknown',
     };
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -262,6 +267,10 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
           </div>
           {firewall.inventoryLimited && <p className="sentinel-detail-error" role="status">{labels.limited}</p>}
           {firewall.inventoryUnparsed > 0 && <p className="sentinel-detail-error" role="status">{firewall.inventoryUnparsed} {labels.unparsed}</p>}
+          {firewall.duplicatePolicyEntries > 0 && <p className="sentinel-detail-note" role="status">
+            {labels.duplicatePolicies(firewall.duplicatePolicyEntries)}
+            {firewall.inventoryLimited ? ` ${labels.duplicatesLimited}` : ''}
+          </p>}
           <div className="sentinel-table-scroll"><table><thead><tr>
             <th>{labels.list}</th><th>{labels.direction}</th><th>{labels.name}</th>
             <th>{labels.source}</th><th>{labels.ports}</th><th>{labels.class}</th>
@@ -1145,7 +1154,8 @@ function isFirewallInventoryItem(value: unknown): value is FirewallInventoryItem
 function isFirewallStatus(value: unknown): value is FirewallStatus {
   return isRecord(value) && typeof value.known === 'boolean' && typeof value.active === 'boolean' &&
     typeof value.installed === 'boolean' && typeof value.available === 'boolean' &&
-    typeof value.inventoryLimited === 'boolean' && isRecord(value.counts) &&
+    typeof value.inventoryLimited === 'boolean' && isFiniteNumber(value.duplicatePolicyEntries) &&
+    value.duplicatePolicyEntries >= 0 && isRecord(value.counts) &&
     isFiniteNumber(value.counts.all) && isFiniteNumber(value.counts.inputAllow) &&
     isFiniteNumber(value.counts.inputDeny) && isFiniteNumber(value.counts.portAllow) &&
     isFiniteNumber(value.counts.portDeny) && Array.isArray(value.inventory) &&

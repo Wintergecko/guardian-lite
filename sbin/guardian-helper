@@ -979,6 +979,21 @@ def firewall_status():
             'write_error': restriction}
 
 
+def firewall_duplicate_policy_entries(inventory):
+    """Count extra rows with identical visible policy fields and distinct Plesk IDs."""
+    groups = {}
+    for row in inventory:
+        if not isinstance(row, dict):
+            continue
+        rule_id = row.get('id')
+        fields = tuple(row.get(key) for key in ('action', 'direction', 'class', 'source', 'ports'))
+        if (not isinstance(rule_id, str) or not rule_id.isdigit() or
+                any(not isinstance(value, str) for value in fields)):
+            continue
+        groups.setdefault(fields, set()).add(rule_id)
+    return sum(len(ids) - 1 for ids in groups.values() if len(ids) > 1)
+
+
 def firewall_rules():
     """Read Plesk rules for the dashboard, while only managing Guardian-owned rules."""
     pending = read_json(FIREWALL_PENDING, {})
@@ -1103,6 +1118,7 @@ def firewall_rules():
     return {'available': True, 'limited': len(rules) > 100, 'rules': rules[:100],
             'inventory': inventory, 'inventory_limited': len(decoded) > len(inventory),
             'inventory_unparsed': len(decoded) - counts['all'],
+            'duplicate_policy_entries': firewall_duplicate_policy_entries(inventory),
             'counts': counts,
             'allowlist': allowlist,
             'pending': pending}
