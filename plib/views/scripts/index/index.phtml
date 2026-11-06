@@ -90,19 +90,22 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.46" />
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.46" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.48" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.48" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sentinel Security <span>v0.28.46</span></h1>
+      <h1>Sentinel Security <span>v0.28.48</span></h1>
       <p>Sicherheitsverwaltung für Plesk Obsidian</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
   </header>
   <?php if ($this->helperError): ?>
     <div class="guardian-alert">Helfer nicht erreichbar: <?= $esc($this->helperError) ?></div>
+  <?php endif; ?>
+  <?php if (!empty($fw['write_error'])): ?>
+    <div class="guardian-alert" id="guardian-firewall-write-error" role="alert">Firewall-Verwaltung eingeschraenkt: <?= $esc($fw['write_error']) ?> / Firewall changes unavailable. Fail2Ban bleibt separat verfuegbar.</div>
   <?php endif; ?>
   <div class="guardian-shell">
     <div id="sentinel-app-root" hidden
@@ -510,7 +513,7 @@ $action = static function ($name) use ($esc) {
       foreach (($f2b['jails'] ?? []) as $jailInfo) {
           $listedBans += count($jailInfo['banned_ips'] ?? []);
       }
-      $planFwActive = !empty($fw['available']) && !empty($fw['plesk_firewall_active']);
+      $planFwActive = !empty($fw['available']) && !empty($fw['plesk_firewall_active']) && empty($fw['write_error']);
       $guardianRuleCount = count(isset($fw['rules']) && is_array($fw['rules']) ? $fw['rules'] : []);
       $csDecisions = !empty($crowdsec['available']) && isset($crowdsec['decisions']) && is_array($crowdsec['decisions']) ? $crowdsec['decisions'] : [];
       $f2bTotal = max($listedBans, (int)($f2b['banned_total'] ?? 0));
@@ -536,7 +539,7 @@ $action = static function ($name) use ($esc) {
       <h3 class="guardian-firewall-section-title">Listen-Übersicht</h3>
       <p class="guardian-small guardian-list-counts"><span class="guardian-list-badge is-white">Weiß</span> <strong><?= (int)count(array_filter(isset($fw['rules']) && is_array($fw['rules']) ? $fw['rules'] : [], static function ($rule) { return ($rule['action'] ?? '') === 'allow'; })) ?></strong> Guardian-Freigaben · <span class="guardian-list-badge is-black">Schwarz</span> <strong><?= (int)$blockTotal ?></strong> Sperren gesamt · Weiß schlägt Schwarz.</p>
       <?php
-      $planCanPermanent = !empty($fw['available']) && !empty($fw['plesk_firewall_active']);
+      $planCanPermanent = !empty($fw['available']) && !empty($fw['plesk_firewall_active']) && empty($fw['write_error']);
       $hasBlocks = $listedBans > 0 || $guardianRuleCount > 0 || count($csDecisions) > 0;
       ?>
       <?php if ($hasBlocks): ?>
@@ -565,7 +568,7 @@ $action = static function ($name) use ($esc) {
         <?php endforeach; endforeach; ?>
         <?php foreach (isset($fw['rules']) && is_array($fw['rules']) ? $fw['rules'] : [] as $rule): ?>
           <tr><td><?= ($rule['action'] ?? '') === 'allow' ? '<span class="guardian-list-badge is-white">Weiß</span>' : '<span class="guardian-list-badge is-black">Schwarz</span>' ?> Guardian · Plesk</td><td><code><?= $esc($rule['network'] ?? '') ?></code></td><td><?= ($rule['kind'] ?? '') === 'port' ? $esc((($rule['action'] ?? '') === 'allow' ? 'Portfreigabe ' : 'Portsperre ') . ($rule['ports'] ?? '')) : 'Alle Ports' ?></td><td><?= !empty($rule['expires_at']) ? $esc($rule['expires_at']) . ' UTC' : 'Dauerhaft' ?></td><td>
-            <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese Guardian-Firewallregel entfernen? Die Aenderung wird erst nach Verbindungstest bestaetigt.');">
+            <form <?= !empty($fw['write_error']) ? 'inert aria-disabled="true" aria-describedby="guardian-firewall-write-error"' : '' ?> method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese Guardian-Firewallregel entfernen? Die Aenderung wird erst nach Verbindungstest bestaetigt.');">
               <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
               <?php if (($rule['kind'] ?? '') === 'port'): ?><input type="hidden" name="operation" value="port-remove" /><input type="hidden" name="rule_id" value="<?= $esc($rule['id'] ?? '') ?>" />
               <?php else: ?><input type="hidden" name="operation" value="unban" /><input type="hidden" name="network" value="<?= $esc($rule['network'] ?? '') ?>" /><?php endif; ?>
@@ -606,7 +609,7 @@ $action = static function ($name) use ($esc) {
           <label for="guardian-ip">IPv4 oder IPv6</label>
           <input id="guardian-ip" type="text" name="ip" placeholder="198.51.100.23" required maxlength="45" />
           <label for="guardian-operation">Aktion</label>
-          <select name="operation" id="guardian-operation"><option value="ban">Temporär sperren</option><option value="unban">Fail2Ban-Freigabe</option><?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?><option value="permanent">Dauerhaft sperren</option><?php endif; ?></select>
+          <select name="operation" id="guardian-operation"><option value="ban">Temporär sperren</option><option value="unban">Fail2Ban-Freigabe</option><?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active']) && empty($fw['write_error'])): ?><option value="permanent">Dauerhaft sperren</option><?php endif; ?></select>
           <button type="submit">Aktion ausfuehren</button>
         </form>
         </div>
@@ -614,7 +617,7 @@ $action = static function ($name) use ($esc) {
     </section>
     <section class="guardian-card guardian-firewall-console" id="guardian-firewall">
       <div class="guardian-firewall-title-row"><div><span class="guardian-eyebrow">PLESK-FIREWALL</span><h2>Plesk-Regeln</h2></div>
-        <?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?><span class="guardian-firewall-status is-ready"><i></i>Aktiv · Regeln lesbar</span>
+        <?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active']) && empty($fw['write_error'])): ?><span class="guardian-firewall-status is-ready"><i></i>Aktiv · Regeln lesbar</span>
         <?php elseif (!empty($fw['installed']) && empty($fw['plesk_firewall_active'])): ?><span class="guardian-firewall-status is-warn"><i></i>Nicht aktiv</span>
         <?php elseif (!empty($fw['installed'])): ?><span class="guardian-firewall-status is-warn"><i></i>Prüfung erforderlich</span>
         <?php else: ?><span class="guardian-firewall-status is-off"><i></i>Nicht installiert</span><?php endif; ?>
@@ -665,7 +668,7 @@ $action = static function ($name) use ($esc) {
         <p>Dieser globale Schalter protokolliert feste Aktionen aus Guardian-Helper, Verwaltungsmanager, Updater und Plesk-Firewall mit Ergebnis und Laufzeit. Keine Anfrageparameter, API-Schluessel, Dateiinhalte oder CLI-Standardausgaben; gekuerzte Firewall-Fehlerhinweise koennen Details enthalten. Die root-private Logdatei ist auf 256 KiB begrenzt; Standard: deaktiviert. Schalten im Tab Verwaltung.</p>
         <?php if (!empty($fw['debug_error'])): ?><p class="guardian-alert">Debugstatus: <?= $esc($fw['debug_error']) ?></p><?php endif; ?>
         <p class="guardian-small">Loggroesse: <?= (int)($fw['debug_log_bytes'] ?? 0) ?> / <?= (int)($fw['debug_log_limit_bytes'] ?? 262144) ?> Bytes</p>
-        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>">
+        <form <?= !empty($fw['write_error']) ? 'inert aria-disabled="true" aria-describedby="guardian-firewall-write-error"' : '' ?> method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
           <input type="hidden" name="operation" value="<?= !empty($fw['debug_enabled']) ? 'debug-off' : 'debug-on' ?>" />
           <button type="submit" class="guardian-button <?= !empty($fw['debug_enabled']) ? 'guardian-button-muted' : '' ?>"><?= !empty($fw['debug_enabled']) ? 'Guardian-Debugging ausschalten' : 'Guardian-Debugging einschalten' ?></button>
@@ -688,13 +691,13 @@ $action = static function ($name) use ($esc) {
       <p>Diese Liste verhindert nur neue Guardian-eigene IP- und Port-Sperren fuer die eingetragenen Netze. Sie schaltet keine IP in Plesk oder beim Provider frei und hebt keine bereits bestehenden Regeln auf. Bestehende Guardian-Sperren muessen vorher entfernt werden.</p>
       <?php if (!empty($fw['allowlist']) && is_array($fw['allowlist'])): foreach ($fw['allowlist'] as $entry): ?>
         <div class="guardian-formline"><p><strong><?= $esc($entry['network'] ?? '') ?></strong> · <?= $esc($entry['comment'] ?? '') ?> · seit <?= $esc($entry['created_at'] ?? '') ?></p>
-          <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Guardian-Ausnahme wirklich entfernen? Zukuenftige Guardian-Sperren fuer diese IP sind dann wieder moeglich.');">
+          <form <?= !empty($fw['write_error']) ? 'inert aria-disabled="true" aria-describedby="guardian-firewall-write-error"' : '' ?> method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Guardian-Ausnahme wirklich entfernen? Zukuenftige Guardian-Sperren fuer diese IP sind dann wieder moeglich.');">
             <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="allowlist-remove" /><input type="hidden" name="network" value="<?= $esc($entry['network'] ?? '') ?>" /><button class="guardian-small-button" type="submit">Ausnahme entfernen</button>
           </form>
         </div>
       <?php endforeach; else: ?><p class="guardian-small">Keine Guardian-IP-Ausnahmen vorhanden.</p><?php endif; ?>
-      <?php if (count($fw['allowlist'] ?? []) < 200 && !empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?>
-        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese IP wird vor kuenftigen Guardian-Sperren geschuetzt. Plesk- und Provider-Firewalls werden dadurch nicht veraendert.');">
+      <?php if (count($fw['allowlist'] ?? []) < 200 && !empty($fw['available']) && !empty($fw['plesk_firewall_active']) && empty($fw['write_error'])): ?>
+        <form <?= !empty($fw['write_error']) ? 'inert aria-disabled="true" aria-describedby="guardian-firewall-write-error"' : '' ?> method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese IP wird vor kuenftigen Guardian-Sperren geschuetzt. Plesk- und Provider-Firewalls werden dadurch nicht veraendert.');">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="allowlist-add" />
           <label for="guardian-firewall-exception-network">Vertrauenswuerdige IP oder begrenztes CIDR</label><label for="guardian-firewall-exception-comment">Begruendung / Geraet</label>
           <div class="guardian-formline"><input id="guardian-firewall-exception-network" name="network" type="text" maxlength="80" placeholder="203.0.113.25 oder 2001:db8::/64" required /><input id="guardian-firewall-exception-comment" name="comment" type="text" maxlength="120" placeholder="Admin-VPN" required /><button type="submit">Guardian-Ausnahme hinzufuegen</button></div>
@@ -713,7 +716,7 @@ $action = static function ($name) use ($esc) {
       <?php else: ?>
         <p class="guardian-small">Guardian-Sperrregeln stehen in der Liste „Alle Listen“. Neue Regeln werden hier angelegt.</p>
         <?php if (empty($fw['rules'])): ?><p class="guardian-small">Keine Guardian-Sperrregeln eingetragen.</p><?php endif; ?>
-        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Plesk-Firewall-Regel fuer dieses Netz vorbereiten? Nicht bestaetigte Aenderungen rollen nach 60 Sekunden zurueck.');">
+        <form <?= !empty($fw['write_error']) ? 'inert aria-disabled="true" aria-describedby="guardian-firewall-write-error"' : '' ?> method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Plesk-Firewall-Regel fuer dieses Netz vorbereiten? Nicht bestaetigte Aenderungen rollen nach 60 Sekunden zurueck.');">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="ban" />
           <label for="guardian-firewall-network">IPv4, IPv6 oder begrenztes CIDR</label>
           <label for="guardian-firewall-ttl">Sperrdauer</label>
@@ -724,13 +727,15 @@ $action = static function ($name) use ($esc) {
       <?php if (($pendingFirewall['state'] ?? '') === 'awaiting_confirmation'): ?>
         <?php $pendingTtl = (int)($pendingFirewall['ttl_seconds'] ?? 0); $pendingTtlLabel = $pendingTtl === 3600 ? '1 Stunde' : ($pendingTtl === 86400 ? '24 Stunden' : ($pendingTtl === 604800 ? '7 Tage' : 'dauerhaft')); ?>
         <div class="guardian-alert"><strong>Aenderung wartet auf Bestaetigung:</strong> <?= $esc($pendingFirewall['action'] ?? '') ?> <?= $esc($pendingFirewall['network'] ?? '') ?><?php if (!empty($pendingFirewall['port'])): ?> · <?= (int)$pendingFirewall['port'] ?>/<?= $esc($pendingFirewall['protocol'] ?? '') ?><?php endif; ?> · Sperrdauer: <?= $esc($pendingTtlLabel) ?>. Teste erst in einer unabhaengigen SSH- oder Admin-Verbindung, ob der Server erreichbar ist. Ohne Bestaetigung rollt Plesk nach 60 Sekunden zurueck.</div>
-        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Hast du eine unabhaengige Verbindung zum Server getestet?');">
+        <form <?= !empty($fw['write_error']) ? 'inert aria-disabled="true" aria-describedby="guardian-firewall-write-error"' : '' ?> method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Hast du eine unabhaengige Verbindung zum Server getestet?');">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="confirm" />
           <label><input type="checkbox" name="tested" value="1" required /> Unabhaengige SSH- oder Admin-Verbindung erfolgreich getestet</label><button type="submit">Plesk-Aenderung bestaetigen</button>
         </form>
-        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>">
+        <form <?= !empty($fw['write_error']) ? 'inert aria-disabled="true" aria-describedby="guardian-firewall-write-error"' : '' ?> method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="cancel" /><button class="guardian-small-button" type="submit">Aenderung jetzt zuruecksetzen</button>
         </form>
+      <?php elseif (($pendingFirewall['state'] ?? '') === 'rollback_pending'): ?>
+        <p class="guardian-alert">Ruecknahme angefordert. Der aktive Paketfilter ist noch nicht verifiziert. Keine weitere Aenderung starten, solange die Plesk-Aktivierung laeuft.</p>
       <?php elseif (($pendingFirewall['state'] ?? '') === 'expired'): ?>
         <p class="guardian-alert">Das Bestaetigungsfenster ist abgelaufen. Nicht bestaetigte Regeln werden von Plesk zurueckgerollt. Lade die Seite in einigen Sekunden neu, bevor du eine weitere Firewall-Aktion startest.</p>
       <?php endif; ?>
@@ -745,7 +750,7 @@ $action = static function ($name) use ($esc) {
         <div class="guardian-scroll"><table id="guardian-port-table"><thead><tr><th>Liste</th><th>Quelle</th><th>Port</th><th>Ablauf</th><th>Aktion</th></tr></thead><tbody>
         <?php foreach ($portRules as $rule): ?>
           <tr><td><?= ($rule['action'] ?? '') === 'allow' ? '<span class="guardian-list-badge is-white">Weiß</span> Freigabe' : '<span class="guardian-list-badge is-black">Schwarz</span> Sperre' ?></td><td><code><?= $esc($rule['network'] ?? '') ?></code></td><td><?= $esc($rule['ports'] ?? '') ?></td><td><?= !empty($rule['expires_at']) ? $esc($rule['expires_at']) . ' UTC' : 'Dauerhaft' ?></td><td>
-            <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese Portregel entfernen? Die Aenderung wird erst nach Verbindungstest bestaetigt.');">
+            <form <?= !empty($fw['write_error']) ? 'inert aria-disabled="true" aria-describedby="guardian-firewall-write-error"' : '' ?> method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Diese Portregel entfernen? Die Aenderung wird erst nach Verbindungstest bestaetigt.');">
               <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" /><input type="hidden" name="operation" value="port-remove" /><input type="hidden" name="rule_id" value="<?= $esc($rule['id'] ?? '') ?>" />
               <button class="guardian-small-button" type="submit">Entfernen</button>
             </form>
@@ -754,8 +759,8 @@ $action = static function ($name) use ($esc) {
         </tbody></table></div>
       <?php else: ?><p class="guardian-small">Keine Guardian-Portregeln aktiv.</p><?php endif; ?>
       <h3 class="guardian-firewall-section-title">Portregel anlegen</h3>
-      <?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active'])): ?>
-        <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Plesk-Portregel vorbereiten? Vor der Bestaetigung muss der Zugriff aus einer getrennten Verbindung getestet werden.');">
+      <?php if (!empty($fw['available']) && !empty($fw['plesk_firewall_active']) && empty($fw['write_error'])): ?>
+        <form <?= !empty($fw['write_error']) ? 'inert aria-disabled="true" aria-describedby="guardian-firewall-write-error"' : '' ?> method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'firewall')) ?>" onsubmit="return confirm('Plesk-Portregel vorbereiten? Vor der Bestaetigung muss der Zugriff aus einer getrennten Verbindung getestet werden.');">
           <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
           <label for="guardian-firewall-port-network">Quell-IP (Freigaben nur fuer einzelne IPs)</label>
           <div class="guardian-formline"><input id="guardian-firewall-port-network" name="network" type="text" maxlength="80" placeholder="198.51.100.25" required /><input id="guardian-firewall-port" name="port" type="number" min="1" max="65535" placeholder="2222" required /><select name="protocol" aria-label="Transportprotokoll"><option value="tcp">TCP</option><option value="udp">UDP</option></select><select name="operation" aria-label="Portaktion"><option value="port-allow">Port freigeben</option><option value="port-deny">Port sperren</option></select><button type="submit">Portregel vorbereiten</button></div>
@@ -765,7 +770,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower guardian-settings-area" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.46</h2>
+    <h2>GitHub-Updater · v0.28.48</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -976,7 +981,7 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.46" defer></script>
-  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.46" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.48" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.48" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Drittanbieter-Schutzprodukten verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

@@ -1,3 +1,22 @@
+## 0.28.48 – Firewall-Incident-Sperre und ehrlicher Ruecknahmestatus
+
+- Ergaenzt eine root-private, updatefeste Firewall-Schreibsperre nach fehlgeschlagenen Live-Integrationspruefungen. Der Grund erscheint in der Oberflaeche; betroffene Formulare sind nicht bedienbar. Die laufende Firewall und Fail2Ban werden dadurch nicht deaktiviert.
+- Verhindert neue Guardian-Firewall-Aenderungen, solange die native Plesk-Aktivierungs-Pipe vorhanden ist.
+- Meldet `--reset` ausschliesslich als angeforderte Ruecknahme, behaelt die ausstehende Transaktion und verhindert deren nachtraegliche Bestaetigung.
+- Der Live-Test auf Plesk 18.0.82/Debian 13 zeigte fehlgeschlagene CLI-Bestaetigungen und asynchrone Aktivierungsueberschneidungen. Originalregeln und Filterketten wurden aus dem vorher angelegten Backup wiederhergestellt; schreibende Sentinel-Firewallverwaltung bleibt dort gesperrt.
+
+## 0.28.47 – Verifizierte Sicherheitsaktionen
+
+- Uebergibt zu loeschende Firewall-Regel-IDs mit dem von der Plesk-CLI dokumentierten Parameter `-ids`.
+- Korrigiert die Inventarisierung namenloser Plesk-Standardregeln: auf dem Testziel werden 25 statt bisher 2 Regeln erkannt. Unbekannte Datensaetze markieren das Inventar als unvollstaendig.
+- 203 Linux-Tests auf Debian 13.7/Plesk 18.0.82 ausgefuehrt: 202 bestanden, optionaler nativer Buildtest uebersprungen. Zusaetzlich PHP-Smokes, isolierte HTTP-Tests und lesende Liveadapter-Pruefungen; keine aktiven Produktionsregelaenderungen.
+- Prueft bei manuellen Fail2Ban-IP-Aktionen vorab die Verfuegbarkeit der exakten Statusabfrage und nach der Aenderung den Laufzeitstatus; unbekannte und abweichende Antworten bleiben Fehler.
+- Verwendet fuer Jail-bezogene Freigaben bevorzugt die dokumentierte Plesk-CLI. Manuelle Sperren bleiben beim Fail2Ban-Client, da Plesk dafuer keinen Befehl dokumentiert.
+- Protokolliert angeforderte, fehlgeschlagene und verifizierte IP-Aktionen im bestehenden Incident-Verlauf.
+- Bestaetigt Firewall-Aenderungen erst nach unabhaengiger Pruefung des vollstaendigen Plesk-Regelinventars. Fehlende, abweichende oder doppelte Regeln verhindern die Bestaetigung; der Plesk-Rollback bleibt aktiv.
+- Ergaenzt portable Tests der echten Verifikationsfunktionen und liefert Architektur sowie ehrlichen Implementierungs-/Teststatus im ZIP mit.
+- Keine vollstaendige Umsetzung aller zwoelf Sentinel-Module; kein neuer Nachweis fuer Plesk-Livebetrieb oder Paketfilterwirkung. Details in SENTINEL-STATUS.md.
+
 ## 0.28.46 – Diagnoseergebnisse lesbarer dargestellt
 
 - Nutzt im Diagnosebereich die volle Inhaltsbreite fuer Pruefungen statt einer schmalen rechten Spalte.

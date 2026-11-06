@@ -35,6 +35,7 @@ CROWDSEC_APPSEC_CONFIG = pathlib.Path('/etc/crowdsec/acquis.d/appsec.yaml')
 CROWDSEC_BOUNCER_CONFIG = pathlib.Path('/etc/crowdsec/bouncers/crowdsec-apache2-bouncer.conf')
 SYSTEMCTL_PATHS = ('/usr/bin/systemctl', '/bin/systemctl')
 FIREWALL_SETTINGS = pathlib.Path('/usr/local/psa/bin/modules/firewall/settings')
+FIREWALL_CONFIRM_PIPE = pathlib.Path('/usr/local/psa/var/modules/firewall/confirm.pipe')
 FIREWALL_UNITS = ('plesk-firewall', 'psa-firewall')
 FIREWALL_PENDING = ROOT / 'firewall-pending.json'
 FIREWALL_EXPIRIES = ROOT / 'firewall-expiries.json'
@@ -725,6 +726,24 @@ def crowdsec_appsec_status():
     return state
 
 
+def firewall_write_restriction():
+    """Root-owned incident interlock, persistent across extension upgrades."""
+    path = ROOT / 'firewall-write-block.json'
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return 'Firewall-Schreibzugriff gesperrt: Sicherheitsfreigabe nicht lesbar.'
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077):
+        return 'Firewall-Schreibzugriff gesperrt: unsichere Sicherheitsfreigabe.'
+    data = read_json(path, {}, max_bytes=4096)
+    reason = data.get('reason') if isinstance(data, dict) else None
+    if not isinstance(reason, str) or not reason.strip():
+        return 'Firewall-Schreibzugriff nach fehlgeschlagenem Integrationstest gesperrt.'
+    return re.sub(r'[\x00-\x1f]+', ' ', reason)[:350]
+
+
 def firewall_status():
     ctl = binary(SYSTEMCTL_PATHS)
     active_unit = None
@@ -740,8 +759,11 @@ def firewall_status():
                 known = True
     active = active_unit is not None
     installed = FIREWALL_SETTINGS.is_file()
+    restriction = firewall_write_restriction()
     return {'installed': installed, 'status_known': known,
-            'plesk_firewall_active': active, 'service': active_unit}
+            'plesk_firewall_active': active, 'service': active_unit,
+            'write_available': installed and active and not bool(restriction),
+            'write_error': restriction}
 
 
 def firewall_rules():
@@ -752,6 +774,8 @@ def firewall_rules():
         pending['remaining_seconds'] = max(0, int(55 - elapsed))
         if elapsed > 55:
             pending['state'] = 'expired'
+        if pending.get('cancel_requested'):
+            pending['state'] = 'rollback_pending'
     try:
         allowlist = firewall_allowlist_entries()
     except ValueError as exc:
@@ -781,9 +805,16 @@ def firewall_rules():
         rule_id = item.get('id')
         action = item.get('action')
         direction = item.get('direction')
+        rule_class = item.get('class')
+        display_name = name
+        # Plesk 18.0.82 omits names for built-in service and catchall rules.
+        # Use their class for display, never for Guardian ownership detection.
+        if (name is None and isinstance(rule_class, str) and
+                rule_class and rule_class != 'custom'):
+            display_name = 'Plesk: ' + rule_class
         if (isinstance(rule_id, (str, int)) and str(rule_id).isdigit() and
-                isinstance(name, str) and action in ('allow', 'deny') and
-                isinstance(direction, str)):
+                isinstance(display_name, str) and action in ('allow', 'deny') and
+                direction in ('input', 'output', 'forward')):
             addresses = item.get('from', item.get('remote-addresses', ''))
             if isinstance(addresses, list):
                 addresses = ', '.join(str(x) for x in addresses if isinstance(x, str))
@@ -791,7 +822,7 @@ def firewall_rules():
                 addresses = ''
             ports_value = item.get('ports', '')
             ports = str(ports_value)[:100] if isinstance(ports_value, (str, int)) else ''
-            row = {'id': str(rule_id)[:12], 'name': name[:120], 'class': str(item.get('class', ''))[:40],
+            row = {'id': str(rule_id)[:12], 'name': display_name[:120], 'class': str(item.get('class', ''))[:40],
                    'direction': direction[:20], 'action': action, 'source': addresses[:200], 'ports': ports}
             counts['all'] += 1
             counts[action] += 1
@@ -855,7 +886,8 @@ def firewall_rules():
         rules.append(rule)
     rules.sort(key=lambda row: (row['network'], row['id']))
     return {'available': True, 'limited': len(rules) > 100, 'rules': rules[:100],
-            'inventory': inventory, 'inventory_limited': counts['all'] > len(inventory),
+            'inventory': inventory, 'inventory_limited': len(decoded) > len(inventory),
+            'inventory_unparsed': len(decoded) - counts['all'],
             'counts': counts,
             'allowlist': allowlist,
             'pending': pending}
@@ -969,10 +1001,52 @@ def _firewall_target(value):
     return str(network)
 
 
+def firewall_verify_pending(pending):
+    """Read the Plesk inventory independently before disabling its rollback timer.
+
+    An inventory check is not proof of kernel rules or remote connectivity.
+    """
+    action = pending.get('action')
+    name = pending.get('rule_name')
+    if action not in ('ban', 'unban', 'port-allow', 'port-deny', 'port-remove') or not name:
+        raise ValueError('Ausstehende Firewall-Aenderung ist nicht verifizierbar.')
+    listing = firewall_rules()
+    if (not listing.get('available') or listing.get('limited') or
+            listing.get('inventory_limited') or 'inventory' not in listing):
+        raise ValueError('Firewall-Regelinventar nicht vollstaendig lesbar; keine Bestaetigung. Rollback abwarten.')
+    inventory = [row for row in listing['inventory'] if row.get('name') == name]
+    if action in ('unban', 'port-remove'):
+        verified = not inventory
+    else:
+        rules = [row for row in listing.get('rules', []) if row.get('name') == name]
+        verified = len(inventory) == 1 and len(rules) == 1
+        if verified:
+            rule = rules[0]
+            raw = inventory[0]
+            try:
+                sources = [str(ipaddress.ip_network(value.strip(), strict=False))
+                           for value in raw.get('source', '').split(',')]
+            except ValueError:
+                sources = []
+            verified = (rule.get('network') == pending.get('network') and
+                        sources == [pending.get('network')] and
+                        raw.get('class') == 'custom' and raw.get('direction') == 'input' and
+                        rule.get('kind') == ('ip_deny' if action == 'ban' else 'port') and
+                        rule.get('action') == ('deny' if action == 'ban' else action[5:]))
+            if action != 'ban':
+                verified = (verified and rule.get('port') == pending.get('port') and
+                            rule.get('protocol') == pending.get('protocol'))
+    if not verified:
+        raise ValueError('Firewall-Regelinventar entspricht nicht dem Auftrag; keine Bestaetigung. Rollback abwarten.')
+
+
 def _firewall_action(operation, target='', remote_address='', ttl_seconds=0, port='', protocol=''):
     """Stage one Plesk-native IP/port rule; Plesk rolls it back unless confirmed."""
     if os.geteuid() != 0:
         raise ValueError('Root-Verwaltung erforderlich.')
+    restriction = firewall_write_restriction()
+    if restriction:
+        raise ValueError(restriction)
     if operation in ('allowlist-add', 'allowlist-remove'):
         return _firewall_allowlist_change(operation, target, remote_address)
     plesk = binary(PLESK_BINARIES)
@@ -994,6 +1068,13 @@ def _firewall_action(operation, target='', remote_address='', ttl_seconds=0, por
         elapsed = time.time() - float(pending.get('started_epoch', 0))
         if operation == 'confirm' and elapsed > 55:
             raise ValueError('Plesk-Bestaetigungsfenster ist fast abgelaufen; Firewall-Rollback abwarten und erneut pruefen.')
+        if operation == 'confirm' and pending.get('cancel_requested'):
+            raise ValueError('Ruecknahme bereits angefordert; diese Aenderung darf nicht bestaetigt werden.')
+        if operation == 'confirm':
+            firewall_verify_pending(pending)
+            # The inventory read itself can consume the remaining confirmation window.
+            if time.time() - float(pending.get('started_epoch', 0)) > 55:
+                raise ValueError('Bestaetigungsfenster nach Verifikation abgelaufen; Rollback abwarten.')
         expiry_data = read_json(FIREWALL_EXPIRIES, {})
         network = pending.get('network', '')
         staged_expiry = False
@@ -1017,17 +1098,25 @@ def _firewall_action(operation, target='', remote_address='', ttl_seconds=0, por
         if operation == 'confirm' and pending.get('action') == 'unban':
             expiry_data.pop(network, None)
             write_json(FIREWALL_EXPIRIES, expiry_data)
-        try:
-            FIREWALL_PENDING.unlink()
-        except FileNotFoundError:
-            pass
+        if operation == 'confirm':
+            try:
+                FIREWALL_PENDING.unlink()
+            except FileNotFoundError:
+                pass
+        else:
+            pending['cancel_requested'] = True
+            write_json(FIREWALL_PENDING, pending)
         incident_log('operator', 'warning' if operation == 'confirm' else 'info', '',
-                     'Guardian-Firewall-Aenderung ' + ('bestaetigt.' if operation == 'confirm' else 'zurueckgesetzt.'))
-        return {'ok': True, 'state': 'confirmed' if operation == 'confirm' else 'cancelled',
-                'network': pending.get('network', '')}
+                     'Guardian-Firewall-Aenderung ' + ('bestaetigt.' if operation == 'confirm' else 'Ruecknahme angefordert; Laufzeitzustand noch nicht verifiziert.'))
+        return {'ok': True, 'state': 'confirmed' if operation == 'confirm' else 'rollback_requested',
+                'network': pending.get('network', ''),
+                'verified': operation == 'confirm',
+                'verification_scope': 'plesk-inventory' if operation == 'confirm' else None}
 
     if operation not in ('ban', 'unban', 'port-allow', 'port-deny', 'port-remove'):
         raise ValueError('Ungueltige Guardian-Firewall-Aktion.')
+    if FIREWALL_CONFIRM_PIPE.exists():
+        raise ValueError('Eine Plesk-Firewall-Aktivierung oder Ruecknahme laeuft noch; keine weitere Aenderung erlaubt.')
     if operation == 'port-remove':
         if not isinstance(target, str) or not target.isdigit() or len(target) > 12:
             raise ValueError('Ungueltige Guardian-Firewall-Regel-ID.')
@@ -1067,7 +1156,7 @@ def _firewall_action(operation, target='', remote_address='', ttl_seconds=0, por
             pass
 
     listing = firewall_rules()
-    if not listing['available'] or listing.get('limited'):
+    if not listing['available'] or listing.get('limited') or listing.get('inventory_limited'):
         raise ValueError('Guardian kann die Plesk-Firewallregeln nicht sicher auflisten.')
     if operation in ('ban', 'port-deny'):
         blocked_network = ipaddress.ip_network(network)
@@ -1111,7 +1200,7 @@ def _firewall_action(operation, target='', remote_address='', ttl_seconds=0, por
                           '-remote-addresses', network], timeout=12)
     else:
         name = matches[0]['name']
-        result = execute([plesk, 'ext', 'firewall', '--remove-rules', matches[0]['id']], timeout=12)
+        result = execute([plesk, 'ext', 'firewall', '--remove-rules', '-ids', matches[0]['id']], timeout=12)
     if result is None or result.returncode:
         raise ValueError('Plesk Firewall hat die Regelbearbeitung abgelehnt.')
     applied = execute([plesk, 'ext', 'firewall', '--apply'], timeout=15)
@@ -3177,6 +3266,24 @@ def restore_file(jobid, index):
         os.close(lockfd)
 
 
+def fail2ban_verify_ip(cli, jail, normalized, expected):
+    """Query the exact address, without relying on the truncated dashboard list.
+
+    This verifies Fail2Ban's runtime state, not packet delivery through its actions.
+    Unknown/unsupported responses must never be interpreted as an absent ban.
+    """
+    for attempt in range(3):
+        result = execute([cli, 'get', jail, 'banned', normalized], 4)
+        if result is None or result.returncode or result.stdout.strip() not in ('0', '1'):
+            raise ValueError('Fail2Ban-Sperrstatus nicht verifizierbar; Zustand unbekannt. Jail manuell pruefen.')
+        banned = result.stdout.strip() == '1'
+        if banned == expected:
+            return
+        if attempt < 2:
+            time.sleep(0.2)
+    raise ValueError('Fail2Ban-Sperrstatus entspricht nach der Aktion nicht dem Auftrag. Jail manuell pruefen.')
+
+
 def manual_ban(jail, address, operation):
     if os.geteuid() != 0 or not JAIL_NAME.fullmatch(jail) or operation not in ('ban', 'unban'):
         raise ValueError('Ungueltige Fail2Ban-Aktion.')
@@ -3193,10 +3300,28 @@ def manual_ban(jail, address, operation):
         raise ValueError('Fail2Ban fehlt.')
     if jail not in [x['name'] for x in fail2ban_status()['jails']]:
         raise ValueError('Jail nicht aktiv oder ausserhalb der Anzeigegrenze.')
-    run = execute([cli, 'set', jail, 'banip' if operation == 'ban' else 'unbanip', normalized], 8)
-    if run is None or run.returncode:
-        raise ValueError('Fail2Ban hat die Aktion abgelehnt.')
-    return {'ok': True, 'message': 'Fail2Ban-Aktion ausgefuehrt.', 'ip': normalized}
+    # Prove that verification is supported before changing the server state.
+    probe = execute([cli, 'get', jail, 'banned', normalized], 4)
+    if probe is None or probe.returncode or probe.stdout.strip() not in ('0', '1'):
+        raise ValueError('Fail2Ban-Sperrstatus nicht verifizierbar; keine Aenderung ausgefuehrt.')
+    plesk = binary(PLESK_BINARIES)
+    # Plesk documents jail-scoped unban, but no manual ban command.
+    command = ([plesk, 'bin', 'ip_ban', '--unban', normalized + ',' + jail]
+               if operation == 'unban' and plesk else
+               [cli, 'set', jail, 'banip' if operation == 'ban' else 'unbanip', normalized])
+    detail = 'Fail2Ban ' + operation + ': ' + jail + ' / ' + normalized
+    incident_log('operator', 'warning', '', detail + ' angefordert.')
+    try:
+        run = execute(command, 8)
+        if run is None or run.returncode:
+            raise ValueError('Fail2Ban hat die Aktion nicht bestaetigt; Zustand manuell pruefen.')
+        fail2ban_verify_ip(cli, jail, normalized, operation == 'ban')
+    except (ValueError, OSError, subprocess.SubprocessError):
+        incident_log('operator', 'warning', '', detail + ' fehlgeschlagen oder nicht verifiziert.')
+        raise
+    incident_log('operator', 'info', '', detail + ' im Fail2Ban-Laufzeitstatus verifiziert.')
+    return {'ok': True, 'message': 'Fail2Ban-Laufzeitstatus verifiziert.', 'ip': normalized,
+            'verified': True, 'verification_scope': 'fail2ban-runtime'}
 
 
 def php_runtime_status():

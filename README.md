@@ -1,4 +1,9 @@
-# Guardian Lite 0.28.46 – Plesk Security (Linux)
+# Guardian Lite 0.28.48 – Plesk Security (Linux)
+
+**Entwicklungsstand:** Die zwoelf Module des Sentinel-Gesamtauftrags sind noch
+nicht vollstaendig umgesetzt. Implementierung, lokale Tests, offene Funktionen
+und ausstehende Plesk-Integrationspruefungen sind in
+[SENTINEL-STATUS.md](SENTINEL-STATUS.md) getrennt dokumentiert.
 
 Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf Linux, Python >=3.8. Beta: aktive Schutzfunktionen zuerst auf einem separaten Testserver pruefen. Keine offizielle Plesk-Software.
 
@@ -42,6 +47,8 @@ Alle neuen aktiven Funktionen sind standardmaessig aus. Details zu Aktivierung, 
 
 Der systematische Funktionsabgleich und die Plesk-spezifische Umsetzungsreihenfolge sind in [FUNKTIONSUEBERSICHT.md](FUNKTIONSUEBERSICHT.md) dokumentiert. Gleichwertige Ablaufe werden klar von externen Cloud-/Lizenzdiensten unterschieden.
 
+Die bestehende Komponentenarchitektur, Sicherheitsgrenzen und der Status der zwölf angeforderten Sentinel-Module sind in [ARCHITEKTUR.md](ARCHITEKTUR.md) zusammengefasst.
+
 ## Installation und Upgrade
 
 Nur bei Bedarf installieren: ClamAV samt aktuellen Signaturen (`apt install clamav clamav-freshclam`), Fail2Ban (`fail2ban`), sowie die passenden Plesk-Komponenten fuer ModSecurity und PHP-Handler. Fuer die Laenderkarte kommen `python3-maxminddb` und die kostenfreie DB-IP-Lite Country MMDB hinzu; die Datenbank wird getrennt monatlich bereitgestellt. Plesk-Firewall ist optional und wird getrennt aktiviert. Vollstaendigen Snapshot und externe Backups vorhalten. Die Paketliste je Funktion steht in [MANAGEMENT.md](MANAGEMENT.md).
@@ -50,9 +57,9 @@ Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.28.46.zip
+plesk bin extension -i /root/guardian-lite-0.28.48.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.28.46.zip
+plesk bin extension -g /root/guardian-lite-0.28.48.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
@@ -79,7 +86,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.28.46
+python3 tools/build_release.py --tag v0.28.48
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.

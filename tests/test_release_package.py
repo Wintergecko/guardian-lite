@@ -18,7 +18,7 @@ class ReleasePackageTests(unittest.TestCase):
             path = build.build(pathlib.Path(tmp), 'v' + version)
             with zipfile.ZipFile(path) as archive:
                 self.assertIsNone(archive.testzip())
-                for name in ('meta.xml', 'MANAGEMENT.md', 'FEATURES.md',
+                for name in ('meta.xml', 'MANAGEMENT.md', 'FEATURES.md', 'ARCHITEKTUR.md', 'SENTINEL-STATUS.md',
                              'plib/views/scripts/index/management.phtml', 'sbin/guardian-bot-guard.php',
                              'htdocs/sentinel/sentinel.js', 'htdocs/sentinel/sentinel.css'):
                     self.assertIn(name, archive.namelist())

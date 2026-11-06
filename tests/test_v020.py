@@ -300,15 +300,23 @@ class NewFeatureTests(unittest.TestCase):
                 self.assertNotIn('example.com', h.schedules())
 
     def test_manual_ban_requires_valid_jail_and_ip(self):
-        fake = mock.Mock(return_value=mock.Mock(returncode=0))
+        state = {'banned': False}
+        def execute(args, timeout=5):
+            if args[1] == 'set':
+                state['banned'] = args[3] == 'banip'
+            return mock.Mock(returncode=0, stdout='1' if state['banned'] else '0')
+        fake = mock.Mock(side_effect=execute)
         with mock.patch.object(h.os, 'geteuid', return_value=0), \
-             mock.patch.object(h, 'binary', return_value='/usr/bin/fail2ban-client'), \
+             mock.patch.object(h, 'binary', side_effect=lambda paths: None if paths == h.PLESK_BINARIES else '/usr/bin/fail2ban-client'), \
              mock.patch.object(h, 'fail2ban_status', return_value={'jails': [{'name': 'sshd'}]}), \
+             mock.patch.object(h, 'incident_log'), \
              mock.patch.object(h, 'execute', fake):
             self.assertTrue(h.manual_ban('sshd', '8.8.8.8', 'ban')['ok'])
-            fake.assert_called_with(['/usr/bin/fail2ban-client', 'set', 'sshd', 'banip', '8.8.8.8'], 8)
+            fake.assert_any_call(['/usr/bin/fail2ban-client', 'set', 'sshd', 'banip', '8.8.8.8'], 8)
+            fake.assert_called_with(['/usr/bin/fail2ban-client', 'get', 'sshd', 'banned', '8.8.8.8'], 4)
             self.assertTrue(h.manual_ban('sshd', '127.0.0.1', 'unban')['ok'])
-            fake.assert_called_with(['/usr/bin/fail2ban-client', 'set', 'sshd', 'unbanip', '127.0.0.1'], 8)
+            fake.assert_any_call(['/usr/bin/fail2ban-client', 'set', 'sshd', 'unbanip', '127.0.0.1'], 8)
+            fake.assert_called_with(['/usr/bin/fail2ban-client', 'get', 'sshd', 'banned', '127.0.0.1'], 4)
             with self.assertRaises(ValueError):
                 h.manual_ban('sshd', '127.0.0.1', 'ban')
             with self.assertRaises(ValueError):

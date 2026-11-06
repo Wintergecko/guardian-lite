@@ -343,3 +343,6 @@
 .guardian .guardian-button{border-radius:4px!important;background:#4aa765!important;border-color:#4aa765!important}
 .guardian .guardian-button:hover{background:#3d9157!important;border-color:#3d9157!important}
 @media(max-width:900px){.guardian-menu{float:none;width:auto;position:relative;flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid #e2e7ed}.guardian-brand{width:100%;height:auto;padding:12px 18px}.guardian-menu-group{width:auto;border-bottom:0}.guardian-hero,.guardian-important,.guardian>.guardian-alert,.guardian-pages,.guardian-foot{margin-left:0;margin-right:0}.guardian-hero{flex-wrap:wrap;padding:14px 18px}.guardian-important,.guardian>.guardian-alert{margin-left:16px;margin-right:16px}.guardian-pages{padding:18px 16px}.guardian-tag{display:none}}
+
+/* An incident interlock keeps unsupported firewall controls visibly unavailable. */
+.guardian form[inert] { opacity: .5; }

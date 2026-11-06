@@ -10,7 +10,8 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-TOP_FILES = ('meta.xml', 'README.md', 'CHANGES.md', 'DESCRIPTION.md', 'SECURITY.md', 'MANAGEMENT.md', 'FEATURES.md', 'LICENSE')
+TOP_FILES = ('meta.xml', 'README.md', 'CHANGES.md', 'DESCRIPTION.md', 'SECURITY.md', 'MANAGEMENT.md',
+             'FEATURES.md', 'ARCHITEKTUR.md', 'SENTINEL-STATUS.md', 'LICENSE')
 TOP_DIRS = ('htdocs', 'plib', 'sbin', 'security')
 
 
