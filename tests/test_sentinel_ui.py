@@ -39,6 +39,7 @@ class SentinelUiTests(unittest.TestCase):
         styles = (ROOT / 'ui/src/styles.css').read_text(encoding='utf-8')
         self.assertIn('sentinel-dashboard-active .guardian-shell.sentinel-ready .guardian-pages', styles)
         self.assertIn('sentinel-module-active .guardian-shell.sentinel-ready .guardian-pages', styles)
+        self.assertRegex(styles, r'\.sentinel-sidebar\s*\{[^}]*z-index:\s*20;')
         self.assertIn('left: calc(100% + 8px)', styles)
         self.assertIn('top: 100%; left: 0', styles)
         self.assertIn('.guardian.sentinel-enabled { width: 100%; max-width: none;', styles)

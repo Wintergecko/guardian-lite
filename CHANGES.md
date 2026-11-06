@@ -1,3 +1,8 @@
+## 0.28.36 – Sidebar im Vordergrund
+
+- Hebt die Sentinel-Sidebar samt Untermenues vor den Inhaltsbereich, damit Navigation und seitliche Menue-Overlays nicht verdeckt werden.
+- Aktualisiert Asset-Versionen, damit Browser die korrigierten Styles laden.
+
 ## 0.28.35 – Volle Plesk-Inhaltsbreite
 
 - Sentinel nutzt die gesamte Breite des von Plesk bereitgestellten Inhaltsbereichs statt einer festen Maximalbreite.

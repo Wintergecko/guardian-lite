@@ -37,6 +37,7 @@
   grid-column: 1;
   grid-row: 1 / span 2;
   position: sticky;
+  z-index: 20;
   top: 12px;
   display: flex;
   flex-direction: column;
