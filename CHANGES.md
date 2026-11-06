@@ -1,3 +1,8 @@
+## 0.28.38 – Mehr Platz fuer die Ansicht
+
+- Entfernt den dauerhaft eingeblendeten Beta-Hinweis aus dem Kopfbereich, sodass die Sentinel-Inhalte weiter oben beginnen.
+- Zeigt die relevanten ClamAV-, Quarantaene- und Baseline-Hinweise kompakt direkt beim Malware-Scan.
+
 ## 0.28.37 – WAF-Ereignisse mit IP und Zeit
 
 - Liest Quell-IP und Zeitstempel aus ModSecurity-Audit-Abschnitt A sowie Apache-Fehlerlogzeilen mit IPv4-Client und Port.

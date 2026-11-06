@@ -48,18 +48,17 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.37" />
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.37" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.38" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.38" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sentinel Security <span>v0.28.37</span></h1>
+      <h1>Sentinel Security <span>v0.28.38</span></h1>
       <p>Sicherheitsverwaltung für Plesk Obsidian</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
   </header>
-  <div class="guardian-alert guardian-important">Beta-Version: Erst nach Snapshot auf Testsystem testen. ClamAV kann Malware uebersehen. Quarantaene entfernt Dateien aus der laufenden Website und kann sie beschaedigen. Automatische Good-File-Reparatur nur nach separater Freigabe pro Domain.</div>
   <?php if ($this->helperError): ?>
     <div class="guardian-alert">Helfer nicht erreichbar: <?= $esc($this->helperError) ?></div>
   <?php endif; ?>
@@ -298,6 +297,7 @@ $action = static function ($name) use ($esc) {
         </div>
       <?php endif; ?>
       <p>Die in Plesk hinterlegten Document-Roots werden mit ClamAV unter der Website-UID geprueft. Scans laufen einzeln mit niedriger CPU-Prioritaet; faellige manuelle und geplante Auftraege warten FIFO in einer begrenzten Warteschlange.</p>
+      <p class="guardian-small">ClamAV kann Malware uebersehen. Vor Quarantaene einen Snapshot erstellen: dabei wird die Datei aus der laufenden Website entfernt. Good-File-Reparatur muss separat pro Domain freigegeben werden.</p>
       <?php $scanQueue = is_array($this->scanQueue ?? null) ? $this->scanQueue : ['count' => 0, 'jobs' => []]; ?>
       <p class="guardian-small" role="status">Wartende Scans: <strong><?= $esc($scanQueue['count'] ?? 0) ?></strong> / <?= $esc($scanQueue['limit'] ?? 100) ?>.</p>
       <?php if (!empty($scanQueue['jobs'])): ?>
@@ -722,7 +722,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.37</h2>
+    <h2>GitHub-Updater · v0.28.38</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -934,7 +934,7 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.37" defer></script>
-  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.37" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.38" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.38" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Drittanbieter-Schutzprodukten verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>
