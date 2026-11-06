@@ -1,4 +1,4 @@
-# Sentinel Security: Liefer- und Pruefstatus 0.28.54
+# Sentinel Security: Liefer- und Pruefstatus 0.28.55
 
 Stand: 6. November 2026. Dieses Paket ist ein Entwicklungsstand der vorhandenen
 Plesk-Erweiterung `guardian-lite`. Der gesamte Entwicklungsauftrag mit zwoelf
@@ -12,6 +12,16 @@ die Komponenten, Vertrauensgrenzen und alle zwoelf Module mit konkreten Luecken.
 Die Erweiterung nutzt weiterhin denselben Plesk-Controller, dieselbe Extension-ID,
 dieselben Datenverzeichnisse sowie die vorhandenen React-/TypeScript- und
 serverseitigen Ansichten. Dieses Update fuehrt keine Datenmigration durch.
+
+## In 0.28.55 ergaenzt
+
+- Die Firewall-Tabelle zeigt jetzt die jeweilige Plesk-ID. Dadurch lassen sich
+  gleich aussehende Zeilen gezielt im Plesk-Firewall-Modul nachsehen.
+- Der Duplikatvergleich beruecksichtigt Regelname und alle weiteren sichtbaren
+  Felder; nur unterschiedliche IDs werden als verschiedene Eintraege
+  behandelt. Automatische Aenderungen bleiben ausgeschlossen.
+- Tests pruefen identische angezeigte Regeln, abweichende Quellen und Namen;
+  UI-/Navigations-/Pakettests, TypeScript-Build und PHP-Smokes sind bestanden.
 
 ## In 0.28.54 ergaenzt
 
@@ -287,9 +297,9 @@ Die bestehenden Teilfunktionen bleiben erhalten. Offen bleiben insbesondere:
    `/var/lib/guardian-lite/` sichern. Das Entwicklungs-ZIP nicht als bereits
    produktionsgeprueft behandeln.
 2. Die SHA-256-Datei zusammen mit dem ZIP auf den Testserver uebertragen und dort
-   mit `sha256sum -c guardian-lite-0.28.54.zip.sha256` pruefen.
-3. Neuinstallation: `plesk bin extension -i /root/guardian-lite-0.28.54.zip`.
-   Update: `plesk bin extension -g /root/guardian-lite-0.28.54.zip`.
+   mit `sha256sum -c guardian-lite-0.28.55.zip.sha256` pruefen.
+3. Neuinstallation: `plesk bin extension -i /root/guardian-lite-0.28.55.zip`.
+   Update: `plesk bin extension -g /root/guardian-lite-0.28.55.zip`.
 4. Als direkt angemeldeter Plesk-Administrator oeffnen, Diagnose ausfuehren und
    vorhandene Routen, Einstellungen, Scans und Wiederherstellungsdaten pruefen.
 5. Firewall-Apply/Confirm/Rollback ausschliesslich auf einem isolierten

@@ -72,6 +72,8 @@ class SentinelUiTests(unittest.TestCase):
         self.assertIn('firewall.duplicatePolicyEntries', app)
         self.assertIn('Sentinel ändert diese Regeln nicht.', app)
         self.assertIn('Sentinel does not change these rules.', app)
+        self.assertIn('<th>{labels.id}</th>', app)
+        self.assertIn('<td><code>{item.id}</code></td>', app)
         self.assertIn('aria-labelledby="sentinel-firewall-rules-title"', app)
         self.assertIn("const THEME_STORAGE_KEY = 'guardian-lite.sentinel.theme'", app)
         self.assertIn('aria-pressed={darkMode}', app)

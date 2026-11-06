@@ -980,13 +980,13 @@ def firewall_status():
 
 
 def firewall_duplicate_policy_entries(inventory):
-    """Count extra rows with identical visible policy fields and distinct Plesk IDs."""
+    """Count extra rows with identical displayed policy fields and distinct Plesk IDs."""
     groups = {}
     for row in inventory:
         if not isinstance(row, dict):
             continue
         rule_id = row.get('id')
-        fields = tuple(row.get(key) for key in ('action', 'direction', 'class', 'source', 'ports'))
+        fields = tuple(row.get(key) for key in ('name', 'action', 'direction', 'class', 'source', 'ports'))
         if (not isinstance(rule_id, str) or not rule_id.isdigit() or
                 any(not isinstance(value, str) for value in fields)):
             continue

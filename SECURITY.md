@@ -1,4 +1,14 @@
-# Guardian Lite v0.28.54 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.55 – Sicherheitsmodell und Grenzen
+
+## 0.28.55 – Plesk-Regel-IDs und Duplikate
+
+- Die read-only Tabelle zeigt die Plesk-ID, damit Eintraege im Plesk-Modul
+  manuell eindeutig geprueft werden koennen.
+- Der Duplikatvergleich umfasst alle sichtbaren Felder ausser der ID
+  (Regelname, Aktion, Richtung, Klasse, Quelle, Port). Er beweist nicht, dass
+  Regeln ausserhalb dieser Felder identisch wirken.
+- Es gibt weiterhin keine automatisierte Bereinigung oder Aenderung fremder
+  Plesk-Regeln.
 
 ## 0.28.54 – Plesk-Regel-Duplikate
 

@@ -651,12 +651,14 @@ class GuardianTests(unittest.TestCase):
 
     def test_firewall_inventory_counts_only_duplicate_visible_rules_with_distinct_ids(self):
         rows = [
-            {'id': 119, 'class': 'custom', 'name': None, 'direction': 'input',
+            {'id': 119, 'class': 'custom', 'name': 'Same rule', 'direction': 'input',
              'action': 'allow', 'ports': '8123/tcp', 'from': ''},
-            {'id': 120, 'class': 'custom', 'name': None, 'direction': 'input',
+            {'id': 120, 'class': 'custom', 'name': 'Same rule', 'direction': 'input',
              'action': 'allow', 'ports': '8123/tcp', 'from': ''},
             {'id': 121, 'class': 'custom', 'name': 'Different source', 'direction': 'input',
              'action': 'allow', 'ports': '8123/tcp', 'from': '192.0.2.1'},
+            {'id': 123, 'class': 'custom', 'name': 'Different name', 'direction': 'input',
+             'action': 'allow', 'ports': '8123/tcp', 'from': ''},
             {'id': 122, 'class': 'ssh', 'name': None, 'direction': 'input',
              'action': 'allow', 'ports': '22/tcp', 'from': ''},
         ]
@@ -667,7 +669,7 @@ class GuardianTests(unittest.TestCase):
                  ['plesk'], 0, json.dumps(rows), '')):
             result = helper.firewall_rules()
         self.assertEqual(result['duplicate_policy_entries'], 1)
-        self.assertEqual(result['counts']['all'], 4)
+        self.assertEqual(result['counts']['all'], 5)
         self.assertEqual(result['rules'], [])
 
     def test_unrecognized_firewall_rows_mark_inventory_incomplete(self):

@@ -207,9 +207,10 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
       all: 'Alle Regeln', list: 'Liste', direction: 'Richtung', name: 'Regel',
       source: 'Quelle', ports: 'Port', class: 'Klasse', search: 'Regeln suchen',
       filter: 'Aktion', allActions: 'Alle', shown: 'angezeigt', empty: 'Keine Regeln entsprechen dem Filter.',
+      id: 'Plesk-ID',
       limited: 'Die Plesk-Regelliste ist unvollständig oder erreicht die Anzeigegrenze.', noInventory: 'Plesk hat keine Firewall-Regeln zurückgegeben.',
       unparsed: 'Plesk-Regeln konnten wegen fehlender oder ungültiger Felder nicht dargestellt werden.',
-      duplicatePolicies: (count: number) => `${count} zusätzliche Plesk-Einträge haben identische sichtbare Regelmerkmale (Aktion, Richtung, Klasse, Quelle und Port). Das kann beabsichtigt sein; bitte in Plesk prüfen. Sentinel ändert diese Regeln nicht.`,
+      duplicatePolicies: (count: number) => `${count} zusätzliche Plesk-Einträge haben identische angezeigte Regelmerkmale. Das kann beabsichtigt sein; bitte die Plesk-IDs in Plesk prüfen. Sentinel ändert diese Regeln nicht.`,
       duplicatesLimited: 'Die Prüfung umfasst nur die angezeigten Einträge, da das Regelinventar begrenzt ist.',
       input: 'Eingehend', output: 'Ausgehend', unknown: 'Unbekannt',
     }
@@ -222,9 +223,10 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
       all: 'All rules', list: 'List', direction: 'Direction', name: 'Rule',
       source: 'Source', ports: 'Port', class: 'Class', search: 'Search rules',
       filter: 'Action', allActions: 'All', shown: 'shown', empty: 'No rules match the filter.',
+      id: 'Plesk ID',
       limited: 'The Plesk inventory is incomplete or reached the display limit.', noInventory: 'Plesk returned no firewall rules.',
       unparsed: 'Plesk rules could not be displayed because required fields were missing or invalid.',
-      duplicatePolicies: (count: number) => `${count} additional Plesk entries have identical visible rule fields (action, direction, class, source, and port). This may be intentional; verify in Plesk. Sentinel does not change these rules.`,
+      duplicatePolicies: (count: number) => `${count} additional Plesk entries have identical displayed rule fields. This may be intentional; check the Plesk IDs in Plesk. Sentinel does not change these rules.`,
       duplicatesLimited: 'The check covers only displayed entries because the inventory is limited.',
       input: 'Inbound', output: 'Outbound', unknown: 'Unknown',
     };
@@ -272,11 +274,12 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
             {firewall.inventoryLimited ? ` ${labels.duplicatesLimited}` : ''}
           </p>}
           <div className="sentinel-table-scroll"><table><thead><tr>
-            <th>{labels.list}</th><th>{labels.direction}</th><th>{labels.name}</th>
+            <th>{labels.id}</th><th>{labels.list}</th><th>{labels.direction}</th><th>{labels.name}</th>
             <th>{labels.source}</th><th>{labels.ports}</th><th>{labels.class}</th>
           </tr></thead><tbody>
             {rows.map((item) => (
               <tr key={item.id}>
+                <td><code>{item.id}</code></td>
                 <td>{item.action === 'allow' ? labels.allow : labels.deny}</td>
                 <td>{item.direction === 'input' ? labels.input : item.direction === 'output' ? labels.output : item.direction || labels.unknown}</td>
                 <td>{item.name}</td><td><code>{item.source || '—'}</code></td>

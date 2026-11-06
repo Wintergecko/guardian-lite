@@ -1,3 +1,11 @@
+## 0.28.55 – Plesk-Regeln eindeutig zuordnen
+
+- Die read-only Firewall-Tabelle zeigt jetzt die Plesk-Regel-ID jeder Zeile,
+  damit gleich aussehende Eintraege im Plesk-Modul wiedergefunden werden.
+- Der Duplikathinweis vergleicht saemtliche angezeigten Regelmerkmale
+  einschliesslich Name; abweichend benannte Regeln werden nicht als Duplikate
+  gezaehlt. Es werden weiterhin keine Regeln bearbeitet oder entfernt.
+
 ## 0.28.54 – Plesk-Firewall-Duplikat-Hinweis
 
 - Die read-only Regelliste zaehlt Eintraege mit identischen sichtbaren Feldern

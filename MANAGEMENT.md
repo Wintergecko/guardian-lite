@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.54 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.55 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -20,10 +20,11 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | CrowdSec-Entscheidungen | Optional CrowdSec (MIT) mit laufendem lokalen Dienst und lesbarem `cscli`; Guardian liest maximal 50 aktive Entscheidungen. Keine Installation/Registrierung, Community-Listen oder Bouncer durch Guardian. Einzelne IP-`ban`-Entscheidungen lassen sich in den Plesk-Bestaetigungsablauf uebernehmen. |
 | E-Mail-Warnungen | Lokaler Sendmail-kompatibler Mailtransport oder in Plesk funktionierender Mailtransport. |
 
-Die read-only Plesk-Regelliste weist zusaetzlich auf mehrere Eintraege hin,
+Die read-only Plesk-Regelliste zeigt IDs und weist zusaetzlich auf mehrere Eintraege hin,
 deren sichtbare Aktions-, Richtungs-, Klassen-, Quellen- und Portfelder
-identisch sind. Das kann beabsichtigt sein; weitere Plesk-Regelfelder werden
-nicht verglichen. Duplikate muessen im Plesk-Firewall-Modul geprueft werden.
+einschliesslich Regelname identisch sind. Das kann beabsichtigt sein; weitere
+Plesk-Regelfelder werden nicht verglichen. Duplikate muessen anhand ihrer IDs
+im Plesk-Firewall-Modul geprueft werden.
 Sentinel aendert oder loescht sie nicht.
 
 ### Globale Fail2Ban-Defaults

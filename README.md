@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.54 – Plesk Security (Linux)
+# Guardian Lite 0.28.55 – Plesk Security (Linux)
 
 **Entwicklungsstand:** Die zwoelf Module des Sentinel-Gesamtauftrags sind noch
 nicht vollstaendig umgesetzt. Implementierung, lokale Tests, offene Funktionen
@@ -58,9 +58,9 @@ Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.28.54.zip
+plesk bin extension -i /root/guardian-lite-0.28.55.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.28.54.zip
+plesk bin extension -g /root/guardian-lite-0.28.55.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
@@ -87,7 +87,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.28.54
+python3 tools/build_release.py --tag v0.28.55
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.
