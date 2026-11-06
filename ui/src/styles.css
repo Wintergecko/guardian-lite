@@ -212,6 +212,17 @@
 .guardian.sentinel-enabled .guardian-pages { width: auto; margin-left: 0; margin-right: 0; }
 .guardian.sentinel-enabled .guardian-foot { grid-column: 2; grid-row: 3; }
 .guardian.sentinel-dark { color: #dbe5f1; }
+.guardian.sentinel-dark {
+  color-scheme: dark;
+  background: #0b1120 !important;
+  border-color: #26354d !important;
+}
+.guardian.sentinel-light {
+  color-scheme: light;
+  color: #253447 !important;
+  background: #fff !important;
+  border-color: #e2e7ed !important;
+}
 .guardian.sentinel-dark .guardian-pages { color: #dbe5f1; }
 .guardian.sentinel-dark .guardian-card,
 .guardian.sentinel-dark .guardian-protection-panel,
@@ -240,7 +251,147 @@
 .guardian.sentinel-dark .guardian-pages .guardian-incident-chart { color: #dbe5f1; background: #101a2b; border-color: #2a3a53; }
 .guardian.sentinel-dark .guardian-pages .guardian-state,
 .guardian.sentinel-dark .guardian-pages .guardian-stat { background: #1d2b42; border-color: #2a3a53; }
+.guardian.sentinel-dark .guardian-pages .guardian-firewall-subpanel,
+.guardian.sentinel-dark .guardian-pages .guardian-firewall-action-panel,
+.guardian.sentinel-dark .guardian-pages .guardian-result-block,
+.guardian.sentinel-dark .guardian-pages .guardian-result-list > li,
+.guardian.sentinel-dark .guardian-pages .guardian-firewall-source,
+.guardian.sentinel-dark .guardian-pages .guardian-firewall-summary-item {
+  color: #dbe5f1;
+  background: #111c2f;
+  border-color: #2a3a53;
+}
+.guardian.sentinel-dark .guardian-pages .guardian-firewall-summary-item span,
+.guardian.sentinel-dark .guardian-pages .guardian-firewall-summary-item strong,
+.guardian.sentinel-dark .guardian-pages .guardian-firewall-source span,
+.guardian.sentinel-dark .guardian-pages .guardian-firewall-source strong,
+.guardian.sentinel-dark .guardian-pages .guardian-firewall-source small,
+.guardian.sentinel-dark .guardian-pages .guardian-result-grid dt,
+.guardian.sentinel-dark .guardian-pages .guardian-result-grid dd,
+.guardian.sentinel-dark .guardian-pages .guardian-result-value {
+  color: #dbe5f1 !important;
+}
+.guardian.sentinel-dark .guardian-pages pre,
+.guardian.sentinel-dark .guardian-pages code {
+  color: #dbe5f1 !important;
+  -webkit-text-fill-color: #dbe5f1 !important;
+  background: #101a2b !important;
+  border-color: #2a3a53 !important;
+}
 .guardian.sentinel-dark .guardian-foot { color: #91a3bb; }
+
+.guardian.sentinel-light .sentinel-sidebar,
+.guardian.sentinel-light .sentinel-overview,
+.guardian.sentinel-light .sentinel-react-content {
+  color: #253447;
+  background: #fff;
+  border-color: #dbe3ec;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 5%);
+}
+.guardian.sentinel-light .sentinel-brand,
+.guardian.sentinel-light .sentinel-nav-group > button,
+.guardian.sentinel-light .sentinel-sidebar-controls label,
+.guardian.sentinel-light .sentinel-route-header,
+.guardian.sentinel-light .sentinel-route-header h1,
+.guardian.sentinel-light .sentinel-overview-heading h1,
+.guardian.sentinel-light .sentinel-overview-heading p,
+.guardian.sentinel-light .sentinel-module-description,
+.guardian.sentinel-light .sentinel-event-table h2,
+.guardian.sentinel-light .sentinel-table-scroll td,
+.guardian.sentinel-light .sentinel-firewall-kpis article strong,
+.guardian.sentinel-light .sentinel-kpis strong,
+.guardian.sentinel-light .sentinel-fail2ban h2,
+.guardian.sentinel-light .sentinel-jail-settings dd,
+.guardian.sentinel-light .sentinel-fail2ban-form h3,
+.guardian.sentinel-light .sentinel-fail2ban-backups h3,
+.guardian.sentinel-light .sentinel-recent-events h2,
+.guardian.sentinel-light .sentinel-recent-events li strong {
+  color: #1e293b;
+}
+.guardian.sentinel-light .sentinel-brand small,
+.guardian.sentinel-light .sentinel-nav-group a,
+.guardian.sentinel-light .sentinel-event-toolbar label,
+.guardian.sentinel-light .sentinel-event-table > header > span,
+.guardian.sentinel-light .sentinel-table-scroll th,
+.guardian.sentinel-light .sentinel-kpis article > span,
+.guardian.sentinel-light .sentinel-kpis small,
+.guardian.sentinel-light .sentinel-firewall-kpis article span,
+.guardian.sentinel-light .sentinel-jail-settings dt,
+.guardian.sentinel-light .sentinel-detail-note,
+.guardian.sentinel-light .sentinel-detail-message,
+.guardian.sentinel-light .sentinel-fail2ban-form label,
+.guardian.sentinel-light .sentinel-fail2ban-backups time,
+.guardian.sentinel-light .sentinel-fail2ban-backups p,
+.guardian.sentinel-light .sentinel-recent-events p,
+.guardian.sentinel-light .sentinel-recent-events li small {
+  color: #64748b;
+}
+.guardian.sentinel-light .sentinel-sidebar-controls select,
+.guardian.sentinel-light .sentinel-theme-toggle,
+.guardian.sentinel-light .sentinel-event-toolbar input[type="search"],
+.guardian.sentinel-light .sentinel-event-toolbar select,
+.guardian.sentinel-light .sentinel-fail2ban-heading select,
+.guardian.sentinel-light .sentinel-fail2ban-form input {
+  color: #1e293b;
+  background: #fff;
+  border-color: #cbd5e1;
+}
+.guardian.sentinel-light .sentinel-nav-group > button:hover,
+.guardian.sentinel-light .sentinel-nav-group > button.is-active,
+.guardian.sentinel-light .sentinel-nav-group > button.is-open,
+.guardian.sentinel-light .sentinel-nav-group a:hover,
+.guardian.sentinel-light .sentinel-nav-group ul {
+  color: #1e293b;
+  background: #f1f5f9;
+  border-color: #dbe3ec;
+}
+.guardian.sentinel-light .sentinel-sidebar-controls,
+.guardian.sentinel-light .sentinel-table-scroll th,
+.guardian.sentinel-light .sentinel-table-scroll td,
+.guardian.sentinel-light .sentinel-fail2ban-form,
+.guardian.sentinel-light .sentinel-fail2ban-backups {
+  border-color: #e2e8f0;
+}
+.guardian.sentinel-light .sentinel-firewall-kpis article,
+.guardian.sentinel-light .sentinel-kpis article,
+.guardian.sentinel-light .sentinel-jail-settings div {
+  background: #f8fafc;
+  border-color: #dbe3ec;
+}
+.guardian.sentinel-light .sentinel-fail2ban,
+.guardian.sentinel-light .sentinel-fail2ban-backups li,
+.guardian.sentinel-light .sentinel-recent-events li {
+  color: #334155;
+  background: #f1f5f9;
+  border-color: #dbe3ec;
+}
+.guardian.sentinel-light .sentinel-firewall-status {
+  color: #334155;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+.guardian.sentinel-light .sentinel-event-export,
+.guardian.sentinel-light .sentinel-recent-events > button {
+  color: #15803d;
+}
+.guardian.sentinel-light .sentinel-table-scroll code {
+  color: #334155;
+}
+.guardian.sentinel-light .sentinel-theme-toggle[aria-pressed="true"] {
+  color: #1e293b;
+}
+.guardian.sentinel-light .sentinel-live-state,
+.guardian.sentinel-light .sentinel-jail-settings,
+.guardian.sentinel-light .sentinel-recent-events li,
+.guardian.sentinel-light .sentinel-firewall-status {
+  color: #475569;
+}
+.guardian.sentinel-light .sentinel-detail-error { color: #b91c1c; }
+.guardian.sentinel-light .sentinel-detail-success { color: #15803d; }
+.guardian.sentinel-light .sentinel-event-table code {
+  color: #334155;
+  background: #f1f5f9;
+}
 
 @media (max-width: 1000px) {
   .guardian-shell.sentinel-ready { grid-template-columns: 210px minmax(0, 1fr); gap: 12px; }

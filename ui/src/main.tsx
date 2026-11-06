@@ -499,9 +499,20 @@ function currentModuleTarget(): string | null {
   return target && target !== 'guardian-dashboard-top' ? target : null;
 }
 
+const THEME_STORAGE_KEY = 'guardian-lite.sentinel.theme';
+
+function readThemePreference(): boolean {
+  try {
+    return window.localStorage.getItem(THEME_STORAGE_KEY) !== 'light';
+  } catch (error: unknown) {
+    console.error('Sentinel theme preference could not be read.', error);
+    return true;
+  }
+}
+
 function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string }) {
   const [language, setLanguage] = useState<'de' | 'en'>('de');
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(readThemePreference);
   const [activeGroup, setActiveGroup] = useState('overview');
   const [openGroup, setOpenGroup] = useState('');
   const [activeTarget, setActiveTarget] = useState<string | null>(currentModuleTarget);
@@ -529,7 +540,7 @@ function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string
     page.classList.add('sentinel-enabled');
     return () => {
       shell.classList.remove('sentinel-ready');
-      page.classList.remove('sentinel-enabled', 'sentinel-dark', 'sentinel-module-active', 'sentinel-dashboard-active', 'sentinel-react-page-active');
+      page.classList.remove('sentinel-enabled', 'sentinel-dark', 'sentinel-light', 'sentinel-module-active', 'sentinel-dashboard-active', 'sentinel-react-page-active');
     };
   }, []);
 
@@ -547,7 +558,15 @@ function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string
   }, [activeTarget]);
 
   useEffect(() => {
-    document.querySelector('.guardian')?.classList.toggle('sentinel-dark', darkMode);
+    const page = document.querySelector('.guardian');
+    page?.classList.toggle('sentinel-dark', darkMode);
+    page?.classList.toggle('sentinel-light', !darkMode);
+    page?.setAttribute('data-sentinel-theme', darkMode ? 'dark' : 'light');
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, darkMode ? 'dark' : 'light');
+    } catch (error: unknown) {
+      console.error('Sentinel theme preference could not be saved.', error);
+    }
   }, [darkMode]);
 
   useEffect(() => {
@@ -737,7 +756,15 @@ function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string
           <select id="sentinel-language" value={language} onChange={(event) => setLanguage(event.currentTarget.value === 'en' ? 'en' : 'de')}>
             <option value="de">Deutsch</option><option value="en">English</option>
           </select>
-          <button type="button" className="sentinel-theme-toggle" onClick={() => setDarkMode(!darkMode)}>{labels.theme}</button>
+          <button
+            type="button"
+            className="sentinel-theme-toggle"
+            aria-pressed={darkMode}
+            aria-label={language === 'de'
+              ? `Aktuelles Design: ${darkMode ? 'dunkel' : 'hell'}. ${darkMode ? 'Zum hellen Design wechseln' : 'Zum dunklen Design wechseln'}.`
+              : `Current theme: ${darkMode ? 'dark' : 'light'}. Switch to ${darkMode ? 'light' : 'dark'} theme.`}
+            onClick={() => setDarkMode((current) => !current)}
+          >{labels.theme}</button>
         </div>
       </aside>
       {activeMenuItem && (

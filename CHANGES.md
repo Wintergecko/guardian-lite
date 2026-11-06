@@ -1,3 +1,9 @@
+## 0.28.42 – Theme-Umschaltung vereinheitlicht
+
+- Helles und dunkles Design werden auf React-Dashboard, Firewall- und Ereignisansichten konsistent angewendet.
+- Die Auswahl bleibt bei Navigation und Seitenaktualisierung erhalten; der Schalter gibt seinen Zustand barrierefrei aus.
+- Ergaenzt helle Lesbarkeit fuer React-Steuerelemente und dunkle Farben fuer wichtige Legacy-Plesk-Status- und Ausgabebloecke.
+
 ## 0.28.41 – Plesk-Firewall in React
 
 - Migriert die Plesk-Regelübersicht in eine React-Ansicht mit Regelzählern sowie Suche und Aktionsfilter.
