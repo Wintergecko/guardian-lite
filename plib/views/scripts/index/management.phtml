@@ -168,6 +168,7 @@ $domainSelect = function () use ($esc) {
     </tbody></table></div></details>
   <?php endif; ?>
   </section>
+  <section id="guardian-settings-overview" hidden aria-hidden="true"></section>
   <section class="guardian-card guardian-subsection" id="guardian-settings-storage">
   <h3>Speicher und Wiederherstellungspunkte</h3>
   <p>Guardian-Verbrauch: <strong><?= $esc($formatBytes($storage['managed_bytes'] ?? 0)) ?></strong>

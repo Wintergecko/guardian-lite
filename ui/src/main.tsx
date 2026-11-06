@@ -57,6 +57,85 @@ function normalizeSeverity(value: string): string {
   return severity;
 }
 
+function SettingsModule({ language, onNavigate }: {
+  language: 'de' | 'en';
+  onNavigate: (target: string) => void;
+}) {
+  const isGerman = language === 'de';
+  const sections = isGerman
+    ? [
+      {
+        title: 'Speicher & Wiederherstellung',
+        description: 'Speicherbelegung, Backups, Aufbewahrung und Wiederherstellungspunkte verwalten.',
+        items: [{ target: 'guardian-settings-storage', title: 'Speicher & Backups', description: 'Quotas, Speicherverbrauch und sichere Bereinigung.' }],
+      },
+      {
+        title: 'Zugangsdaten & Integrationen',
+        description: 'Externe Dienste und vertrauliche API-Zugangsdaten konfigurieren.',
+        items: [{ target: 'guardian-service-keys', title: 'Dienst-Schlüssel', description: 'AbuseIPDB- und Turnstile-Schlüssel sowie Einwilligung.' }],
+      },
+      {
+        title: 'Wartung & System',
+        description: 'Erweiterungsaktualisierungen und technische Diagnose.',
+        items: [
+          { target: 'guardian-updater', title: 'Updates', description: 'Version prüfen und verfügbare Erweiterungsupdates verwalten.' },
+          { target: 'guardian-management-diagnostics', title: 'Diagnose', description: 'System-, Dienst- und Berechtigungsstatus prüfen.' },
+        ],
+      },
+    ]
+    : [
+      {
+        title: 'Storage & recovery',
+        description: 'Review storage use, backups, retention, and recovery points.',
+        items: [{ target: 'guardian-settings-storage', title: 'Storage & backups', description: 'Quotas, storage usage, and safe cleanup.' }],
+      },
+      {
+        title: 'Credentials & integrations',
+        description: 'Configure external services and confidential API credentials.',
+        items: [{ target: 'guardian-service-keys', title: 'Service keys', description: 'AbuseIPDB and Turnstile keys and consent.' }],
+      },
+      {
+        title: 'Maintenance & system',
+        description: 'Extension updates and technical diagnostics.',
+        items: [
+          { target: 'guardian-updater', title: 'Updates', description: 'Check the version and manage available extension updates.' },
+          { target: 'guardian-management-diagnostics', title: 'Diagnostics', description: 'Review system, service, and permission status.' },
+        ],
+      },
+    ];
+
+  return (
+    <main className="sentinel-react-content sentinel-settings" aria-labelledby="sentinel-settings-title">
+      <header className="sentinel-settings-heading">
+        <p>{isGerman ? 'KONFIGURATION & WARTUNG' : 'CONFIGURATION & MAINTENANCE'}</p>
+        <h2 id="sentinel-settings-title">{isGerman ? 'Verwaltung' : 'Administration'}</h2>
+        <span>{isGerman
+          ? 'Einstellungen nach Aufgabe gruppiert. Wähle einen Bereich, um Details und verfügbare Aktionen zu öffnen.'
+          : 'Settings grouped by task. Choose a section to review details and available actions.'}</span>
+      </header>
+      <div className="sentinel-settings-groups">
+        {sections.map((section) => (
+          <section className="sentinel-settings-group" key={section.title}>
+            <header><h3>{section.title}</h3><p>{section.description}</p></header>
+            <div className="sentinel-settings-cards">
+              {section.items.map((item) => (
+                <button type="button" className="sentinel-settings-card" key={item.target}
+                  onClick={() => onNavigate(item.target)}>
+                  <span>{item.title}</span><small>{item.description}</small>
+                  <strong>{isGerman ? 'Bereich öffnen' : 'Open section'} <span aria-hidden="true">→</span></strong>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+      <p className="sentinel-settings-note">{isGerman
+        ? 'Änderungen werden weiterhin über die geschützten Plesk-Verwaltungsaktionen ausgeführt. Zugangsschlüssel werden nicht im Klartext angezeigt.'
+        : 'Changes continue to use protected Plesk administration actions. Service keys are never displayed in plain text.'}</p>
+    </main>
+  );
+}
+
 function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus; language: 'de' | 'en' }) {
   const [query, setQuery] = useState('');
   const [action, setAction] = useState<'all' | 'allow' | 'deny'>('all');
@@ -242,6 +321,7 @@ const menu: MenuGroup[] = [
     label: 'Verwaltung',
     english: 'Administration',
     items: [
+      { target: 'guardian-settings-overview', label: 'Verwaltungsübersicht', english: 'Administration overview' },
       { target: 'guardian-settings-storage', label: 'Speicher & Backups', english: 'Storage & backups' },
       { target: 'guardian-service-keys', label: 'Dienst-Schlüssel', english: 'Service keys' },
       { target: 'guardian-updater', label: 'Updates', english: 'Updates' },
@@ -777,6 +857,14 @@ function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string
         <EventsModule status={status} language={language} exportUrl={exportUrl} />
       )}
       {activeTarget === 'guardian-firewall' && <PleskFirewallModule firewall={status.firewall} language={language} />}
+      {activeTarget === 'guardian-settings-overview' && (
+        <SettingsModule language={language} onNavigate={(target) => {
+          navigateTo(target);
+          setActiveGroup('settings');
+          setOpenGroup('');
+          setActiveTarget(target);
+        }} />
+      )}
       <section className="sentinel-overview" hidden={Boolean(activeTarget)} aria-label={language === 'de' ? 'Sicherheitsstatus' : 'Security status'}>
         <header className="sentinel-overview-heading">
           <div><p>{labels.subtitle}</p><h1>Sentinel Security</h1></div>

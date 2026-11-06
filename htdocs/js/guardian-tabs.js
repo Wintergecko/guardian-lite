@@ -45,6 +45,7 @@
         ['guardian-runtime', 'PHP Runtime · Schutzstatus'], ['guardian-php-config', 'Handler & Rollback'],
         ['guardian-reputation', 'IP-Reputation']]},
       {id: 'settings', label: 'Verwaltung', items: [
+        ['guardian-settings-overview', 'Verwaltungsübersicht'],
         ['guardian-settings-storage', 'Speicher & Backups'], ['guardian-service-keys', 'Dienst-Schlüssel'],
         ['guardian-updater', 'Updates'], ['guardian-management-diagnostics', 'Diagnose']]}
     ];

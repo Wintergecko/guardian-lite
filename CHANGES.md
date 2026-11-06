@@ -1,3 +1,9 @@
+## 0.28.43 – Verwaltungsbereich geordnet
+
+- Fuegt fuer `guardian-tab-settings` eine klare React-Verwaltungsübersicht mit Gruppen fuer Speicher/Wiederherstellung, Dienst-Schluessel/Integrationen und Wartung/System hinzu.
+- Verlinkt die vorhandenen Einstellungsbereiche, ohne deren Formulare, Aktionen oder Plesk-Controller zu veraendern.
+- Die Verwaltungsübersicht wird beim direkten Aufruf des Verwaltungs-Tabs als Einstiegsseite angezeigt.
+
 ## 0.28.42 – Theme-Umschaltung vereinheitlicht
 
 - Helles und dunkles Design werden auf React-Dashboard, Firewall- und Ereignisansichten konsistent angewendet.
