@@ -90,13 +90,13 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.44" />
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.44" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.45" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.45" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sentinel Security <span>v0.28.44</span></h1>
+      <h1>Sentinel Security <span>v0.28.45</span></h1>
       <p>Sicherheitsverwaltung für Plesk Obsidian</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -764,19 +764,18 @@ $action = static function ($name) use ($esc) {
       <?php else: ?><p class="guardian-small">Portregeln sind erst verfügbar, wenn die Plesk-Firewall aktiv und ihre Regelliste lesbar ist.</p><?php endif; ?>
     </section>
   </div>
-  <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.44</h2>
+  <section class="guardian-card guardian-lower guardian-settings-area" id="guardian-updater">
+    <h2>GitHub-Updater · v0.28.45</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
        Eine GitHub-Pruefsumme ist <strong>keine unabhaengige digitale Signatur</strong>. Bei kompromittiertem Repository ist auch das Update gefaehrdet.</p>
-    <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'update-repo')) ?>">
+    <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'update-repo')) ?>" class="guardian-settings-form guardian-settings-form-single guardian-update-repo-form">
       <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>" />
-      <label for="guardian-update-repo">GitHub-Repository (URL oder owner/repo)</label>
-      <div class="guardian-formline">
+      <label class="guardian-setting-field" for="guardian-update-repo">GitHub-Repository (URL oder owner/repo)
         <input id="guardian-update-repo" name="repo" type="text" value="<?= $esc($this->updateRepo) ?>" maxlength="200" placeholder="https://github.com/Wintergecko/guardian-lite" />
-        <button type="submit">Speichern</button>
-      </div>
+      </label>
+      <div class="guardian-settings-form-actions"><button type="submit">Speichern</button></div>
     </form>
     <p class="guardian-small">Voreingestellt ist das offizielle Guardian-Lite-Repository. Du kannst direkt nach Updates suchen, ohne vorher auf Speichern zu klicken.</p>
     <form id="guardian-update-check-form" method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'update-check')) ?>">
@@ -977,7 +976,7 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.44" defer></script>
-  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.44" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.45" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.45" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Drittanbieter-Schutzprodukten verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

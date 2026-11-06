@@ -1,3 +1,9 @@
+## 0.28.45 – Einstellungsformulare vereinheitlicht
+
+- Vereinheitlicht Feldbreiten, Abstaende und Aktionsbereiche in Speicher-, Diagnose-, Dienstschluessel- und Update-Einstellungen.
+- Formatiert auch Select-Felder konsistent und passt die Formulare responsiv fuer schmale Ansichten sowie den Dunkelmodus an.
+- Bestehende Plesk-Aktionen, CSRF-Felder und Formularwerte bleiben unveraendert.
+
 ## 0.28.44 – Einstellungsfelder vereinheitlicht
 
 - Richtet die AbuseIPDB- und Turnstile-Schluesselfelder in einem responsiven Formularraster mit gleicher Breite, Hoehe und Ausrichtung aus.

@@ -169,7 +169,7 @@ $domainSelect = function () use ($esc) {
   <?php endif; ?>
   </section>
   <section id="guardian-settings-overview" hidden aria-hidden="true"></section>
-  <section class="guardian-card guardian-subsection" id="guardian-settings-storage">
+  <section class="guardian-card guardian-subsection guardian-settings-area" id="guardian-settings-storage">
   <h3>Speicher und Wiederherstellungspunkte</h3>
   <p>Guardian-Verbrauch: <strong><?= $esc($formatBytes($storage['managed_bytes'] ?? 0)) ?></strong>
     · Baselines: <strong><?= $esc($formatBytes($storageAreas['baselines']['bytes'] ?? 0)) ?> / <?= $esc($formatBytes($storage['baseline_quota_bytes'] ?? 536870912)) ?></strong>
@@ -183,10 +183,10 @@ $domainSelect = function () use ($esc) {
   </tbody></table></div>
   <p class="guardian-small">Quotas: Baselines 512 MiB; PHP-/WAF-Backups 256 MiB und 200 Eintraege. Guardian loescht Wiederherstellungspunkte nie automatisch. Die folgende Einmal-Bereinigung loescht nur nach Vorschau und zweiter Bestaetigung.</p>
   <h4>Aufbewahrung planen</h4>
-  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" class="guardian-retention-form">
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" class="guardian-settings-form guardian-settings-form-single guardian-retention-form">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="retention-preview">
-    <label>Aufbewahrungsfrist (Tage) <input type="number" name="days" value="90" min="30" max="3650" required></label>
-    <button class="guardian-button" type="submit">Bereinigung vorschauen</button>
+    <label class="guardian-setting-field">Aufbewahrungsfrist (Tage) <input type="number" name="days" value="90" min="30" max="3650" required></label>
+    <div class="guardian-settings-form-actions"><button class="guardian-button" type="submit">Bereinigung vorschauen</button></div>
   </form>
   <?php $retentionResult = $this->managementResult['operation'] ?? ''; $retentionPlan = $this->managementResult['result']['plan'] ?? null; ?>
   <?php if ($retentionResult === 'retention-preview' && is_array($retentionPlan)): ?>
@@ -338,7 +338,7 @@ $domainSelect = function () use ($esc) {
   <p><a href="https://docs.crowdsec.net/docs/appsec/quickstart/apache/" target="_blank" rel="noopener noreferrer">Offizielle CrowdSec-AppSec-Anleitung fuer Apache</a>. Die Apache-Komponente hat eigene Installations- und Vertrauensanforderungen; Guardian laedt keine Fremd-Binaries.</p>
 
   </section>
-  <section class="guardian-card guardian-subsection" id="guardian-service-keys">
+  <section class="guardian-card guardian-subsection guardian-settings-area" id="guardian-service-keys">
   <h3>Cloud-Dienst-Schluessel</h3>
   <p>AbuseIPDB: <?= !empty($cloud['abuseipdb_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?> · Turnstile: <?= !empty($cloud['turnstile_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?></p>
   <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" autocomplete="off" class="guardian-settings-form">
@@ -474,11 +474,13 @@ $domainSelect = function () use ($esc) {
   </form>
   <?= $renderResult('Ergebnis des CMS-Datenbank-Scans', $management['cms_db_clamav_scans'] ?? $management['wordpress_db_clamav_scans'] ?? []) ?>
   </section>
-  <section class="guardian-card guardian-subsection" id="guardian-management-diagnostics">
+  <section class="guardian-card guardian-subsection guardian-settings-area" id="guardian-management-diagnostics">
   <h3>Diagnose fuer deinen Plesk-Test</h3>
-  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
-    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="diagnostics"><?php $domainSelect(); ?>
-    <label><input type="checkbox" name="http_probe" value="1"> Kurzzeitig eine zufaellig benannte PHP-Testdatei anlegen, per HTTPS abrufen und danach entfernen</label><button>Diagnose ausfuehren</button>
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" class="guardian-settings-form guardian-settings-form-single guardian-settings-diagnostics-form">
+    <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="diagnostics">
+    <label class="guardian-setting-field">Domain <?php $domainSelect(); ?></label>
+    <label class="guardian-setting-toggle"><input type="checkbox" name="http_probe" value="1"> <span>Kurzzeitig eine zufaellig benannte PHP-Testdatei anlegen, per HTTPS abrufen und danach entfernen</span></label>
+    <div class="guardian-settings-form-actions"><button type="submit">Diagnose ausfuehren</button></div>
   </form>
   <p><a href="<?= $esc(pm_Context::getActionUrl('index', 'management-export')) ?>">Letztes Diagnoseergebnis als JSON herunterladen</a></p>
   <?= $renderResult('Diagnoseergebnis', $management['diagnostics'] ?? []) ?>
