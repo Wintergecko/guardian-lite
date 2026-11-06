@@ -26,6 +26,7 @@ type FirewallStatus = {
   installed: boolean;
   available: boolean;
   inventoryLimited: boolean;
+  inventoryUnparsed: number;
   counts: { all: number; inputAllow: number; inputDeny: number; portAllow: number; portDeny: number };
   inventory: FirewallInventoryItem[];
 };
@@ -142,7 +143,7 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
   const isGerman = language === 'de';
   const labels = isGerman
     ? {
-      description: 'Read-only-Übersicht der von Plesk gemeldeten Firewall-Regeln. Angezeigt werden maximal 300 Regeln; Änderungen an Firewall-Regeln werden nicht automatisch vorgenommen.',
+      description: 'Read-only-Übersicht der von Plesk gemeldeten Firewall-Regeln. Angezeigt werden bis zu 2000 Regeln; nicht-Guardian-Regeln sind nicht über Sentinel bearbeitbar.',
       active: 'Aktiv · Regeln lesbar', activeUnreadable: 'Aktiv · Regeln nicht lesbar',
       stopped: 'Nicht aktiv', unavailable: 'Regeln nicht lesbar',
       installed: 'Installiert, Status unbekannt', readableUnknown: 'Status unbekannt · Regeln lesbar', missing: 'Nicht installiert',
@@ -150,11 +151,12 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
       all: 'Alle Regeln', list: 'Liste', direction: 'Richtung', name: 'Regel',
       source: 'Quelle', ports: 'Port', class: 'Klasse', search: 'Regeln suchen',
       filter: 'Aktion', allActions: 'Alle', shown: 'angezeigt', empty: 'Keine Regeln entsprechen dem Filter.',
-      limited: 'Die Liste ist auf 300 Regeln begrenzt.', noInventory: 'Plesk hat keine Firewall-Regeln zurückgegeben.',
+      limited: 'Die Plesk-Regelliste ist unvollständig oder erreicht die Anzeigegrenze.', noInventory: 'Plesk hat keine Firewall-Regeln zurückgegeben.',
+      unparsed: 'Plesk-Regeln konnten wegen fehlender oder ungültiger Felder nicht dargestellt werden.',
       input: 'Eingehend', output: 'Ausgehend', unknown: 'Unbekannt',
     }
     : {
-      description: 'Read-only overview of firewall rules reported by Plesk. At most 300 rules are shown; firewall rules are not changed automatically.',
+      description: 'Read-only overview of firewall rules reported by Plesk. Up to 2000 rules are shown; non-Guardian rules cannot be edited through Sentinel.',
       active: 'Active · rules readable', activeUnreadable: 'Active · rules unavailable',
       stopped: 'Not active', unavailable: 'Rules unavailable',
       installed: 'Installed, status unknown', readableUnknown: 'Status unknown · rules readable', missing: 'Not installed',
@@ -162,7 +164,8 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
       all: 'All rules', list: 'List', direction: 'Direction', name: 'Rule',
       source: 'Source', ports: 'Port', class: 'Class', search: 'Search rules',
       filter: 'Action', allActions: 'All', shown: 'shown', empty: 'No rules match the filter.',
-      limited: 'The list is limited to 300 rules.', noInventory: 'Plesk returned no firewall rules.',
+      limited: 'The Plesk inventory is incomplete or reached the display limit.', noInventory: 'Plesk returned no firewall rules.',
+      unparsed: 'Plesk rules could not be displayed because required fields were missing or invalid.',
       input: 'Inbound', output: 'Outbound', unknown: 'Unknown',
     };
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -203,6 +206,7 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
             </label>
           </div>
           {firewall.inventoryLimited && <p className="sentinel-detail-error" role="status">{labels.limited}</p>}
+          {firewall.inventoryUnparsed > 0 && <p className="sentinel-detail-error" role="status">{firewall.inventoryUnparsed} {labels.unparsed}</p>}
           <div className="sentinel-table-scroll"><table><thead><tr>
             <th>{labels.list}</th><th>{labels.direction}</th><th>{labels.name}</th>
             <th>{labels.source}</th><th>{labels.ports}</th><th>{labels.class}</th>

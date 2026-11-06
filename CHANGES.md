@@ -1,3 +1,10 @@
+## 0.28.49 – Plesk-Portregeln vollstaendig anzeigen
+
+- Zeigt im Port-Tab alle von Plesk gelieferten Regeln mit Portangaben, darunter Standarddienste und benutzerdefinierte Plesk-Regeln.
+- Haelt Plesk-Regeln read-only und getrennt von Guardian-eigenen Regeln, die weiterhin separat verwaltet werden.
+- Erhoeht die vollstaendige Inventaranzeige auf 2000 Eintraege und meldet nicht darstellbare Plesk-Datensaetze transparent.
+- Verifiziert read-only am Zielserver: 25 Regeln insgesamt, davon 22 mit Ports; 20 Standarddienste und zwei benutzerdefinierte Regeln.
+
 ## 0.28.48 – Firewall-Incident-Sperre und ehrlicher Ruecknahmestatus
 
 - Ergaenzt eine root-private, updatefeste Firewall-Schreibsperre nach fehlgeschlagenen Live-Integrationspruefungen. Der Grund erscheint in der Oberflaeche; betroffene Formulare sind nicht bedienbar. Die laufende Firewall und Fail2Ban werden dadurch nicht deaktiviert.

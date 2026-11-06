@@ -809,9 +809,11 @@ def firewall_rules():
         display_name = name
         # Plesk 18.0.82 omits names for built-in service and catchall rules.
         # Use their class for display, never for Guardian ownership detection.
-        if (name is None and isinstance(rule_class, str) and
-                rule_class and rule_class != 'custom'):
-            display_name = 'Plesk: ' + rule_class
+        if not isinstance(display_name, str) or not display_name.strip():
+            if isinstance(rule_class, str) and rule_class:
+                display_name = 'Plesk: ' + rule_class
+            else:
+                display_name = 'Plesk rule #' + str(rule_id)[:12]
         if (isinstance(rule_id, (str, int)) and str(rule_id).isdigit() and
                 isinstance(display_name, str) and action in ('allow', 'deny') and
                 direction in ('input', 'output', 'forward')):
@@ -830,7 +832,7 @@ def firewall_rules():
                 counts['input_' + action] += 1
                 if ports:
                     counts['port_' + action] += 1
-            if len(inventory) < 300:
+            if len(inventory) < 2000:
                 inventory.append(row)
         if (not isinstance(name, str) or not isinstance(rule_id, (str, int)) or
                 not str(rule_id).isdigit() or item.get('class') != 'custom' or

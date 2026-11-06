@@ -41,6 +41,7 @@ $sentinelStatus = [
         'installed' => !empty($fw['installed']),
         'available' => !empty($fw['available']),
         'inventoryLimited' => !empty($fw['inventory_limited']),
+        'inventoryUnparsed' => (int)($fw['inventory_unparsed'] ?? 0),
         'counts' => [
             'all' => (int)($fw['counts']['all'] ?? 0),
             'inputAllow' => (int)($fw['counts']['input_allow'] ?? 0),
@@ -58,7 +59,7 @@ $sentinelStatus = [
                 'ports' => (string)($item['ports'] ?? ''),
                 'class' => (string)($item['class'] ?? ''),
             ];
-        }, array_slice(array_filter(isset($fw['inventory']) && is_array($fw['inventory']) ? $fw['inventory'] : [], 'is_array'), 0, 300))),
+        }, array_slice(array_filter(isset($fw['inventory']) && is_array($fw['inventory']) ? $fw['inventory'] : [], 'is_array'), 0, 2000))),
     ],
     'blockedIps' => isset($blockedGeo['blocked_ip_count']) ? (int)$blockedGeo['blocked_ip_count'] : null,
     'eventsTotal' => count(is_array($this->incidents) ? $this->incidents : []),
@@ -90,13 +91,13 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.48" />
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.48" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.49" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.49" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sentinel Security <span>v0.28.48</span></h1>
+      <h1>Sentinel Security <span>v0.28.49</span></h1>
       <p>Sicherheitsverwaltung für Plesk Obsidian</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -631,8 +632,9 @@ $action = static function ($name) use ($esc) {
           <div class="guardian-firewall-summary-item"><span>Portfreigaben</span><strong><?= (int)($fwCounts['port_allow'] ?? 0) ?></strong></div>
           <div class="guardian-firewall-summary-item"><span>Portsperren</span><strong><?= (int)($fwCounts['port_deny'] ?? 0) ?></strong></div>
         </div>
-        <p class="guardian-small">Plesk-Regeln insgesamt: <?= (int)($fwCounts['all'] ?? 0) ?> · Anzeige maximal 300 Regeln. Allow = Plesk-Erlauben-Regel (White List), Deny = Sperrregel (Black List). Die effektive Prioritaet bestimmt Plesk.</p>
-        <?php if (!empty($fw['inventory_limited'])): ?><p class="guardian-alert">Die Regelliste ist fuer die Anzeige auf 300 Eintraege begrenzt.</p><?php endif; ?>
+        <p class="guardian-small">Plesk-Regeln insgesamt: <?= (int)($fwCounts['all'] ?? 0) ?> · Anzeige maximal 2000 Regeln. Allow = Plesk-Erlauben-Regel (White List), Deny = Sperrregel (Black List). Die effektive Prioritaet bestimmt Plesk.</p>
+        <?php if (!empty($fw['inventory_limited'])): ?><p class="guardian-alert">Die Plesk-Regelliste ist unvollstaendig: Anzeigegrenze oder nicht unterstuetzte Datensaetze erreicht.</p><?php endif; ?>
+        <?php if (!empty($fw['inventory_unparsed'])): ?><p class="guardian-alert"><?= (int)$fw['inventory_unparsed'] ?> Plesk-Regel(n) konnten wegen fehlender oder ungueltiger Felder nicht dargestellt werden.</p><?php endif; ?>
         <details class="guardian-debug guardian-firewall-advanced"><summary>Erweitert: kompletten Plesk-Regelbestand durchsuchen (<?= (int)($fwCounts['all'] ?? 0) ?> Regeln)</summary>
         <div class="guardian-firewall-toolbar">
           <label for="guardian-firewall-search">Regeln suchen</label>
@@ -744,8 +746,22 @@ $action = static function ($name) use ($esc) {
     <section class="guardian-card guardian-firewall-console" id="guardian-ports">
       <div class="guardian-firewall-title-row"><div><span class="guardian-eyebrow">PORTREGELN</span><h2>Ports</h2></div></div>
       <p class="guardian-firewall-intro">Portregeln gelten nur für eine einzelne Quell-IP und ein Protokoll. Guardian legt sie ausschließlich nach Admin-Klick an; jede Änderung braucht danach einen getrennten Verbindungstest.</p>
-      <?php $portRules = array_values(array_filter(isset($fw['rules']) && is_array($fw['rules']) ? $fw['rules'] : [], static function ($rule) { return ($rule['kind'] ?? '') === 'port'; })); ?>
-      <h3 class="guardian-firewall-section-title">Aktive Portregeln</h3>
+      <?php
+        $portRules = array_values(array_filter(isset($fw['rules']) && is_array($fw['rules']) ? $fw['rules'] : [], static function ($rule) { return ($rule['kind'] ?? '') === 'port'; }));
+        $pleskPortRules = array_values(array_filter(isset($fw['inventory']) && is_array($fw['inventory']) ? $fw['inventory'] : [], static function ($rule) {
+            return is_array($rule) && is_string($rule['ports'] ?? null) && trim($rule['ports']) !== '';
+        }));
+      ?>
+      <h3 class="guardian-firewall-section-title">Alle Plesk-Portregeln · schreibgeschuetzt</h3>
+      <p class="guardian-small">Einschliesslich Plesk-Standarddiensten und benutzerdefinierten Plesk-Regeln. Diese Uebersicht veraendert keine Regel; nicht-Guardian-Regeln bleiben ausschliesslich in Plesk bearbeitbar.</p>
+      <?php if (!empty($pleskPortRules)): ?>
+        <div class="guardian-scroll"><table id="guardian-plesk-port-inventory"><thead><tr><th>Aktion</th><th>Richtung</th><th>Regel</th><th>Quelle</th><th>Port / Protokoll</th><th>Klasse</th></tr></thead><tbody>
+        <?php foreach ($pleskPortRules as $rule): ?>
+          <tr><td><?= ($rule['action'] ?? '') === 'allow' ? 'Erlauben' : 'Sperren' ?></td><td><?= $esc($rule['direction'] ?? '') ?></td><td><?= $esc($rule['name'] ?? '') ?></td><td><code><?= $esc(($rule['source'] ?? '') !== '' ? $rule['source'] : 'Alle') ?></code></td><td><?= $esc($rule['ports'] ?? '') ?></td><td><?= $esc($rule['class'] ?? '') ?></td></tr>
+        <?php endforeach; ?>
+        </tbody></table></div>
+      <?php else: ?><p class="guardian-small">Plesk meldet keine Portregeln oder das Regelinventar ist nicht verfuegbar.</p><?php endif; ?>
+      <h3 class="guardian-firewall-section-title">Guardian-Portregeln</h3>
       <?php if (!empty($portRules)): ?>
         <div class="guardian-scroll"><table id="guardian-port-table"><thead><tr><th>Liste</th><th>Quelle</th><th>Port</th><th>Ablauf</th><th>Aktion</th></tr></thead><tbody>
         <?php foreach ($portRules as $rule): ?>
@@ -770,7 +786,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower guardian-settings-area" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.48</h2>
+    <h2>GitHub-Updater · v0.28.49</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -981,7 +997,7 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.48" defer></script>
-  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.48" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.49" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.49" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Drittanbieter-Schutzprodukten verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

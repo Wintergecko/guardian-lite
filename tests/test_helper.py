@@ -467,6 +467,20 @@ class GuardianTests(unittest.TestCase):
         self.assertFalse(result['inventory_limited'])
         self.assertEqual(result['inventory_unparsed'], 0)
 
+    def test_unnamed_plesk_custom_port_rule_is_visible_without_becoming_managed(self):
+        rows = [{'id': 119, 'class': 'custom', 'name': None, 'direction': 'input',
+                 'action': 'allow', 'ports': '8123/tcp', 'from': ''}]
+        with mock.patch.object(helper, 'read_json', return_value={}), \
+             mock.patch.object(helper, 'firewall_allowlist_entries', return_value=[]), \
+             mock.patch.object(helper, 'binary', return_value='/usr/sbin/plesk'), \
+             mock.patch.object(helper, 'execute', return_value=subprocess.CompletedProcess(
+                 ['plesk'], 0, json.dumps(rows), '')):
+            result = helper.firewall_rules()
+        self.assertEqual(result['inventory'][0]['name'], 'Plesk: custom')
+        self.assertEqual(result['inventory'][0]['ports'], '8123/tcp')
+        self.assertEqual(result['rules'], [])
+        self.assertEqual(result['inventory_unparsed'], 0)
+
     def test_unrecognized_firewall_rows_mark_inventory_incomplete(self):
         rows = [{'id': 1, 'class': 'custom', 'name': None, 'direction': 'input', 'action': 'deny'},
                 {'id': 2, 'class': 'ssh', 'name': None, 'direction': 'unknown', 'action': 'allow'},
@@ -478,7 +492,7 @@ class GuardianTests(unittest.TestCase):
                  ['plesk'], 0, json.dumps(rows), '')):
             result = helper.firewall_rules()
         self.assertTrue(result['inventory_limited'])
-        self.assertEqual(result['inventory_unparsed'], 3)
+        self.assertEqual(result['inventory_unparsed'], 2)
 
     def test_guardian_firewall_rules_displays_confirmed_expiry(self):
         row = {'id': 41, 'class': 'custom', 'name': 'Guardian Lite managed deny 203.0.113.25/32',

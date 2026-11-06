@@ -67,7 +67,7 @@ Automatisierte Tests ersetzen die Plesk-Praxistests nicht. Die Tests des Betreib
 
 ## Plesk-Firewall-Dashboard, Diagnose und IP-/Portregeln
 
-Im Angriffe-&-Schutz-Bereich zeigt Guardian Zaehler und ein durchsuchbares Inventar der von Plesk gemeldeten Regeln. Die Inventaransicht ist auf 300 Regeln begrenzt. Plesk-Erlauben-Regeln werden als Allow/White, Sperrregeln als Deny/Black bezeichnet; dies ist keine separate Guardian-Prioritaetssteuerung. Greylist, Bot-Challenges und Cloud-Reputation werden nicht von dieser Plesk-Firewall bereitgestellt.
+Im Angriffe-&-Schutz-Bereich zeigt Guardian Zaehler und ein durchsuchbares Inventar von bis zu 2000 durch Plesk gemeldeten Regeln. Der Port-Tab listet zusaetzlich alle gelieferten Plesk-Portregeln read-only, einschliesslich Standarddiensten und benutzerdefinierten Plesk-Regeln. Nur Guardian-eigene Regeln sind dort ueber Sentinel verwaltbar. Plesk-Erlauben-Regeln werden als Allow/White, Sperrregeln als Deny/Black bezeichnet; dies ist keine separate Guardian-Prioritaetssteuerung. Greylist, Bot-Challenges und Cloud-Reputation werden nicht von dieser Plesk-Firewall bereitgestellt.
 
 Die **Guardian-Moduldiagnose** ist standardmaessig deaktiviert. Der identische globale Schalter steht im Firewall-Bereich und unter **Verwaltung → Guardian-Moduldiagnose**. Bei Aktivierung protokolliert Guardian feste Aktionsnamen, Ergebniscode, Laufzeit sowie begrenzte Plesk-Firewall-CLI-Metadaten. Die root-private JSONL-Datei ist auf 256 KiB und 100 sichtbare Ereignisse begrenzt. Anfrageargumente und CLI-Standardausgaben werden nicht gespeichert; vorhandene gekuerzte Fehlerhinweise koennen weiterhin Details enthalten. Deaktivieren stoppt weitere Ereignisse, loescht das vorhandene Protokoll aber nicht.
 

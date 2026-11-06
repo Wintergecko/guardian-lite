@@ -107,6 +107,9 @@ class ScanUiTests(unittest.TestCase):
         controller = (ROOT / 'plib/controllers/IndexController.php').read_text()
         js = (ROOT / 'htdocs/js/guardian-tabs.js').read_text()
         self.assertIn('guardian-firewall-inventory', view)
+        self.assertIn('guardian-plesk-port-inventory', view)
+        self.assertIn('Alle Plesk-Portregeln', view)
+        self.assertIn('Guardian-Portregeln', view)
         self.assertIn('guardian-firewall-search', view)
         self.assertIn('Greylist, Bot-Challenges', view)
         self.assertIn('debug-on', controller)
@@ -171,6 +174,6 @@ class ScanUiTests(unittest.TestCase):
 
     def test_versions(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.48')
+        self.assertEqual(version, '0.28.49')
         for file in ('plib/controllers/IndexController.php', 'plib/views/scripts/index/index.phtml'):
             self.assertIn(version, (ROOT / file).read_text())
