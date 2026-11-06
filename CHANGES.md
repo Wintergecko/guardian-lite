@@ -1,3 +1,17 @@
+## 0.28.53 – Globale Fail2Ban-Defaults
+
+- Ergänzt eine Plesk-geschützte Oberfläche zum Lesen, Sichern, Ändern und
+  Wiederherstellen von `MaxRetry`, `FindTime` und `BanTime` in `[DEFAULT]`.
+- Bestehende jail-spezifische Abschnitte werden beim Ändern oder Wiederherstellen
+  erhalten. Änderungen erfordern einen aktuellen Konfigurations-Fingerprint,
+  ein Backup, `fail2ban-client -t`, einen vollständigen Fail2Ban-Reload und
+  unabhängige Laufzeitprüfungen mit Rollback bei Fehlern.
+- Die Oberfläche warnt vor dem vollständigen Dienst-Reload. Fail2Ban zeigt über
+  seine CLI nicht, ob ein Jail einen Wert von `[DEFAULT]` erbt; diese Grenze
+  wird ausdrücklich dargestellt.
+- Keine Live-Änderung auf dem Plesk-Server und kein Firewall-Apply in diesem
+  Release.
+
 ## 0.28.52 – Compose-Zugangsdaten-Warnung
 
 - Warnt im Compose-Erstellungs- und YAML-Editor vor wahrscheinlichen Klartextwerten bei Variablennamen wie Passwort, Token, Secret oder API-Key.

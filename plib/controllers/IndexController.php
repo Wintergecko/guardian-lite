@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.28.52';
+    private const GUARDIAN_VERSION = '0.28.53';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -596,6 +596,59 @@ class IndexController extends pm_Controller_Action
         $this->getResponse()->setHeader('Content-Type', 'application/json; charset=UTF-8', true)
             ->setHeader('Cache-Control', 'no-store', true)
             ->setBody($body);
+    }
+
+    public function fail2banGlobalStatusAction()
+    {
+        try {
+            if (!$this->getRequest()->isGet()) {
+                throw new pm_Exception('GET erforderlich.');
+            }
+            $this->sendFail2banJson($this->helper(['fail2ban-global-details']));
+        } catch (Exception $e) {
+            $this->sendFail2banJson(['ok' => false, 'error' => substr($e->getMessage(), 0, 350)], 400);
+        }
+    }
+
+    public function fail2banGlobalSetAction()
+    {
+        try {
+            $this->verifyPost();
+            $request = $this->getRequest();
+            $values = [];
+            foreach (['maxretry', 'findtime', 'bantime'] as $key) {
+                $value = $request->getPost($key, '');
+                if (!is_string($value) || !preg_match('/^-?\d{1,8}$/D', $value)) {
+                    throw new pm_Exception('Ungueltige globale Fail2Ban-Einstellung.');
+                }
+                $values[$key] = $value;
+            }
+            $sha256 = $request->getPost('sha256', '');
+            if (!is_string($sha256) || !preg_match('/^[a-f0-9]{64}$/D', $sha256)) {
+                throw new pm_Exception('Fail2Ban-Konfiguration ist ungueltig oder veraltet.');
+            }
+            $this->sendFail2banJson($this->helper(['fail2ban-global-set', $values['maxretry'],
+                $values['findtime'], $values['bantime'], $sha256]));
+        } catch (Exception $e) {
+            $this->sendFail2banJson(['ok' => false, 'error' => substr($e->getMessage(), 0, 350)], 400);
+        }
+    }
+
+    public function fail2banGlobalRestoreAction()
+    {
+        try {
+            $this->verifyPost();
+            $request = $this->getRequest();
+            $backup = $request->getPost('backup_id', '');
+            $sha256 = $request->getPost('sha256', '');
+            if (!is_string($backup) || !preg_match('/^[a-f0-9]{32}$/D', $backup) ||
+                !is_string($sha256) || !preg_match('/^[a-f0-9]{64}$/D', $sha256)) {
+                throw new pm_Exception('Fail2Ban-Rollback ist ungueltig oder veraltet.');
+            }
+            $this->sendFail2banJson($this->helper(['fail2ban-global-restore', $backup, $sha256]));
+        } catch (Exception $e) {
+            $this->sendFail2banJson(['ok' => false, 'error' => substr($e->getMessage(), 0, 350)], 400);
+        }
     }
 
     private function sendFail2banJson(array $data, $status = 200)

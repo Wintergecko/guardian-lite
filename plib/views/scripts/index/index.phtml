@@ -91,13 +91,13 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.52" />
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.52" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.53" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.53" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sentinel Security <span>v0.28.52</span></h1>
+      <h1>Sentinel Security <span>v0.28.53</span></h1>
       <p>Sicherheitsverwaltung für Plesk Obsidian</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -113,6 +113,9 @@ $action = static function ($name) use ($esc) {
       data-fail2ban-url="<?= $esc(pm_Context::getActionUrl('index', 'fail2ban-status')) ?>"
       data-fail2ban-set-url="<?= $esc(pm_Context::getActionUrl('index', 'fail2ban-set')) ?>"
       data-fail2ban-restore-url="<?= $esc(pm_Context::getActionUrl('index', 'fail2ban-restore')) ?>"
+      data-fail2ban-global-url="<?= $esc(pm_Context::getActionUrl('index', 'fail2ban-global-status')) ?>"
+      data-fail2ban-global-set-url="<?= $esc(pm_Context::getActionUrl('index', 'fail2ban-global-set')) ?>"
+      data-fail2ban-global-restore-url="<?= $esc(pm_Context::getActionUrl('index', 'fail2ban-global-restore')) ?>"
       data-incidents-export-url="<?= $esc(pm_Context::getActionUrl('index', 'incidents-export')) ?>"
       data-docker-status-url="<?= $esc(pm_Context::getActionUrl('index', 'docker-status')) ?>"
       data-docker-file-url="<?= $esc(pm_Context::getActionUrl('index', 'docker-file')) ?>"
@@ -791,7 +794,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower guardian-settings-area" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.52</h2>
+    <h2>GitHub-Updater · v0.28.53</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -1006,7 +1009,7 @@ $action = static function ($name) use ($esc) {
       </section>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.52" defer></script>
-  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.52" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.53" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.53" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Drittanbieter-Schutzprodukten verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

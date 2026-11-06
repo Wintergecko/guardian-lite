@@ -145,6 +145,174 @@ class GuardianTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 helper.fail2ban_parse_override(invalid)
 
+    def test_fail2ban_global_defaults_are_serialized_before_and_preserve_jail_overrides(self):
+        defaults = {'maxretry': 8, 'findtime': 1200, 'bantime': 3600}
+        jail = {'maxretry': 4, 'findtime': 300, 'bantime': 900}
+        serialized = helper.fail2ban_serialize_override({'ssh': jail, 'DEFAULT': defaults})
+        self.assertLess(serialized.index(b'[DEFAULT]'), serialized.index(b'[ssh]'))
+        self.assertEqual(helper.fail2ban_parse_override(serialized),
+                         {'DEFAULT': defaults, 'ssh': jail})
+
+    def test_fail2ban_global_update_backs_up_defaults_without_replacing_jail_values(self):
+        defaults = {'maxretry': 8, 'findtime': 1200, 'bantime': 3600}
+        jail = {'maxretry': 4, 'findtime': 300, 'bantime': 900}
+        previous = {'ssh': jail, 'nginx': {'maxretry': 5, 'findtime': 600, 'bantime': 1800}}
+        current = helper.fail2ban_serialize_override({'ssh': jail})
+        expected = helper.fail2ban_serialize_override({'DEFAULT': defaults, 'ssh': jail})
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_path = pathlib.Path(tmp) / 'fail2ban.lock'
+            def open_lock():
+                return os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+            with mock.patch.object(helper.os, 'geteuid', return_value=0), \
+                 mock.patch.object(helper, 'binary', return_value='/usr/bin/fail2ban-client'), \
+                 mock.patch.object(helper, 'fail2ban_prepare_backup_dir'), \
+                 mock.patch.object(helper, 'fail2ban_open_lock', side_effect=open_lock), \
+                 mock.patch.object(helper, 'fail2ban_read_override',
+                                   side_effect=[(current, True), (expected, True)]), \
+                 mock.patch.object(helper, 'fail2ban_effective_jails', return_value=previous), \
+                 mock.patch.object(helper, 'fail2ban_store_backup', return_value='a' * 32) as backup, \
+                 mock.patch.object(helper, 'fail2ban_write_override') as write, \
+                 mock.patch.object(helper, 'fail2ban_apply_global_and_verify', return_value=previous) as verify, \
+                 mock.patch.object(helper, 'incident_log'):
+                result = helper.fail2ban_update_global(defaults, helper.hashlib.sha256(current).hexdigest())
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['backup_id'], 'a' * 32)
+        backup.assert_called_once_with('DEFAULT', current, True, previous)
+        write.assert_called_once_with(expected)
+        verify.assert_called_once_with('/usr/bin/fail2ban-client', previous, defaults)
+
+    def test_fail2ban_global_update_rolls_back_after_runtime_verification_failure(self):
+        defaults = {'maxretry': 8, 'findtime': 1200, 'bantime': 3600}
+        previous = {'ssh': {'maxretry': 5, 'findtime': 600, 'bantime': 300}}
+        current = helper.fail2ban_serialize_override({'ssh': previous['ssh']})
+        updated = helper.fail2ban_serialize_override({'DEFAULT': defaults, 'ssh': previous['ssh']})
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_path = pathlib.Path(tmp) / 'fail2ban.lock'
+            def open_lock():
+                return os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+            with mock.patch.object(helper.os, 'geteuid', return_value=0), \
+                 mock.patch.object(helper, 'binary', return_value='/usr/bin/fail2ban-client'), \
+                 mock.patch.object(helper, 'fail2ban_prepare_backup_dir'), \
+                 mock.patch.object(helper, 'fail2ban_open_lock', side_effect=open_lock), \
+                 mock.patch.object(helper, 'fail2ban_read_override',
+                                   side_effect=[(current, True), (updated, True), (current, True)]), \
+                 mock.patch.object(helper, 'fail2ban_effective_jails', return_value=previous), \
+                 mock.patch.object(helper, 'fail2ban_store_backup', return_value='a' * 32), \
+                 mock.patch.object(helper, 'fail2ban_write_override') as write, \
+                 mock.patch.object(helper, 'fail2ban_restore_override') as restore, \
+                 mock.patch.object(helper, 'fail2ban_apply_global_and_verify',
+                                   side_effect=[ValueError('runtime mismatch'), previous]) as verify, \
+                 mock.patch.object(helper, 'incident_log'):
+                with self.assertRaisesRegex(ValueError, 'wurde zurueckgerollt'):
+                    helper.fail2ban_update_global(defaults, helper.hashlib.sha256(current).hexdigest())
+        write.assert_called_once()
+        restore.assert_called_once_with(current, True)
+        self.assertEqual(verify.call_count, 2)
+
+    def test_fail2ban_global_verification_rejects_unexpected_runtime_values(self):
+        previous = {'ssh': {'maxretry': 5, 'findtime': 600, 'bantime': 300}}
+        unexpected = {'ssh': {'maxretry': 99, 'findtime': 600, 'bantime': 300}}
+        command_results = [
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, 'Status\nJail list:\tssh\n', ''),
+        ]
+        with mock.patch.object(helper, 'execute', side_effect=command_results), \
+             mock.patch.object(helper, 'fail2ban_status', return_value={
+                 'running': True, 'jails_limited': False, 'jails': [{'name': 'ssh'}]}), \
+             mock.patch.object(helper, 'fail2ban_effective_jails', return_value=unexpected):
+            with self.assertRaisesRegex(ValueError, 'Unerwarteter Fail2Ban-Laufzeitwert'):
+                helper.fail2ban_apply_global_and_verify(
+                    '/usr/bin/fail2ban-client', previous,
+                    {'maxretry': 8, 'findtime': 1200, 'bantime': 3600})
+
+    def test_fail2ban_global_verification_rejects_changed_runtime_jail_inventory(self):
+        previous = {'ssh': {'maxretry': 5, 'findtime': 600, 'bantime': 300}}
+        command_results = [
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, '', ''),
+            subprocess.CompletedProcess([], 0, 'Status\nJail list:\tssh\n', ''),
+        ]
+        with mock.patch.object(helper, 'execute', side_effect=command_results), \
+             mock.patch.object(helper, 'fail2ban_status', return_value={
+                 'running': True, 'jails_limited': False, 'jails': [{'name': 'ssh'}]}), \
+             mock.patch.object(helper, 'fail2ban_effective_jails', return_value={
+                 'nginx': previous['ssh']}):
+            with self.assertRaisesRegex(ValueError, 'Jails haben sich nach Reload geaendert'):
+                helper.fail2ban_apply_global_and_verify(
+                    '/usr/bin/fail2ban-client', previous,
+                    {'maxretry': 8, 'findtime': 1200, 'bantime': 3600})
+
+    def test_fail2ban_global_restore_changes_only_defaults_and_verifies_saved_file(self):
+        backup_id = 'b' * 32
+        ssh_current = {'maxretry': 4, 'findtime': 300, 'bantime': 900}
+        ssh_before = {'maxretry': 5, 'findtime': 600, 'bantime': 1800}
+        defaults_current = {'maxretry': 8, 'findtime': 1200, 'bantime': 3600}
+        defaults_before = {'maxretry': 6, 'findtime': 900, 'bantime': 2700}
+        current = helper.fail2ban_serialize_override({'DEFAULT': defaults_current, 'ssh': ssh_current})
+        before = helper.fail2ban_serialize_override({'DEFAULT': defaults_before, 'ssh': ssh_before})
+        expected = helper.fail2ban_serialize_override({'DEFAULT': defaults_before, 'ssh': ssh_current})
+        previous = {'ssh': ssh_current}
+        backup_record = {
+            'id': backup_id,
+            'jail': 'DEFAULT',
+            'before_exists': True,
+            'before_content': before.decode('utf-8'),
+            'before_settings': {'ssh': ssh_before},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            backup_path = mock.Mock()
+            backup_path.lstat.return_value = mock.Mock(
+                st_mode=stat.S_IFREG | 0o600, st_uid=0, st_nlink=1)
+            backups = mock.MagicMock()
+            backups.__truediv__.return_value = backup_path
+            lock_path = root / 'fail2ban.lock'
+            def open_lock():
+                return os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+            with mock.patch.object(helper.os, 'geteuid', return_value=0), \
+                 mock.patch.object(helper, 'binary', return_value='/usr/bin/fail2ban-client'), \
+                 mock.patch.object(helper, 'FAIL2BAN_BACKUPS', backups), \
+                 mock.patch.object(helper, 'read_json', return_value=backup_record), \
+                 mock.patch.object(helper, 'fail2ban_prepare_backup_dir'), \
+                 mock.patch.object(helper, 'fail2ban_open_lock', side_effect=open_lock), \
+                 mock.patch.object(helper, 'fail2ban_read_override',
+                                   side_effect=[(current, True), (expected, True), (expected, True)]), \
+                 mock.patch.object(helper, 'fail2ban_effective_jails', return_value=previous), \
+                 mock.patch.object(helper, 'fail2ban_store_backup', return_value='c' * 32) as store, \
+                 mock.patch.object(helper, 'fail2ban_restore_override') as restore, \
+                 mock.patch.object(helper, 'fail2ban_apply_global_and_verify',
+                                   return_value=previous) as verify, \
+                 mock.patch.object(helper, 'incident_log'):
+                result = helper.fail2ban_restore_global(
+                    backup_id, helper.hashlib.sha256(current).hexdigest())
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['restored_from'], backup_id)
+        store.assert_called_once_with('DEFAULT', current, True, previous)
+        restore.assert_called_once_with(expected, True)
+        self.assertEqual(helper.fail2ban_parse_override(restore.call_args.args[0]), {
+            'DEFAULT': defaults_before, 'ssh': ssh_current})
+        verify.assert_called_once_with('/usr/bin/fail2ban-client', previous,
+                                       defaults=defaults_before, historical={'ssh': ssh_before})
+        self.assertEqual(result['override_sha256'], helper.hashlib.sha256(expected).hexdigest())
+
+    def test_fail2ban_global_runtime_snapshot_reads_every_setting_with_a_bounded_jail_list(self):
+        outputs = [
+            'Status\nJail list:\tssh, nginx\n',
+            '5\n', '600\n', '300\n',
+            '7\n', '900\n', '-1\n',
+        ]
+        def fake_execute(args, timeout=5):
+            output = outputs.pop(0)
+            return subprocess.CompletedProcess(args, 0, output, '')
+        with mock.patch.object(helper, 'execute', side_effect=fake_execute):
+            result = helper.fail2ban_effective_jails('/usr/bin/fail2ban-client')
+        self.assertEqual(result, {
+            'ssh': {'maxretry': 5, 'findtime': 600, 'bantime': 300},
+            'nginx': {'maxretry': 7, 'findtime': 900, 'bantime': -1},
+        })
+        self.assertEqual(outputs, [])
+
     def test_fail2ban_update_backs_up_before_atomic_override_and_verifies(self):
         settings = {'maxretry': 7, 'findtime': 900, 'bantime': 1800}
         previous = {'maxretry': 5, 'findtime': 600, 'bantime': 300}

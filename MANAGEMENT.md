@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.52 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.53 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -19,6 +19,18 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 | Fail2Ban-Anzeige und IP-Aktionen | Fail2Ban (`fail2ban-client`) und mindestens ein konfiguriertes Jail. Guardian erstellt keine Jails. |
 | CrowdSec-Entscheidungen | Optional CrowdSec (MIT) mit laufendem lokalen Dienst und lesbarem `cscli`; Guardian liest maximal 50 aktive Entscheidungen. Keine Installation/Registrierung, Community-Listen oder Bouncer durch Guardian. Einzelne IP-`ban`-Entscheidungen lassen sich in den Plesk-Bestaetigungsablauf uebernehmen. |
 | E-Mail-Warnungen | Lokaler Sendmail-kompatibler Mailtransport oder in Plesk funktionierender Mailtransport. |
+
+### Globale Fail2Ban-Defaults
+
+Der Fail2Ban-Bereich verwaltet neben den bisherigen Jail-Overrides auch
+`MaxRetry`, `FindTime` und `BanTime` in der Guardian-eigenen `[DEFAULT]`-
+Sektion. Änderungen sichern die komplette Guardian-Konfiguration, erhalten
+vorhandene Jail-Abschnitte und verlangen einen vollständigen Fail2Ban-Reload.
+Die UI weist vor dem Reload auf die mögliche Unterbrechung hin. Ein
+Konfigurationstest, Laufzeitprüfung und Rollback sind eingebaut; Fail2Ban legt
+über seine CLI jedoch nicht offen, ob ein Jail einen Wert tatsächlich aus
+`[DEFAULT]` erbt. Die Funktion erstellt keine Jails, Filter oder Actions und
+wurde in diesem Release nicht live auf dem Plesk-Server angewendet.
 
 Fehlgeschlagene Malware-Warnungen werden bis zu 100 Eintraege root-privat gespeichert und beim stuendlichen Plesk-Task mit wachsendem Abstand bis zu sechs Mal erneut uebergeben. Der Administrator kann den Versuch manuell starten. Plesk zeigt Warteschlangenstand und letzten Transportfehler; eine erfolgreiche lokale Annahme belegt nicht die Zustellung zum Empfaenger.
 

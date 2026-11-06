@@ -750,6 +750,15 @@ type Fail2banDetails = {
 };
 
 type Fail2banBackup = { id: string; created_at: string };
+type Fail2banGlobalSettings = { maxretry: number; findtime: number; bantime: number };
+type Fail2banGlobalDetails = {
+  managed: boolean;
+  settings: Fail2banGlobalSettings | null;
+  effective: (Fail2banGlobalSettings & { jail: string })[];
+  override_sha256: string;
+  backups: Fail2banBackup[];
+  verification_scope: string;
+};
 
 type MenuItem = { target: string; label: string; english: string };
 type MenuGroup = { id: string; label: string; english: string; items: MenuItem[] };
@@ -915,6 +924,215 @@ function parseFail2banDetails(value: unknown): Fail2banDetails {
 function isFail2banBackup(value: unknown): value is Fail2banBackup {
   return isRecord(value) && typeof value.id === 'string' &&
     /^[a-f0-9]{32}$/.test(value.id) && typeof value.created_at === 'string';
+}
+
+function parseFail2banGlobalDetails(value: unknown): Fail2banGlobalDetails {
+  const isSettings = (settings: unknown): settings is Fail2banGlobalSettings =>
+    isRecord(settings) && isFiniteNumber(settings.maxretry) &&
+    isFiniteNumber(settings.findtime) && isFiniteNumber(settings.bantime);
+  if (!isRecord(value) || value.ok !== true || typeof value.managed !== 'boolean' ||
+      (value.settings !== null && !isSettings(value.settings)) ||
+      value.managed !== (value.settings !== null) ||
+      !Array.isArray(value.effective) || value.effective.length > 24 ||
+      !value.effective.every((item: unknown) =>
+        isRecord(item) && typeof item.jail === 'string' && isSettings(item)) ||
+      typeof value.override_sha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(value.override_sha256) ||
+      !Array.isArray(value.backups) || value.backups.length > 5 || !value.backups.every(isFail2banBackup) ||
+      typeof value.verification_scope !== 'string') {
+    throw new Error('Fail2ban global detail response is invalid.');
+  }
+  return {
+    managed: value.managed,
+    settings: value.settings,
+    effective: value.effective as Fail2banGlobalDetails['effective'],
+    override_sha256: value.override_sha256,
+    backups: value.backups,
+    verification_scope: value.verification_scope,
+  };
+}
+
+function Fail2banGlobalModule({ language }: { language: 'de' | 'en' }) {
+  const isGerman = language === 'de';
+  const [details, setDetails] = useState<Fail2banGlobalDetails | null>(null);
+  const [values, setValues] = useState({ maxretry: '', findtime: '', bantime: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const labels = isGerman
+    ? {
+      title: 'Fail2Ban · globale Defaults',
+      description: 'Verwaltet nur [DEFAULT]. Eigene Einstellungen aktiver Jails bleiben erhalten.',
+      loading: 'Globale Fail2Ban-Einstellungen werden geladen …',
+      unavailable: 'Globale Fail2Ban-Einstellungen konnten nicht geladen werden.',
+      defaults: 'Guardian-Defaults', unmanaged: 'Noch keine Guardian-Defaults gesetzt.',
+      maxretry: 'MaxRetry', findtime: 'FindTime (Sekunden)',
+      bantime: 'BanTime (Sekunden; −1 = dauerhaft)', save: 'Defaults sichern und anwenden',
+      effective: 'Effektive Werte pro aktivem Jail',
+      jail: 'Jail', retries: 'Versuche', window: 'FindTime', ban: 'BanTime',
+      backups: 'Gesicherte globale Versionen', noBackups: 'Keine globalen Fail2Ban-Backups vorhanden.',
+      restore: 'Wiederherstellen', applyConfirm: 'Globale Fail2Ban-Defaults sichern und anwenden? Das gesamte Fail2Ban wird neu geladen. Jail-spezifische Overrides bleiben erhalten; prufe SSH-Zugriff und beobachte den Dienst.',
+      restoreConfirm: 'Globale Fail2Ban-Defaults aus diesem Backup wiederherstellen und Fail2Ban neu laden? Aktuelle Jail-Overrides bleiben erhalten.',
+      scope: 'Fail2Ban stellt ueber die CLI nicht bereit, welche Werte von [DEFAULT] geerbt werden. Sentinel prueft Konfiguration, Reload und effektive Werte, kann die Vererbung einzelner Jails aber nicht beweisen.',
+    }
+    : {
+      title: 'Fail2Ban · global defaults',
+      description: 'Manages only [DEFAULT]. Existing jail-specific settings remain in place.',
+      loading: 'Loading global Fail2Ban settings …',
+      unavailable: 'Could not load global Fail2Ban settings.',
+      defaults: 'Guardian defaults', unmanaged: 'No Guardian defaults are set yet.',
+      maxretry: 'MaxRetry', findtime: 'FindTime (seconds)',
+      bantime: 'BanTime (seconds; −1 = permanent)', save: 'Back up and apply defaults',
+      effective: 'Effective values per active jail',
+      jail: 'Jail', retries: 'Retries', window: 'FindTime', ban: 'BanTime',
+      backups: 'Saved global versions', noBackups: 'No global Fail2Ban backups are available.',
+      restore: 'Restore', applyConfirm: 'Back up and apply global Fail2Ban defaults? This reloads the entire Fail2Ban service. Jail-specific overrides remain; verify SSH access and monitor the service.',
+      restoreConfirm: 'Restore global Fail2Ban defaults from this backup and reload Fail2Ban? Current jail-specific overrides remain.',
+      scope: 'Fail2Ban does not expose through its CLI which values were inherited from [DEFAULT]. Sentinel checks configuration, reload, and effective values, but cannot prove inheritance for individual jails.',
+    };
+
+  async function load(): Promise<void> {
+    const root = document.getElementById('sentinel-app-root');
+    const endpoint = root?.dataset.fail2banGlobalUrl;
+    if (!endpoint) {
+      setError(labels.unavailable);
+      setLoading(false);
+      return;
+    }
+    const url = new URL(endpoint, window.location.href);
+    if (url.origin !== window.location.origin) {
+      setError(labels.unavailable);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setDetails(null);
+    setError('');
+    try {
+      const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept: 'application/json' } });
+      const value: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(isRecord(value) && typeof value.error === 'string' ? value.error : labels.unavailable);
+      }
+      const parsed = parseFail2banGlobalDetails(value);
+      setDetails(parsed);
+      setValues({
+        maxretry: parsed.settings ? String(parsed.settings.maxretry) : '',
+        findtime: parsed.settings ? String(parsed.settings.findtime) : '',
+        bantime: parsed.settings ? String(parsed.settings.bantime) : '',
+      });
+    } catch (loadError: unknown) {
+      setError(loadError instanceof Error ? loadError.message : labels.unavailable);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submit(operation: 'set' | 'restore', fields: Record<string, string>): Promise<void> {
+    const root = document.getElementById('sentinel-app-root');
+    const endpoint = operation === 'set' ? root?.dataset.fail2banGlobalSetUrl
+      : root?.dataset.fail2banGlobalRestoreUrl;
+    const csrf = root?.dataset.csrf;
+    if (!endpoint || !csrf || !details) {
+      setError(labels.unavailable);
+      return;
+    }
+    const url = new URL(endpoint, window.location.href);
+    if (url.origin !== window.location.origin) {
+      setError(labels.unavailable);
+      return;
+    }
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const body = new URLSearchParams({ ...fields, sha256: details.override_sha256, csrf });
+      const response = await fetch(url, { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body });
+      const result: unknown = await response.json();
+      if (!response.ok || !isRecord(result) || result.ok !== true) {
+        throw new Error(isRecord(result) && typeof result.error === 'string' ? result.error : labels.unavailable);
+      }
+      setMessage(typeof result.message === 'string' ? result.message : labels.save);
+      await load();
+    } catch (actionError: unknown) {
+      setError(actionError instanceof Error ? actionError.message : labels.unavailable);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  function apply(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const maxretry = Number(values.maxretry);
+    const findtime = Number(values.findtime);
+    const bantime = Number(values.bantime);
+    if (!Number.isInteger(maxretry) || maxretry < 1 || maxretry > 100 ||
+        !Number.isInteger(findtime) || findtime < 1 || findtime > 604800 ||
+        !Number.isInteger(bantime) || bantime < -1 || bantime > 31536000) {
+      setError(isGerman
+        ? 'Erlaubt: MaxRetry 1–100, FindTime 1–604800 Sekunden, BanTime −1–31536000 Sekunden.'
+        : 'Allowed: MaxRetry 1–100, FindTime 1–604800 seconds, BanTime −1–31536000 seconds.');
+      return;
+    }
+    if (!window.confirm(labels.applyConfirm)) return;
+    void submit('set', { maxretry: String(maxretry), findtime: String(findtime), bantime: String(bantime) });
+  }
+
+  return (
+    <section className="sentinel-fail2ban sentinel-fail2ban-global" aria-labelledby="sentinel-fail2ban-global-title">
+      <header className="sentinel-fail2ban-heading">
+        <h2 id="sentinel-fail2ban-global-title">{labels.title}</h2>
+        <button type="button" disabled={loading || saving} onClick={() => void load()}>
+          {isGerman ? 'Aktualisieren' : 'Refresh'}
+        </button>
+      </header>
+      <p className="sentinel-detail-note">{labels.description}</p>
+      {loading && <p role="status">{labels.loading}</p>}
+      {error && <p className="sentinel-detail-error" role="alert">{error}</p>}
+      {message && <p className="sentinel-detail-success" role="status">{message}</p>}
+      {details && <>
+        <p className="sentinel-detail-note">{details.managed ? labels.defaults : labels.unmanaged}</p>
+        <form className="sentinel-fail2ban-form" onSubmit={apply}>
+          <label>{labels.maxretry}
+            <input type="number" min="1" max="100" required value={values.maxretry}
+              onChange={(event) => setValues({ ...values, maxretry: event.currentTarget.value })} />
+          </label>
+          <label>{labels.findtime}
+            <input type="number" min="1" max="604800" required value={values.findtime}
+              onChange={(event) => setValues({ ...values, findtime: event.currentTarget.value })} />
+          </label>
+          <label>{labels.bantime}
+            <input type="number" min="-1" max="31536000" required value={values.bantime}
+              onChange={(event) => setValues({ ...values, bantime: event.currentTarget.value })} />
+          </label>
+          <button type="submit" disabled={saving || loading}>{saving ? (isGerman ? 'Wird angewendet …' : 'Applying …') : labels.save}</button>
+        </form>
+        <p className="sentinel-detail-note">{labels.scope}</p>
+        <h3>{labels.effective}</h3>
+        <div className="sentinel-table-scroll"><table><thead><tr>
+          <th>{labels.jail}</th><th>{labels.retries}</th><th>{labels.window}</th><th>{labels.ban}</th>
+        </tr></thead><tbody>{details.effective.map((item) => (
+          <tr key={item.jail}><th scope="row">{item.jail}</th><td>{item.maxretry}</td>
+            <td>{item.findtime} s</td><td>{item.bantime < 0 ? (isGerman ? 'Dauerhaft' : 'Permanent') : `${item.bantime} s`}</td></tr>
+        ))}</tbody></table></div>
+        <h3>{labels.backups}</h3>
+        {details.backups.length === 0 ? <p>{labels.noBackups}</p> : <ul>{details.backups.map((backup) => (
+          <li key={backup.id}><time>{backup.created_at}</time>
+            <button type="button" disabled={saving} onClick={() => {
+              if (window.confirm(labels.restoreConfirm)) {
+                void submit('restore', { backup_id: backup.id });
+              }
+            }}>{labels.restore}</button></li>
+        ))}</ul>}
+      </>}
+    </section>
+  );
 }
 
 function isFirewallInventoryItem(value: unknown): value is FirewallInventoryItem {
@@ -1449,6 +1667,7 @@ function App({ status, exportUrl, dockerUrls }: {
             setActiveTarget(target);
           }} />
       )}
+      {activeTarget === 'guardian-fail2ban' && <Fail2banGlobalModule language={language} />}
       {activeTarget === 'guardian-firewall' && <PleskFirewallModule firewall={status.firewall} language={language} />}
       {activeTarget === 'guardian-docker' && <DockerModule language={language}
         statusUrl={dockerUrls.status} fileUrl={dockerUrls.file} manageUrl={dockerUrls.manage}

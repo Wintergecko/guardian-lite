@@ -1,6 +1,6 @@
 # Sentinel Security – Architektur und Bestandsaufnahme
 
-Stand: Version 0.28.52. Dieses Dokument beschreibt die vorhandene Erweiterung, keine Soll-Implementierung. Die Funktionsangaben sind auf Quellcode, Tests und die dokumentierten Systemvoraussetzungen begrenzt.
+Stand: Version 0.28.53. Dieses Dokument beschreibt die vorhandene Erweiterung, keine Soll-Implementierung. Die Funktionsangaben sind auf Quellcode, Tests und die dokumentierten Systemvoraussetzungen begrenzt.
 
 ## Architektur
 
@@ -46,10 +46,10 @@ Plesk Obsidian (Administrator)
 
 „Teilweise“ bedeutet, dass es eine echte Funktion gibt, aber nicht der vollständige im Auftrag beschriebene Umfang. Nicht vorhandene Funktionen werden nicht als verfügbar dargestellt.
 
-| # | Angefordertes Modul | Stand 0.28.52 | Verifiziert vorhandener Umfang | Wesentliche Lücken |
+| # | Angefordertes Modul | Stand 0.28.53 | Verifiziert vorhandener Umfang | Wesentliche Lücken |
 |---|---|---|---|---|
 | 1 | Security Dashboard | Teilweise | Reale Fail2Ban-, Firewall-, Ereignis- und WAF-Statusdaten; Schutzkennzahlen und IP-Karte, wenn lokale Datenbank und Abhängigkeit vorhanden sind | Dauerhafte, umfassende Statistikhistorie und zusätzliche Datenquellen |
-| 2 | Fail2Ban Manager | Teilweise | Status, aktive Jails, begrenzte Jail-Parameter, manuelles Sperren/Freigeben; eigene Override-Datei, Backup, Konfigurationstest, Laufzeitprüfung und Rollback | Verwaltung globaler Fail2Ban-Einstellungen, Erstellen von Jails/Filtern/Aktionen und getestete Plesk-spezifische Jail-Vorlagen |
+| 2 | Fail2Ban Manager | Teilweise | Status, aktive Jails, begrenzte Jail-Parameter und globale `[DEFAULT]`-Werte, manuelles Sperren/Freigeben; eigene Override-Datei, Backup, Konfigurationstest, Laufzeitprüfung und Rollback | Erstellen von Jails/Filtern/Aktionen und getestete Plesk-spezifische Jail-Vorlagen |
 | 3 | Firewall Manager | Teilweise | Plesk-Regelinventar, Guardian-IP-Regeln/Schutz-Ausnahmen und ausgewählte quell-IP-bezogene Portregeln; Vorschau, Admin-Bestätigung, Rollback und Verifikation für unterstützte Schreibpfade | Vollständige Richtung-/Netz-/Protokollverwaltung über alle Adapter, globale Policies und priorisierte Allowlist/Greylist |
 | 4 | IP Block Manager | Teilweise | IPv4/IPv6-Sperren, begrenzte Netze, zeitlich begrenzte Guardian-Regeln, Ausnahmen und Massenaktionen in bestehenden Abläufen | Einheitliche Black-/Whitelist mit systemweiter Priorität, umfassendere Historie und adapterübergreifende Regeln |
 | 5 | Security Event Viewer | Teilweise | WAF-/Incident-Daten, Filter, jüngste Ereignisse und JSON-Export; lokale E-Mail-Warnungen für Malwareereignisse | Konfigurierbare Ereignisregeln, umfassender Live-Log-Stream und persistente, unbegrenzte Ereignishistorie |

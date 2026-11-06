@@ -1,4 +1,26 @@
-# Guardian Lite v0.28.52 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.53 – Sicherheitsmodell und Grenzen
+
+## 0.28.53 – Globale Fail2Ban-Defaults
+
+- Status und Änderungen sind ausschließlich über den Admin-geschützten
+  Plesk-Controller erreichbar; Schreibaktionen erfordern POST und Session-CSRF.
+- Der Helper akzeptiert nur die feste Aktion und die drei validierten
+  numerischen Werte. Die Änderung bleibt auf `[DEFAULT]` in der Guardian-eigenen
+  Override-Datei beschränkt; bestehende Jail-Overrides werden beim Setzen und
+  Wiederherstellen erhalten.
+- Vor der Änderung wird unter root-eigener Sperre ein root-privates Backup
+  erstellt. Ein Konfigurations-Fingerprint verhindert das Anwenden auf
+  zwischenzeitlich geänderte Daten. Konfigurationstest, vollständiger
+  Fail2Ban-Reload und Prüfung aktiver Jails/Werte sind erforderlich; bei Fehlern
+  wird die vorherige Konfiguration zurückgeschrieben und erneut geprüft.
+- Ein vollständiger Reload kann alle Jails beeinflussen. Die Oberfläche
+  verlangt eine ausdrückliche Bestätigung und warnt insbesondere vor der
+  Erreichbarkeit über SSH. Die Änderung wurde in diesem Release nicht auf dem
+  Plesk-Server angewendet.
+- Fail2Ban-CLI liefert keine Information über die Herkunft effektiver Werte.
+  Deshalb kann Sentinel nicht beweisen, ob ein Jail einen Wert aus `[DEFAULT]`
+  oder aus einer anderen Konfigurationsquelle bezieht; die Prüfung dieser
+  Vererbungsgrenze wird in der Oberfläche angezeigt.
 
 ## Docker-Verwaltung
 
