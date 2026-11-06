@@ -189,6 +189,23 @@ class NewFeatureTests(unittest.TestCase):
         self.assertEqual(events[0]['ts'], '2026-11-06T12:34:56+01:00')
         self.assertTrue(events[0]['blocked'])
 
+    def test_waf_concurrent_audit_log_uses_real_ip_header_and_fractional_timestamp(self):
+        events = h.parse_waf_lines([
+            '--abc123-A--',
+            '[06/Nov/2026:00:58:29.839857 +0100]',
+            '--abc123-B--',
+            'GET /redacted HTTP/1.1',
+            'Host: example.invalid',
+            'X-Real-IP: 203.0.113.17',
+            '--abc123-H--',
+            'Message: Access denied with code 403 [id "210492"] [severity "CRITICAL"]',
+            '--abc123-Z--',
+        ])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]['ip'], '203.0.113.17')
+        self.assertEqual(events[0]['ts'], '2026-11-06T00:58:29.839857+01:00')
+        self.assertTrue(events[0]['blocked'])
+
     def test_waf_apache_error_lines_include_source_ip_and_timestamp(self):
         events = h.parse_waf_lines([
             '[Fri Nov  6 12:34:56.123456 2026] [security2:error] [pid 123] '

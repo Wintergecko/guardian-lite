@@ -1,3 +1,8 @@
+## 0.28.39 – WAF-IP und Audit-Zeit erkennen
+
+- Liest ModSecurity-Zeitstempel mit Mikrosekunden sowie die Quell-IP aus dem protokollierten `X-Real-IP`-Header des Abschnitts B.
+- Ergaenzt einen Regressionstest fuer das tatsaechliche Plesk-Audit-Logformat.
+
 ## 0.28.38 – Mehr Platz fuer die Ansicht
 
 - Entfernt den dauerhaft eingeblendeten Beta-Hinweis aus dem Kopfbereich, sodass die Sentinel-Inhalte weiter oben beginnen.

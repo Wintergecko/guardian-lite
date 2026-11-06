@@ -1161,14 +1161,28 @@ def parse_waf_lines(lines):
     events = []
     timestamp = None
     audit_ip = None
-    in_audit_section_a = False
+    audit_section = None
     for line in lines:
         section = re.match(r'^--[A-Za-z0-9]+-([A-Z])--$', line)
         if section:
-            in_audit_section_a = section.group(1) == 'A'
-            if in_audit_section_a:
+            audit_section = section.group(1)
+            if audit_section == 'A':
                 timestamp = None
                 audit_ip = None
+            elif audit_section == 'Z':
+                audit_section = None
+            continue
+
+        if audit_section == 'B':
+            address = re.match(r'^X-Real-IP:\s*(\S+)\s*$', line, re.IGNORECASE)
+            if address:
+                try:
+                    audit_ip = str(ipaddress.ip_address(address.group(1)))
+                except ValueError:
+                    audit_ip = None
+            continue
+
+        if audit_section is not None and audit_section not in ('A', 'H'):
             continue
 
         stamp = re.match(r'^\[([^\]]+)\]', line)
@@ -1176,14 +1190,17 @@ def parse_waf_lines(lines):
             raw_stamp = stamp.group(1)
             try:
                 try:
-                    parsed = datetime.datetime.strptime(raw_stamp, '%d/%b/%Y:%H:%M:%S %z')
+                    parsed = datetime.datetime.strptime(raw_stamp, '%d/%b/%Y:%H:%M:%S.%f %z')
                 except ValueError:
-                    parsed = datetime.datetime.strptime(raw_stamp, '%a %b %d %H:%M:%S.%f %Y')
+                    try:
+                        parsed = datetime.datetime.strptime(raw_stamp, '%d/%b/%Y:%H:%M:%S %z')
+                    except ValueError:
+                        parsed = datetime.datetime.strptime(raw_stamp, '%a %b %d %H:%M:%S.%f %Y')
                 timestamp = {'ts': parsed.isoformat(), 'epoch': int(parsed.timestamp())}
             except ValueError:
-                if not in_audit_section_a:
+                if audit_section != 'A':
                     timestamp = None
-        if in_audit_section_a:
+        if audit_section == 'A':
             address = re.match(r'^\S+\s+([0-9a-fA-F:.]+)\s+\d+\s+', line)
             if address:
                 try:
