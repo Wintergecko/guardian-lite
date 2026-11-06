@@ -1,3 +1,9 @@
+## 0.28.34 – Klarere Sentinel-Navigation
+
+- Sidebar-Untermenues oeffnen sich als seitliches Overlay, ohne die restlichen Menuepunkte nach unten zu verschieben.
+- Beim Aufrufen eines Plesk-Moduls ersetzt dessen Ansicht das Sentinel-Dashboard, statt unterhalb davon angehaengt zu werden.
+- Die Dashboard-Startansicht blendet den zusaetzlichen Plesk-Modulbereich aus; Sentinel bleibt ueber das Markenfeld erreichbar.
+
 ## 0.28.33 – Sentinel-Oberflaeche und Fail2Ban-Jail-Verwaltung
 
 - Fuehrt die React-/TypeScript-Sicherheitszentrale mit deutsch/englischer Navigation, responsivem Layout, Hell-/Dunkelmodus und echten Serverstatusdaten ein; die Extension-ID und bestehenden Plesk-Module bleiben erhalten.

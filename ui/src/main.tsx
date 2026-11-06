@@ -199,10 +199,20 @@ function navigateTo(target: string): void {
   link.click();
 }
 
+function currentModuleTarget(): string | null {
+  const activeLink = document.querySelector<HTMLAnchorElement>(
+    '.guardian-menu-enhanced [data-menu-target][aria-current="location"]',
+  );
+  const target = activeLink?.dataset.menuTarget;
+  return target && target !== 'guardian-dashboard-top' ? target : null;
+}
+
 function App({ status }: { status: DashboardStatus }) {
   const [language, setLanguage] = useState<'de' | 'en'>('de');
   const [darkMode, setDarkMode] = useState(true);
   const [activeGroup, setActiveGroup] = useState('overview');
+  const [openGroup, setOpenGroup] = useState('');
+  const [activeTarget, setActiveTarget] = useState<string | null>(currentModuleTarget);
   const [selectedJail, setSelectedJail] = useState(status.fail2ban.jailNames[0] || '');
   const [jailDetails, setJailDetails] = useState<Fail2banDetails | null>(null);
   const [jailDetailsError, setJailDetailsError] = useState('');
@@ -224,20 +234,19 @@ function App({ status }: { status: DashboardStatus }) {
     page.classList.add('sentinel-enabled');
     return () => {
       shell.classList.remove('sentinel-ready');
-      page.classList.remove('sentinel-enabled', 'sentinel-dark');
+      page.classList.remove('sentinel-enabled', 'sentinel-dark', 'sentinel-module-active', 'sentinel-dashboard-active');
     };
   }, []);
 
   useEffect(() => {
-    const activeLink = document.querySelector<HTMLAnchorElement>(
-      '.guardian-menu-enhanced [data-menu-target][aria-current="location"]',
-    );
-    const target = activeLink?.dataset.menuTarget;
+    const target = activeTarget;
     const group = menu.find((entry) => entry.items.some((item) => item.target === target));
     if (group) {
       setActiveGroup(group.id);
     }
-  }, []);
+    document.querySelector('.guardian')?.classList.toggle('sentinel-module-active', Boolean(target));
+    document.querySelector('.guardian')?.classList.toggle('sentinel-dashboard-active', !target);
+  }, [activeTarget]);
 
   useEffect(() => {
     document.querySelector('.guardian')?.classList.toggle('sentinel-dark', darkMode);
@@ -385,8 +394,10 @@ function App({ status }: { status: DashboardStatus }) {
       <aside className="sentinel-sidebar" aria-label={language === 'de' ? 'Hauptnavigation' : 'Main navigation'}>
         <a className="sentinel-brand" href="#guardian-dashboard-top" onClick={(event) => {
           event.preventDefault();
-          navigateTo('guardian-dashboard-top');
           setActiveGroup('overview');
+          setOpenGroup('');
+          setActiveTarget(null);
+          navigateTo('guardian-dashboard-top');
         }}>
           <span className="sentinel-brand-mark" aria-hidden="true">S</span>
           <span><strong>Sentinel</strong><small>SECURITY</small></span>
@@ -396,13 +407,16 @@ function App({ status }: { status: DashboardStatus }) {
             <section className="sentinel-nav-group" key={group.id}>
               <button
                 type="button"
-                className={activeGroup === group.id ? 'is-active' : ''}
-                aria-expanded={activeGroup === group.id}
-                onClick={() => setActiveGroup(activeGroup === group.id ? '' : group.id)}
+                className={`${activeGroup === group.id ? 'is-active' : ''}${openGroup === group.id ? ' is-open' : ''}`}
+                aria-expanded={openGroup === group.id}
+                onClick={() => {
+                  setActiveGroup(group.id);
+                  setOpenGroup(openGroup === group.id ? '' : group.id);
+                }}
               >
-                <span>{language === 'de' ? group.label : group.english}</span><span aria-hidden="true">{activeGroup === group.id ? '−' : '+'}</span>
+                <span>{language === 'de' ? group.label : group.english}</span><span aria-hidden="true">{openGroup === group.id ? '−' : '+'}</span>
               </button>
-              {activeGroup === group.id && (
+              {openGroup === group.id && (
                 <ul>
                   {group.items.map((item) => (
                     <li key={item.target}>
@@ -410,6 +424,8 @@ function App({ status }: { status: DashboardStatus }) {
                         event.preventDefault();
                         navigateTo(item.target);
                         setActiveGroup(group.id);
+                        setOpenGroup('');
+                        setActiveTarget(item.target);
                       }}>{item[lang]}</a>
                     </li>
                   ))}
@@ -426,7 +442,7 @@ function App({ status }: { status: DashboardStatus }) {
           <button type="button" className="sentinel-theme-toggle" onClick={() => setDarkMode(!darkMode)}>{labels.theme}</button>
         </div>
       </aside>
-      <section className="sentinel-overview" aria-label={language === 'de' ? 'Sicherheitsstatus' : 'Security status'}>
+      <section className="sentinel-overview" hidden={Boolean(activeTarget)} aria-label={language === 'de' ? 'Sicherheitsstatus' : 'Security status'}>
         <header className="sentinel-overview-heading">
           <div><p>{labels.subtitle}</p><h1>Sentinel Security</h1></div>
           <span className={`sentinel-live-state ${status.available ? 'is-live' : 'is-unknown'}`}>
@@ -514,7 +530,11 @@ function App({ status }: { status: DashboardStatus }) {
               return <li key={`${event.time}-${index}`}><span className={`sentinel-severity severity-${severity}`}>{event.severity}</span><span><strong>{event.type}</strong><small>{event.detail || event.time}</small></span></li>;
             })}</ul>
           ) : <p>{status.available ? labels.noEvents : labels.unavailable}</p>}
-          <button type="button" onClick={() => navigateTo('guardian-incidents')}>
+          <button type="button" onClick={() => {
+            navigateTo('guardian-incidents');
+            setActiveGroup('incidents');
+            setActiveTarget('guardian-incidents');
+          }}>
             {language === 'de' ? 'Ereignisprotokoll öffnen' : 'Open event log'} <span aria-hidden="true">→</span>
           </button>
         </div>
