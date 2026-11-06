@@ -38,6 +38,27 @@ $sentinelStatus = [
     'firewall' => [
         'known' => !empty($fw['status_known']),
         'active' => !empty($fw['plesk_firewall_active']),
+        'installed' => !empty($fw['installed']),
+        'available' => !empty($fw['available']),
+        'inventoryLimited' => !empty($fw['inventory_limited']),
+        'counts' => [
+            'all' => (int)($fw['counts']['all'] ?? 0),
+            'inputAllow' => (int)($fw['counts']['input_allow'] ?? 0),
+            'inputDeny' => (int)($fw['counts']['input_deny'] ?? 0),
+            'portAllow' => (int)($fw['counts']['port_allow'] ?? 0),
+            'portDeny' => (int)($fw['counts']['port_deny'] ?? 0),
+        ],
+        'inventory' => array_values(array_map(static function ($item) {
+            return [
+                'id' => (string)($item['id'] ?? ''),
+                'name' => (string)($item['name'] ?? ''),
+                'action' => (string)($item['action'] ?? ''),
+                'direction' => (string)($item['direction'] ?? ''),
+                'source' => (string)($item['source'] ?? ''),
+                'ports' => (string)($item['ports'] ?? ''),
+                'class' => (string)($item['class'] ?? ''),
+            ];
+        }, array_slice(array_filter(isset($fw['inventory']) && is_array($fw['inventory']) ? $fw['inventory'] : [], 'is_array'), 0, 300))),
     ],
     'blockedIps' => isset($blockedGeo['blocked_ip_count']) ? (int)$blockedGeo['blocked_ip_count'] : null,
     'eventsTotal' => count(is_array($this->incidents) ? $this->incidents : []),
@@ -69,13 +90,13 @@ $action = static function ($name) use ($esc) {
     return $esc(pm_Context::getBaseUrl() . 'index/' . $name);
 };
 ?>
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.40" />
-<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.40" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>css/guardian.css?v=0.28.41" />
+<link rel="stylesheet" href="<?= $esc($this->baseUrl) ?>sentinel/sentinel.css?v=0.28.41" />
 <div class="guardian">
   <header class="guardian-hero">
     <div>
       <div class="guardian-kicker">LINUX VPS · PLESK OBSIDIAN</div>
-      <h1>Sentinel Security <span>v0.28.40</span></h1>
+      <h1>Sentinel Security <span>v0.28.41</span></h1>
       <p>Sicherheitsverwaltung für Plesk Obsidian</p>
     </div>
     <span class="guardian-tag">Administratorbereich</span>
@@ -744,7 +765,7 @@ $action = static function ($name) use ($esc) {
     </section>
   </div>
   <section class="guardian-card guardian-lower" id="guardian-updater">
-    <h2>GitHub-Updater · v0.28.40</h2>
+    <h2>GitHub-Updater · v0.28.41</h2>
     <p>Nur oeffentliche GitHub-Releases. Ein Update wird <strong>niemals automatisch installiert</strong>.
        Die Plesk-Administration muss es bestaetigen; die SHA-256-Pruefsumme wird vor der Installation geprueft.</p>
     <p class="guardian-alert">Vor jedem Update: VPS-Snapshot erstellen und Release-Quellcode pruefen.
@@ -956,7 +977,7 @@ $action = static function ($name) use ($esc) {
   <?php include __DIR__ . '/management.phtml'; ?>
     </main>
   </div>
-  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.40" defer></script>
-  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.40" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>js/guardian-tabs.js?v=0.28.41" defer></script>
+  <script src="<?= $esc($this->baseUrl) ?>sentinel/sentinel.js?v=0.28.41" defer></script>
   <footer class="guardian-foot">Eigenstaendige Open-Source-Extension, nicht mit Plesk oder Drittanbieter-Schutzprodukten verbunden. PHP-Runtime- und HTTP-Rate-Limit-Policies muessen separat aktiviert werden. Keine DDoS-Garantie. Automatische Reparatur nur nach ausdruecklicher Baseline-Freigabe und Aktivierung.</footer>
 </div>

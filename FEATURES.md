@@ -1,4 +1,4 @@
-# Weitere Features nach 0.28.40
+# Weitere Features nach 0.28.41
 
 Der umfassende Funktionsvergleich steht in [FUNKTIONSUEBERSICHT.md](FUNKTIONSUEBERSICHT.md). Ergaenzend zu den dortigen Funktionsluecken bleiben folgende eigenstaendige Guardian-Verbesserungen offen:
 

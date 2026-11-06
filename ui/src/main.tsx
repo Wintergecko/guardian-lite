@@ -10,6 +10,26 @@ type EventRow = {
   detail: string;
 };
 
+type FirewallInventoryItem = {
+  id: string;
+  name: string;
+  action: 'allow' | 'deny';
+  direction: string;
+  source: string;
+  ports: string;
+  class: string;
+};
+
+type FirewallStatus = {
+  known: boolean;
+  active: boolean;
+  installed: boolean;
+  available: boolean;
+  inventoryLimited: boolean;
+  counts: { all: number; inputAllow: number; inputDeny: number; portAllow: number; portDeny: number };
+  inventory: FirewallInventoryItem[];
+};
+
 type WafEvent = {
   epoch: number | null;
   rule: string;
@@ -37,10 +57,97 @@ function normalizeSeverity(value: string): string {
   return severity;
 }
 
+function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus; language: 'de' | 'en' }) {
+  const [query, setQuery] = useState('');
+  const [action, setAction] = useState<'all' | 'allow' | 'deny'>('all');
+  const isGerman = language === 'de';
+  const labels = isGerman
+    ? {
+      description: 'Read-only-Übersicht der von Plesk gemeldeten Firewall-Regeln. Angezeigt werden maximal 300 Regeln; Änderungen an Firewall-Regeln werden nicht automatisch vorgenommen.',
+      active: 'Aktiv · Regeln lesbar', activeUnreadable: 'Aktiv · Regeln nicht lesbar',
+      stopped: 'Nicht aktiv', unavailable: 'Regeln nicht lesbar',
+      installed: 'Installiert, Status unbekannt', readableUnknown: 'Status unbekannt · Regeln lesbar', missing: 'Nicht installiert',
+      allow: 'Erlauben', deny: 'Sperren', portsAllow: 'Portfreigaben', portsDeny: 'Portsperren',
+      all: 'Alle Regeln', list: 'Liste', direction: 'Richtung', name: 'Regel',
+      source: 'Quelle', ports: 'Port', class: 'Klasse', search: 'Regeln suchen',
+      filter: 'Aktion', allActions: 'Alle', shown: 'angezeigt', empty: 'Keine Regeln entsprechen dem Filter.',
+      limited: 'Die Liste ist auf 300 Regeln begrenzt.', noInventory: 'Plesk hat keine Firewall-Regeln zurückgegeben.',
+      input: 'Eingehend', output: 'Ausgehend', unknown: 'Unbekannt',
+    }
+    : {
+      description: 'Read-only overview of firewall rules reported by Plesk. At most 300 rules are shown; firewall rules are not changed automatically.',
+      active: 'Active · rules readable', activeUnreadable: 'Active · rules unavailable',
+      stopped: 'Not active', unavailable: 'Rules unavailable',
+      installed: 'Installed, status unknown', readableUnknown: 'Status unknown · rules readable', missing: 'Not installed',
+      allow: 'Allow', deny: 'Deny', portsAllow: 'Port allows', portsDeny: 'Port denies',
+      all: 'All rules', list: 'List', direction: 'Direction', name: 'Rule',
+      source: 'Source', ports: 'Port', class: 'Class', search: 'Search rules',
+      filter: 'Action', allActions: 'All', shown: 'shown', empty: 'No rules match the filter.',
+      limited: 'The list is limited to 300 rules.', noInventory: 'Plesk returned no firewall rules.',
+      input: 'Inbound', output: 'Outbound', unknown: 'Unknown',
+    };
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const rows = firewall.inventory.filter((item) => {
+    const matchesAction = action === 'all' || item.action === action;
+    const text = `${item.name} ${item.source} ${item.ports} ${item.class} ${item.direction}`.toLocaleLowerCase();
+    return matchesAction && (!normalizedQuery || text.includes(normalizedQuery));
+  });
+  const firewallState = !firewall.installed ? labels.missing
+    : firewall.active ? (firewall.available ? labels.active : labels.activeUnreadable)
+      : firewall.known ? labels.stopped
+        : firewall.available ? labels.readableUnknown : labels.installed;
+
+  return (
+    <main className="sentinel-react-content sentinel-firewall" aria-label={labels.all}>
+      <p className="sentinel-module-description">{labels.description}</p>
+      <div className="sentinel-firewall-status" role="status">{firewallState}</div>
+      <div className="sentinel-firewall-kpis">
+        <article><span>{labels.allow}</span><strong>{firewall.counts.inputAllow}</strong></article>
+        <article><span>{labels.deny}</span><strong>{firewall.counts.inputDeny}</strong></article>
+        <article><span>{labels.portsAllow}</span><strong>{firewall.counts.portAllow}</strong></article>
+        <article><span>{labels.portsDeny}</span><strong>{firewall.counts.portDeny}</strong></article>
+      </div>
+      {!firewall.available ? (
+        <p className="sentinel-detail-error" role="status">{labels.unavailable}</p>
+      ) : (
+        <section className="sentinel-event-table" aria-labelledby="sentinel-firewall-rules-title">
+          <header><h2 id="sentinel-firewall-rules-title">{labels.all}</h2><span>{rows.length} {labels.shown} / {firewall.counts.all}</span></header>
+          <div className="sentinel-event-toolbar">
+            <label>{labels.search}<input type="search" maxLength={120} value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+            <label>{labels.filter}
+              <select value={action} onChange={(event) => {
+                const value = event.currentTarget.value;
+                setAction(value === 'allow' || value === 'deny' ? value : 'all');
+              }}>
+                <option value="all">{labels.allActions}</option><option value="allow">{labels.allow}</option><option value="deny">{labels.deny}</option>
+              </select>
+            </label>
+          </div>
+          {firewall.inventoryLimited && <p className="sentinel-detail-error" role="status">{labels.limited}</p>}
+          <div className="sentinel-table-scroll"><table><thead><tr>
+            <th>{labels.list}</th><th>{labels.direction}</th><th>{labels.name}</th>
+            <th>{labels.source}</th><th>{labels.ports}</th><th>{labels.class}</th>
+          </tr></thead><tbody>
+            {rows.map((item) => (
+              <tr key={item.id}>
+                <td>{item.action === 'allow' ? labels.allow : labels.deny}</td>
+                <td>{item.direction === 'input' ? labels.input : item.direction === 'output' ? labels.output : item.direction || labels.unknown}</td>
+                <td>{item.name}</td><td><code>{item.source || '—'}</code></td>
+                <td>{item.ports || '—'}</td><td>{item.class || '—'}</td>
+              </tr>
+            ))}
+          </tbody></table></div>
+          {rows.length === 0 && <p className="sentinel-detail-message">{firewall.inventory.length ? labels.empty : labels.noInventory}</p>}
+        </section>
+      )}
+    </main>
+  );
+}
+
 type DashboardStatus = {
   available: boolean;
   fail2ban: { installed: boolean; running: boolean; jails: number; jailNames: string[]; banned: number };
-  firewall: { known: boolean; active: boolean };
+  firewall: FirewallStatus;
   blockedIps: number | null;
   eventsTotal: number;
   events: EventRow[];
@@ -150,8 +257,7 @@ function readStatus(element: HTMLElement): DashboardStatus {
       typeof parsed.fail2ban.running !== 'boolean' || !isFiniteNumber(parsed.fail2ban.jails) ||
       !Array.isArray(parsed.fail2ban.jailNames) ||
       !parsed.fail2ban.jailNames.every((name: unknown) => typeof name === 'string') ||
-      !isFiniteNumber(parsed.fail2ban.banned) || !isRecord(parsed.firewall) ||
-      typeof parsed.firewall.known !== 'boolean' || typeof parsed.firewall.active !== 'boolean' ||
+      !isFiniteNumber(parsed.fail2ban.banned) || !isFirewallStatus(parsed.firewall) ||
       (parsed.blockedIps !== null && !isFiniteNumber(parsed.blockedIps)) ||
       !isFiniteNumber(parsed.eventsTotal) || !Array.isArray(parsed.events) ||
       !parsed.events.every((event: unknown) => isRecord(event) &&
@@ -179,7 +285,7 @@ function readStatus(element: HTMLElement): DashboardStatus {
       jailNames: parsed.fail2ban.jailNames,
       banned: parsed.fail2ban.banned,
     },
-    firewall: { known: parsed.firewall.known, active: parsed.firewall.active },
+    firewall: parsed.firewall,
     blockedIps: parsed.blockedIps,
     eventsTotal: parsed.eventsTotal,
     events: parsed.events,
@@ -222,6 +328,23 @@ function parseFail2banDetails(value: unknown): Fail2banDetails {
 function isFail2banBackup(value: unknown): value is Fail2banBackup {
   return isRecord(value) && typeof value.id === 'string' &&
     /^[a-f0-9]{32}$/.test(value.id) && typeof value.created_at === 'string';
+}
+
+function isFirewallInventoryItem(value: unknown): value is FirewallInventoryItem {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string' &&
+    (value.action === 'allow' || value.action === 'deny') &&
+    typeof value.direction === 'string' && typeof value.source === 'string' &&
+    typeof value.ports === 'string' && typeof value.class === 'string';
+}
+
+function isFirewallStatus(value: unknown): value is FirewallStatus {
+  return isRecord(value) && typeof value.known === 'boolean' && typeof value.active === 'boolean' &&
+    typeof value.installed === 'boolean' && typeof value.available === 'boolean' &&
+    typeof value.inventoryLimited === 'boolean' && isRecord(value.counts) &&
+    isFiniteNumber(value.counts.all) && isFiniteNumber(value.counts.inputAllow) &&
+    isFiniteNumber(value.counts.inputDeny) && isFiniteNumber(value.counts.portAllow) &&
+    isFiniteNumber(value.counts.portDeny) && Array.isArray(value.inventory) &&
+    value.inventory.every(isFirewallInventoryItem);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -418,7 +541,7 @@ function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string
     }
     document.querySelector('.guardian')?.classList.toggle('sentinel-module-active', Boolean(target));
     document.querySelector('.guardian')?.classList.toggle('sentinel-dashboard-active', !target);
-    const isReactPage = target === 'guardian-waf-events' || target === 'guardian-incidents';
+    const isReactPage = target === 'guardian-waf-events' || target === 'guardian-incidents' || target === 'guardian-firewall';
     document.querySelector('.guardian')?.classList.toggle('sentinel-react-page-active', isReactPage);
     document.querySelector('.guardian')?.setAttribute('data-sentinel-target', target || '');
   }, [activeTarget]);
@@ -626,6 +749,7 @@ function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string
       {(activeTarget === 'guardian-waf-events' || activeTarget === 'guardian-incidents') && (
         <EventsModule status={status} language={language} exportUrl={exportUrl} />
       )}
+      {activeTarget === 'guardian-firewall' && <PleskFirewallModule firewall={status.firewall} language={language} />}
       <section className="sentinel-overview" hidden={Boolean(activeTarget)} aria-label={language === 'de' ? 'Sicherheitsstatus' : 'Security status'}>
         <header className="sentinel-overview-heading">
           <div><p>{labels.subtitle}</p><h1>Sentinel Security</h1></div>

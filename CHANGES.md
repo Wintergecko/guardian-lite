@@ -1,3 +1,10 @@
+## 0.28.41 – Plesk-Firewall in React
+
+- Migriert die Plesk-Regelübersicht in eine React-Ansicht mit Regelzählern sowie Suche und Aktionsfilter.
+- Übergibt ausschließlich begrenzte, normalisierte Firewall-Bestandsdaten; nicht verfügbare Zustände werden explizit angezeigt.
+- Die Ansicht bleibt read-only: Firewall-Änderungen laufen weiterhin über bestehende Plesk-Controller mit Admin-/CSRF-Prüfung und Rückfallbestätigung.
+- Weitere Firewall-Menüpunkte und Modul-Inhalte werden schrittweise migriert.
+
 ## 0.28.40 – React-Ereignisansichten
 
 - Migriert Webschutz-Ereignisse und Incidents in React: Suche, Schweregrad- und Zeitraumfilter, Auto-Aktualisierung und JSON-Export.
