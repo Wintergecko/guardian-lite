@@ -341,17 +341,24 @@ $domainSelect = function () use ($esc) {
   <section class="guardian-card guardian-subsection" id="guardian-service-keys">
   <h3>Cloud-Dienst-Schluessel</h3>
   <p>AbuseIPDB: <?= !empty($cloud['abuseipdb_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?> · Turnstile: <?= !empty($cloud['turnstile_configured']) ? 'Schluessel gespeichert' : 'Nicht konfiguriert' ?></p>
-  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" autocomplete="off">
+  <form method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>" autocomplete="off" class="guardian-settings-form">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="operation" value="cloud-save">
-    <label>AbuseIPDB API-Key <input type="password" name="abuseipdb_key" maxlength="200" autocomplete="new-password"
-      placeholder="<?= !empty($cloud['abuseipdb_configured']) ? '************ (gespeichert)' : 'nicht gesetzt' ?>"></label>
-    <label>Turnstile Site-Key <input type="text" name="turnstile_sitekey" maxlength="200"
-      placeholder="<?= !empty($cloud['turnstile_configured']) ? '************ (gespeichert)' : 'nicht gesetzt' ?>"></label>
-    <label>Turnstile Secret <input type="password" name="turnstile_secret" maxlength="200" autocomplete="new-password"
-      placeholder="<?= !empty($cloud['turnstile_configured']) ? '************ (gespeichert)' : 'nicht gesetzt' ?>"></label>
-    <p class="guardian-small">Leere Schluesselfelder behalten gespeicherte Werte. Gespeicherte Schluessel werden nie angezeigt, nur als Platzhalter markiert.</p>
-    <label><input type="checkbox" name="consent" value="1" <?= !empty($cloud['consent']) ? 'checked' : '' ?>> IP-Reputationsabfragen an AbuseIPDB und Browserpruefungen ueber Cloudflare erlauben</label>
-    <label><input type="checkbox" name="clear" value="1"> Gespeicherte Schluessel loeschen</label><button>Speichern</button>
+    <label class="guardian-setting-field">AbuseIPDB API-Key
+      <input type="password" name="abuseipdb_key" maxlength="200" autocomplete="new-password"
+        placeholder="<?= !empty($cloud['abuseipdb_configured']) ? '************ (gespeichert)' : 'nicht gesetzt' ?>">
+    </label>
+    <label class="guardian-setting-field">Turnstile Site-Key
+      <input type="text" name="turnstile_sitekey" maxlength="200"
+        placeholder="<?= !empty($cloud['turnstile_configured']) ? '************ (gespeichert)' : 'nicht gesetzt' ?>">
+    </label>
+    <label class="guardian-setting-field">Turnstile Secret
+      <input type="password" name="turnstile_secret" maxlength="200" autocomplete="new-password"
+        placeholder="<?= !empty($cloud['turnstile_configured']) ? '************ (gespeichert)' : 'nicht gesetzt' ?>">
+    </label>
+    <p class="guardian-small guardian-settings-form-note">Leere Schluesselfelder behalten gespeicherte Werte. Gespeicherte Schluessel werden nie angezeigt, nur als Platzhalter markiert.</p>
+    <label class="guardian-setting-toggle"><input type="checkbox" name="consent" value="1" <?= !empty($cloud['consent']) ? 'checked' : '' ?>> <span>IP-Reputationsabfragen an AbuseIPDB und Browserpruefungen ueber Cloudflare erlauben</span></label>
+    <label class="guardian-setting-toggle"><input type="checkbox" name="clear" value="1"> <span>Gespeicherte Schluessel loeschen</span></label>
+    <div class="guardian-settings-form-actions"><button type="submit">Speichern</button></div>
   </form>
   </section>
   <section class="guardian-card guardian-subsection" id="guardian-reputation">

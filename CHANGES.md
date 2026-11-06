@@ -1,3 +1,9 @@
+## 0.28.44 – Einstellungsfelder vereinheitlicht
+
+- Richtet die AbuseIPDB- und Turnstile-Schluesselfelder in einem responsiven Formularraster mit gleicher Breite, Hoehe und Ausrichtung aus.
+- Gruppiert Einwilligung, Schluessel-Loeschoption und Speichern-Aktion klar und verbessert Fokus-/Dark-Mode-Darstellung.
+- Die POST-Felder und bestehende CSRF-geschuetzte Speicheraktion bleiben unveraendert.
+
 ## 0.28.43 – Verwaltungsbereich geordnet
 
 - Fuegt fuer `guardian-tab-settings` eine klare React-Verwaltungsübersicht mit Gruppen fuer Speicher/Wiederherstellung, Dienst-Schluessel/Integrationen und Wartung/System hinzu.
