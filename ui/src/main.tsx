@@ -10,6 +10,33 @@ type EventRow = {
   detail: string;
 };
 
+type WafEvent = {
+  epoch: number | null;
+  rule: string;
+  severity: string;
+  ip: string | null;
+  blocked: boolean;
+};
+
+type Incident = {
+  time: string;
+  type: string;
+  severity: string;
+  domain: string;
+  path: string;
+  detail: string;
+};
+
+function normalizeSeverity(value: string): string {
+  const severity = value.trim().toLowerCase();
+  if (['emergency', 'alert', 'critical', 'crit'].includes(severity)) return 'critical';
+  if (['error', 'err'].includes(severity)) return 'error';
+  if (['warning', 'warn'].includes(severity)) return 'warning';
+  if (['notice'].includes(severity)) return 'notice';
+  if (['info', 'informational'].includes(severity)) return 'info';
+  return severity;
+}
+
 type DashboardStatus = {
   available: boolean;
   fail2ban: { installed: boolean; running: boolean; jails: number; jailNames: string[]; banned: number };
@@ -17,6 +44,10 @@ type DashboardStatus = {
   blockedIps: number | null;
   eventsTotal: number;
   events: EventRow[];
+  wafAvailable: boolean;
+  wafNote: string;
+  wafEvents: WafEvent[];
+  incidents: Incident[];
 };
 
 type Fail2banDetails = {
@@ -125,7 +156,18 @@ function readStatus(element: HTMLElement): DashboardStatus {
       !isFiniteNumber(parsed.eventsTotal) || !Array.isArray(parsed.events) ||
       !parsed.events.every((event: unknown) => isRecord(event) &&
         typeof event.time === 'string' && typeof event.severity === 'string' &&
-        typeof event.type === 'string' && typeof event.detail === 'string')) {
+          typeof event.type === 'string' && typeof event.detail === 'string') ||
+        typeof parsed.wafAvailable !== 'boolean' || typeof parsed.wafNote !== 'string' ||
+        !Array.isArray(parsed.wafEvents) ||
+        !parsed.wafEvents.every((event: unknown) => isRecord(event) &&
+          (event.epoch === null || isFiniteNumber(event.epoch)) &&
+          typeof event.rule === 'string' && typeof event.severity === 'string' &&
+          (event.ip === null || typeof event.ip === 'string') && typeof event.blocked === 'boolean') ||
+        !Array.isArray(parsed.incidents) ||
+        !parsed.incidents.every((event: unknown) => isRecord(event) &&
+          typeof event.time === 'string' && typeof event.type === 'string' &&
+          typeof event.severity === 'string' && typeof event.domain === 'string' &&
+          typeof event.path === 'string' && typeof event.detail === 'string')) {
     throw new Error('Sentinel dashboard data is invalid.');
   }
   return {
@@ -141,6 +183,10 @@ function readStatus(element: HTMLElement): DashboardStatus {
     blockedIps: parsed.blockedIps,
     eventsTotal: parsed.eventsTotal,
     events: parsed.events,
+    wafAvailable: parsed.wafAvailable,
+    wafNote: parsed.wafNote,
+    wafEvents: parsed.wafEvents,
+    incidents: parsed.incidents,
   };
 }
 
@@ -191,12 +237,135 @@ function isNullableNumber(value: unknown): value is number | null {
 }
 
 function navigateTo(target: string): void {
-  const links = document.querySelectorAll<HTMLAnchorElement>('.guardian-menu-enhanced [data-menu-target]');
-  const link = Array.from(links).find((candidate) => candidate.dataset.menuTarget === target);
-  if (!link) {
+  const group = menu.find((entry) => entry.items.some((item) => item.target === target));
+  if (!group) {
     throw new Error(`Guardian panel is unavailable: ${target}`);
   }
-  link.click();
+  window.dispatchEvent(new CustomEvent('guardian:navigate', { detail: { target } }));
+}
+
+function EventsModule({ status, language, exportUrl }: {
+  status: DashboardStatus;
+  language: 'de' | 'en';
+  exportUrl: string;
+}) {
+  const [query, setQuery] = useState('');
+  const [severity, setSeverity] = useState('all');
+  const [range, setRange] = useState('all');
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const isGerman = language === 'de';
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const cutoff = range === 'all' ? 0 : Date.now() - Number(range);
+  const wafEvents = status.wafEvents.filter((event) => {
+    const time = event.epoch === null ? 0 : event.epoch * 1000;
+    const inRange = !cutoff || (time >= cutoff && time <= Date.now());
+    const matchesSeverity = severity === 'all' || normalizeSeverity(event.severity) === severity;
+    const searchable = `${event.rule} ${event.severity} ${event.ip || ''}`.toLocaleLowerCase();
+    return inRange && matchesSeverity && (!normalizedQuery || searchable.includes(normalizedQuery));
+  });
+  const incidents = status.incidents.filter((event) => {
+    const time = Date.parse(event.time);
+    const inRange = !cutoff || (Number.isFinite(time) && time >= cutoff && time <= Date.now());
+    const matchesSeverity = severity === 'all' || normalizeSeverity(event.severity) === severity;
+    const searchable = `${event.type} ${event.severity} ${event.domain} ${event.path} ${event.detail}`.toLocaleLowerCase();
+    return inRange && matchesSeverity && (!normalizedQuery || searchable.includes(normalizedQuery));
+  });
+
+  useEffect(() => {
+    if (!autoRefresh) return undefined;
+    const timer = window.setInterval(() => window.location.reload(), 30000);
+    return () => window.clearInterval(timer);
+  }, [autoRefresh]);
+
+  const formatTime = (epoch: number | null, isoTime?: string) => {
+    const date = epoch === null ? (isoTime ? new Date(isoTime) : null) : new Date(epoch * 1000);
+    return date && Number.isFinite(date.getTime())
+      ? date.toLocaleString(isGerman ? 'de-DE' : 'en-GB')
+      : '—';
+  };
+  const labels = isGerman
+    ? {
+      description: 'ModSecurity-WAF-Ereignisse und Guardian-Audit-Einträge aus den aktuell verfügbaren Serverdaten.',
+      waf: 'Webschutz-Ereignisse', incidents: 'Guardian-Meldungen & Audit-Log',
+      search: 'Ereignisse suchen', severity: 'Schweregrad', all: 'Alle',
+      allTime: 'Gesamter verfügbarer Ausschnitt', day: 'Letzte 24 Stunden',
+      week: 'Letzte 7 Tage', month: 'Letzte 30 Tage', auto: 'Automatisch aktualisieren (30 s)',
+      time: 'Zeit', rule: 'Regel', ip: 'Quell-IP', blocked: 'Blockiert',
+      yes: 'Ja', unknown: 'Unbekannt', type: 'Typ', location: 'Domain / Pfad',
+      no: 'Nein', critical: 'Kritisch', error: 'Fehler', warning: 'Warnung',
+      notice: 'Hinweis', info: 'Info',
+      detail: 'Hinweis', export: 'Audit-Log als JSON exportieren',
+      unavailable: 'ModSecurity-Audit-Log ist nicht verfügbar.',
+      empty: 'Keine passenden Einträge im gewählten Zeitraum.',
+      showing: 'angezeigt', countWaf: 'WAF-Ereignisse', countIncidents: 'Audit-Einträge',
+    }
+    : {
+      description: 'ModSecurity WAF events and Guardian audit entries from currently available server data.',
+      waf: 'Web protection events', incidents: 'Guardian incidents & audit log',
+      search: 'Search events', severity: 'Severity', all: 'All',
+      allTime: 'All available entries', day: 'Last 24 hours',
+      week: 'Last 7 days', month: 'Last 30 days', auto: 'Auto-refresh (30 s)',
+      time: 'Time', rule: 'Rule', ip: 'Source IP', blocked: 'Blocked',
+      yes: 'Yes', unknown: 'Unknown', type: 'Type', location: 'Domain / path',
+      no: 'No', critical: 'Critical', error: 'Error', warning: 'Warning',
+      notice: 'Notice', info: 'Info',
+      detail: 'Details', export: 'Export audit log as JSON',
+      unavailable: 'ModSecurity audit log is unavailable.',
+      empty: 'No matching entries in the selected range.',
+      showing: 'shown', countWaf: 'WAF events', countIncidents: 'Audit entries',
+    };
+
+  return (
+    <main className="sentinel-react-content sentinel-events" aria-label={labels.waf}>
+      <p className="sentinel-module-description">{labels.description}</p>
+      <div className="sentinel-event-toolbar">
+        <label>{labels.search}<input type="search" maxLength={120} value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
+        <label>{labels.severity}
+          <select value={severity} onChange={(event) => setSeverity(event.currentTarget.value)}>
+            <option value="all">{labels.all}</option>
+              <option value="critical">{labels.critical}</option><option value="error">{labels.error}</option>
+              <option value="warning">{labels.warning}</option><option value="notice">{labels.notice}</option>
+              <option value="info">{labels.info}</option>
+          </select>
+        </label>
+        <label>{isGerman ? 'Zeitraum' : 'Time range'}
+          <select value={range} onChange={(event) => setRange(event.currentTarget.value)}>
+            <option value="all">{labels.allTime}</option>
+            <option value={String(24 * 60 * 60 * 1000)}>{labels.day}</option>
+            <option value={String(7 * 24 * 60 * 60 * 1000)}>{labels.week}</option>
+            <option value={String(30 * 24 * 60 * 60 * 1000)}>{labels.month}</option>
+          </select>
+        </label>
+        <label className="sentinel-event-refresh"><input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.currentTarget.checked)} />{labels.auto}</label>
+      </div>
+      <section className="sentinel-event-table" aria-labelledby="sentinel-waf-events-title">
+        <header><h2 id="sentinel-waf-events-title">{labels.waf}</h2><span>{wafEvents.length} {labels.showing} / {status.wafEvents.length} {labels.countWaf}</span></header>
+        {!status.wafAvailable && <p className="sentinel-detail-error" role="status">{status.wafNote || labels.unavailable}</p>}
+        <div className="sentinel-table-scroll"><table><thead><tr><th>{labels.time}</th><th>{labels.rule}</th><th>{labels.severity}</th><th>{labels.ip}</th><th>{labels.blocked}</th></tr></thead>
+          <tbody>{wafEvents.map((event, index) => (
+            <tr key={`${event.epoch}-${event.rule}-${index}`}>
+              <td><time>{formatTime(event.epoch)}</time></td><td>{event.rule}</td>
+              <td>{event.severity || '—'}</td><td><code>{event.ip || '—'}</code></td>
+              <td>{event.blocked ? labels.yes : labels.no}</td>
+            </tr>
+          ))}</tbody></table></div>
+        {status.wafAvailable && wafEvents.length === 0 && <p className="sentinel-detail-message">{labels.empty}</p>}
+      </section>
+      <section className="sentinel-event-table" aria-labelledby="sentinel-incidents-title">
+        <header><h2 id="sentinel-incidents-title">{labels.incidents}</h2><span>{incidents.length} {labels.showing} / {status.incidents.length} {labels.countIncidents}</span></header>
+        <div className="sentinel-table-scroll"><table><thead><tr><th>{labels.time}</th><th>{labels.severity}</th><th>{labels.type}</th><th>{labels.location}</th><th>{labels.detail}</th></tr></thead>
+          <tbody>{incidents.map((event, index) => (
+            <tr key={`${event.time}-${event.type}-${index}`}>
+              <td><time dateTime={event.time}>{formatTime(null, event.time)}</time></td>
+              <td>{event.severity || '—'}</td><td>{event.type}</td>
+              <td>{[event.domain, event.path].filter(Boolean).join(' / ') || '—'}</td><td>{event.detail}</td>
+            </tr>
+          ))}</tbody></table></div>
+        {incidents.length === 0 && <p className="sentinel-detail-message">{labels.empty}</p>}
+        <a className="sentinel-event-export" href={exportUrl}>{labels.export}</a>
+      </section>
+    </main>
+  );
 }
 
 function currentModuleTarget(): string | null {
@@ -207,7 +376,7 @@ function currentModuleTarget(): string | null {
   return target && target !== 'guardian-dashboard-top' ? target : null;
 }
 
-function App({ status }: { status: DashboardStatus }) {
+function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string }) {
   const [language, setLanguage] = useState<'de' | 'en'>('de');
   const [darkMode, setDarkMode] = useState(true);
   const [activeGroup, setActiveGroup] = useState('overview');
@@ -222,6 +391,9 @@ function App({ status }: { status: DashboardStatus }) {
   const [jailSaving, setJailSaving] = useState(false);
   const [jailMutationError, setJailMutationError] = useState('');
   const [jailMutationMessage, setJailMutationMessage] = useState('');
+  const activeMenuItem = menu.flatMap((group) =>
+    group.items.map((item) => ({ ...item, group })),
+  ).find((item) => item.target === activeTarget);
 
   useEffect(() => {
     const shell = document.querySelector('.guardian-shell');
@@ -234,7 +406,7 @@ function App({ status }: { status: DashboardStatus }) {
     page.classList.add('sentinel-enabled');
     return () => {
       shell.classList.remove('sentinel-ready');
-      page.classList.remove('sentinel-enabled', 'sentinel-dark', 'sentinel-module-active', 'sentinel-dashboard-active');
+      page.classList.remove('sentinel-enabled', 'sentinel-dark', 'sentinel-module-active', 'sentinel-dashboard-active', 'sentinel-react-page-active');
     };
   }, []);
 
@@ -246,6 +418,9 @@ function App({ status }: { status: DashboardStatus }) {
     }
     document.querySelector('.guardian')?.classList.toggle('sentinel-module-active', Boolean(target));
     document.querySelector('.guardian')?.classList.toggle('sentinel-dashboard-active', !target);
+    const isReactPage = target === 'guardian-waf-events' || target === 'guardian-incidents';
+    document.querySelector('.guardian')?.classList.toggle('sentinel-react-page-active', isReactPage);
+    document.querySelector('.guardian')?.setAttribute('data-sentinel-target', target || '');
   }, [activeTarget]);
 
   useEffect(() => {
@@ -442,6 +617,15 @@ function App({ status }: { status: DashboardStatus }) {
           <button type="button" className="sentinel-theme-toggle" onClick={() => setDarkMode(!darkMode)}>{labels.theme}</button>
         </div>
       </aside>
+      {activeMenuItem && (
+        <header className="sentinel-route-header">
+          <p>{language === 'de' ? activeMenuItem.group.label : activeMenuItem.group.english}</p>
+          <h1>{activeMenuItem[language === 'de' ? 'label' : 'english']}</h1>
+        </header>
+      )}
+      {(activeTarget === 'guardian-waf-events' || activeTarget === 'guardian-incidents') && (
+        <EventsModule status={status} language={language} exportUrl={exportUrl} />
+      )}
       <section className="sentinel-overview" hidden={Boolean(activeTarget)} aria-label={language === 'de' ? 'Sicherheitsstatus' : 'Security status'}>
         <header className="sentinel-overview-heading">
           <div><p>{labels.subtitle}</p><h1>Sentinel Security</h1></div>
@@ -546,5 +730,10 @@ function App({ status }: { status: DashboardStatus }) {
 const mount = document.getElementById('sentinel-app-root');
 if (mount) {
   const root = createRoot(mount);
-  root.render(<App status={readStatus(mount)} />);
+  const exportUrl = mount.dataset.incidentsExportUrl || '';
+  const exportLink = exportUrl ? new URL(exportUrl, window.location.href) : null;
+  if (!exportLink || exportLink.origin !== window.location.origin) {
+    throw new Error('Sentinel export route is invalid.');
+  }
+  root.render(<App status={readStatus(mount)} exportUrl={exportLink.href} />);
 }

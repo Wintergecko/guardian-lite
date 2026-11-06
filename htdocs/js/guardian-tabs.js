@@ -228,6 +228,14 @@
         window.scrollTo(0, 0);
       });
     });
+    window.addEventListener('guardian:navigate', function (event) {
+      var targetId = event && event.detail && event.detail.target;
+      var groupId = targets[targetId];
+      if (!targetId || !groupId || !isValid(groupId)) return;
+      openMenu = null;
+      activate(groupId, false, true, targetId);
+      window.scrollTo(0, 0);
+    });
     // Show a readable domain independently of native select styling and Plesk skins.
     var domainSelect = document.getElementById('guardian-domain');
     var selectedName = document.getElementById('guardian-domain-selection-value');

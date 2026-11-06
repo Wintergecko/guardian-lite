@@ -1,3 +1,10 @@
+## 0.28.40 – React-Ereignisansichten
+
+- Migriert Webschutz-Ereignisse und Incidents in React: Suche, Schweregrad- und Zeitraumfilter, Auto-Aktualisierung und JSON-Export.
+- Uebergibt begrenzte WAF- und Incident-Daten aus dem serverseitigen Plesk-Status sicher an React.
+- React-Navigation wechselt ueber ein eigenes Ereignis, ohne Legacy-Menueeintraege programmatisch anzuklicken.
+- Die Inhalte weiterer Module werden weiterhin schrittweise migriert; Plesk-Controller und bestehende Schutzgrenzen bleiben erhalten.
+
 ## 0.28.39 – WAF-IP und Audit-Zeit erkennen
 
 - Liest ModSecurity-Zeitstempel mit Mikrosekunden sowie die Quell-IP aus dem protokollierten `X-Real-IP`-Header des Abschnitts B.
