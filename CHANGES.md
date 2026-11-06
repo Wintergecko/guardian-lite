@@ -1,3 +1,9 @@
+## 0.28.35 – Volle Plesk-Inhaltsbreite
+
+- Sentinel nutzt die gesamte Breite des von Plesk bereitgestellten Inhaltsbereichs statt einer festen Maximalbreite.
+- Entfernt den alten zusaetzlichen linken Einzug der Modulansicht, der neben der neuen Sidebar erneut Platz reservierte.
+- Aktualisiert Asset-Versionen, damit Browser die korrigierten Styles laden.
+
 ## 0.28.34 – Klarere Sentinel-Navigation
 
 - Sidebar-Untermenues oeffnen sich als seitliches Overlay, ohne die restlichen Menuepunkte nach unten zu verschieben.

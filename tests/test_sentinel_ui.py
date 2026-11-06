@@ -41,6 +41,8 @@ class SentinelUiTests(unittest.TestCase):
         self.assertIn('sentinel-module-active .guardian-shell.sentinel-ready .guardian-pages', styles)
         self.assertIn('left: calc(100% + 8px)', styles)
         self.assertIn('top: 100%; left: 0', styles)
+        self.assertIn('.guardian.sentinel-enabled { width: 100%; max-width: none;', styles)
+        self.assertIn('.guardian.sentinel-enabled .guardian-pages { width: auto; margin-left: 0;', styles)
         controller = (ROOT / 'plib/controllers/IndexController.php').read_text(encoding='utf-8')
         self.assertIn('function fail2banSetAction()', controller)
         self.assertIn('function fail2banRestoreAction()', controller)

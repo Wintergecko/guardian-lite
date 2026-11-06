@@ -177,9 +177,10 @@
 .sentinel-severity.severity-warning { color: var(--sentinel-warning); }
 .sentinel-recent-events > button { grid-column: 2; grid-row: 2; color: #86efac; background: transparent; border: 0; font-size: 10px; cursor: pointer; }
 
-.guardian.sentinel-enabled { max-width: 1600px; }
+.guardian.sentinel-enabled { width: 100%; max-width: none; margin: 0; box-sizing: border-box; }
 .guardian.sentinel-enabled .guardian-hero { display: none; }
 .guardian.sentinel-enabled .guardian-shell { margin-top: 12px; }
+.guardian.sentinel-enabled .guardian-pages { width: auto; margin-left: 0; margin-right: 0; }
 .guardian.sentinel-enabled .guardian-foot { grid-column: 2; grid-row: 3; }
 .guardian.sentinel-dark { color: #dbe5f1; }
 .guardian.sentinel-dark .guardian-pages { color: #dbe5f1; }
