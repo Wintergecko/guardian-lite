@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.51 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.52 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
@@ -41,6 +41,9 @@ Funktionen ausfuehren, einschliesslich Host-Mounts, Capabilities und
 privilegierten Containern: vor dem Anwenden die vollstaendige Datei und
 Imagequellen pruefen. Diese Funktion ist daher nur fuer vertrauenswuerdige
 Plesk-Administratoren bestimmt.
+Der Editor markiert moegliche Klartext-Zugangsdaten anhand ihrer Variablennamen,
+zeigt dabei keine Werte an und ersetzt weder Rotation noch die Pruefung bereits
+gespeicherter Sicherungen.
 
 Container- und Compose-Loeschaktionen loeschen keine Images oder Volumes.
 Compose-Down entfernt Stack-Container und generierte Netze; Sentinel-eigene

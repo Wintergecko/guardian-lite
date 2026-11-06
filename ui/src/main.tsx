@@ -91,6 +91,18 @@ type ComposeFile = {
   backups: { id: string; created: number }[];
 };
 
+function containsPlaintextComposeCredentials(content: string): boolean {
+  const sensitiveAssignment = /^\s*(?:-\s+)?["']?([A-Z0-9_.-]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIAL)[A-Z0-9_.-]*)["']?\s*(?::|=)\s*(.*?)\s*$/i;
+  return content.split(/\r?\n/).some((line) => {
+    if (/^\s*#/.test(line)) return false;
+    const match = sensitiveAssignment.exec(line);
+    if (!match) return false;
+    const value = match[2].replace(/^(['"])(.*)\1$/, '$2').trim();
+    return value !== '' && !/^(?:null|~)$/i.test(value) &&
+      !/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value);
+  });
+}
+
 function normalizeSeverity(value: string): string {
   const severity = value.trim().toLowerCase();
   if (['emergency', 'alert', 'critical', 'crit'].includes(severity)) return 'critical';
@@ -283,6 +295,7 @@ function DockerModule({ language, statusUrl, fileUrl, manageUrl, csrf }: {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [editor, setEditor] = useState<ComposeFile | null>(null);
+  const [composeDraft, setComposeDraft] = useState('');
   const [logs, setLogs] = useState<{ name: string; content: string } | null>(null);
   const [editingContainer, setEditingContainer] = useState<DockerContainer | null>(null);
   const [creatingCompose, setCreatingCompose] = useState(false);
@@ -321,6 +334,7 @@ function DockerModule({ language, statusUrl, fileUrl, manageUrl, csrf }: {
       createNote: 'Standalone-Container können nur benannte Volumes verwenden; Host-Verzeichnisse sind hier absichtlich nicht freigegeben.',
       composeNote: 'YAML-Dateien root-eigener Projekte (max. 512 KiB) werden vor dem Speichern validiert und versioniert. Anwenden ist ein separater Schritt.',
       securityNote: 'Achtung: Compose-YAML ist ausführbare Infrastrukturkonfiguration. Bind-Mounts, privilegierte Container und Images können Zugriff auf den Host ermöglichen. Änderungen nur nach Prüfung anwenden.',
+      secretWarning: 'Diese Compose-YAML enthält möglicherweise Zugangsdaten im Klartext. Ziehe Docker Secrets oder root-private Umgebungsdateien vor; rotiere bereits gespeicherte Zugangsdaten und prüfe Backups. Diese Warnung zeigt keine Werte an.',
       notEditable: 'Konfigurationsdatei ist nicht root-verwaltet oder kann nicht sicher bearbeitet werden.',
       loading: 'Docker-Status wird geladen …', managed: 'Sentinel-Projekt', existing: 'Vorhandenes Projekt',
       backups: 'Gesicherte Versionen', noBackups: 'Keine Compose-Backups vorhanden.',
@@ -361,6 +375,7 @@ function DockerModule({ language, statusUrl, fileUrl, manageUrl, csrf }: {
       createNote: 'Standalone containers can use named volumes only; host directory mounts are intentionally unavailable here.',
       composeNote: 'YAML files for root-owned projects (max 512 KiB) are validated and versioned before saving. Applying is a separate step.',
       securityNote: 'Warning: Compose YAML is executable infrastructure configuration. Bind mounts, privileged containers, and images may grant host access. Review changes before applying.',
+      secretWarning: 'This Compose YAML may contain plaintext credentials. Prefer Docker secrets or root-private environment files; rotate credentials already stored and review backups. This warning does not display any values.',
       notEditable: 'Configuration file is not root-managed or cannot be safely edited.',
       loading: 'Loading Docker status …', managed: 'Sentinel project', existing: 'Existing project',
       backups: 'Saved versions', noBackups: 'No Compose backups available.',
@@ -483,6 +498,7 @@ function DockerModule({ language, statusUrl, fileUrl, manageUrl, csrf }: {
     const succeeded = await perform(operation, fields, operation === 'container-create' ? labels.createConfirm : '');
     if (succeeded && operation === 'compose-create') {
       setCreatingCompose(false);
+      setComposeDraft('');
       form.reset();
     }
     if (succeeded && operation === 'container-create') setEditingContainer(null);
@@ -500,7 +516,10 @@ function DockerModule({ language, statusUrl, fileUrl, manageUrl, csrf }: {
       <p className="sentinel-module-description">{labels.description}</p>
       <div className="sentinel-docker-actions">
         <button type="button" disabled={loading || busy} onClick={() => void loadStatus()}>{labels.refresh}</button>
-        <button type="button" disabled={busy || !status?.compose_available} onClick={() => setCreatingCompose(true)}>{labels.createCompose}</button>
+        <button type="button" disabled={busy || !status?.compose_available} onClick={() => {
+          setComposeDraft('');
+          setCreatingCompose(true);
+        }}>{labels.createCompose}</button>
         <button type="button" disabled={busy || !status?.available} onClick={() => setEditingContainer({
           id: '', short_id: '', name: '', image: '', status: '', state: '', ports: '', running: false,
           memory_mib: 512, cpus: 1, restart: 'unless-stopped', compose_project: '',
@@ -643,7 +662,11 @@ function DockerModule({ language, statusUrl, fileUrl, manageUrl, csrf }: {
         <form className="sentinel-docker-dialog" onSubmit={(event) => void submitForm(event, 'compose-create')}>
           <h2>{labels.createCompose}</h2>
           <label>{labels.newProject}<input name="project" required maxLength={63} pattern="[a-z0-9][a-z0-9_-]{0,62}" /></label>
-          <label>{labels.yaml}<textarea name="yaml" required maxLength={524288} rows={16} spellCheck={false} /></label>
+          <label>{labels.yaml}<textarea name="yaml" required maxLength={524288} rows={16} spellCheck={false}
+            value={composeDraft} onChange={(event) => setComposeDraft(event.currentTarget.value)} /></label>
+          {containsPlaintextComposeCredentials(composeDraft) && (
+            <p className="sentinel-detail-warning" role="alert">{labels.secretWarning}</p>
+          )}
           <p>{labels.composeNote} {labels.createStackNote}</p>
           <p className="sentinel-detail-warning">{labels.securityNote}</p>
           <div><button type="submit" disabled={busy || !status?.compose_available}>{labels.create}</button>
@@ -658,6 +681,9 @@ function DockerModule({ language, statusUrl, fileUrl, manageUrl, csrf }: {
           <p className="sentinel-detail-warning">{labels.securityNote}</p>
           <label>{labels.yaml}<textarea value={editor.content} maxLength={524288} rows={24} spellCheck={false}
             onChange={(event) => setEditor({ ...editor, content: event.currentTarget.value })} /></label>
+          {containsPlaintextComposeCredentials(editor.content) && (
+            <p className="sentinel-detail-warning" role="alert">{labels.secretWarning}</p>
+          )}
           <div className="sentinel-docker-actions">
             <button type="button" disabled={busy} onClick={() => void perform('compose-validate', {
               project: editor.project, index: String(editor.index), sha256: editor.sha256, yaml: editor.content,

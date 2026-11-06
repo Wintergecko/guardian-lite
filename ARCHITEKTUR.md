@@ -1,6 +1,6 @@
 # Sentinel Security – Architektur und Bestandsaufnahme
 
-Stand: Version 0.28.46. Dieses Dokument beschreibt die vorhandene Erweiterung, keine Soll-Implementierung. Die Funktionsangaben sind auf Quellcode, Tests und die dokumentierten Systemvoraussetzungen begrenzt.
+Stand: Version 0.28.52. Dieses Dokument beschreibt die vorhandene Erweiterung, keine Soll-Implementierung. Die Funktionsangaben sind auf Quellcode, Tests und die dokumentierten Systemvoraussetzungen begrenzt.
 
 ## Architektur
 
@@ -14,6 +14,7 @@ Plesk Obsidian (Administrator)
             └─ htdocs/sentinel/sentinel.js + sentinel.css
                  └─ Plesk-Controller (plib/controllers/IndexController.php)
                       ├─ guardian-helper: feste privilegierte Aktionen
+                      ├─ guardian-docker: eingeschraenkte Docker-/Compose-Aktionen
                       └─ guardian-manager: Verwaltungsoperationen, JSON über stdin
                            └─ lokale Plesk-/Linux-Dienste und private Zustandsdaten
 ```
@@ -27,6 +28,7 @@ Plesk Obsidian (Administrator)
 | `htdocs/js/guardian-tabs.js` | Plesk-Menüintegration und Umschalten zwischen vorhandenen Modulen | Verschiebt vorhandene Inhalte in Modul-Panels; ersetzt deren Controller nicht |
 | `ui/src/` | React-/TypeScript-Navigation, Dashboard und migrierte Modulansichten | Nutzt Plesk-gerenderte Statusdaten und geschützte Plesk-Endpunkte; kein privilegierter Browserzugriff |
 | `sbin/guardian-helper` | Systemstatus, Scans, Firewall-/Fail2Ban-Aktionen und weitere privilegierte Funktionen | Feste Aktionen, geprüfte Argumente, begrenzte Prozesse und private Datenverzeichnisse; keine frei wählbaren Shell-Befehle |
+| `sbin/guardian-docker` | Container-/Compose-Inventar, begrenzte Aktionen, Compose-Validierung und Backups | Direkte Docker-Argumentlisten, Admin-/CSRF-Controller, root-private Projekt-/Backupdaten; Compose-YAML bleibt privilegierte Infrastrukturkonfiguration |
 | `sbin/guardian-manager` | Verwaltungsfunktionen wie WAF-, PHP-, Backup-, Baseline- und Integrationsverwaltung | Feste Operationsnamen; vertrauliche JSON-Eingaben über stdin statt Prozessargumente; begrenzte Dateiziele und Wiederherstellungspunkte |
 | `security/` | Verwaltete Regel- und Konfigurationsvorlagen | Aktivierung über explizite, geprüfte Abläufe; Backup, Konfigurationstest und Rollback je nach Modul |
 | `tests/` | Python-, PHP-Smoke-, UI-Vertrags-, Paket- und HTTP-Integrationstests | Linux-CI ergänzt lokale Tests; echte Plesk-/Provider-/Mailzustellung benötigt weiterhin einen separaten Plesk-Testserver |
@@ -44,7 +46,7 @@ Plesk Obsidian (Administrator)
 
 „Teilweise“ bedeutet, dass es eine echte Funktion gibt, aber nicht der vollständige im Auftrag beschriebene Umfang. Nicht vorhandene Funktionen werden nicht als verfügbar dargestellt.
 
-| # | Angefordertes Modul | Stand 0.28.46 | Verifiziert vorhandener Umfang | Wesentliche Lücken |
+| # | Angefordertes Modul | Stand 0.28.52 | Verifiziert vorhandener Umfang | Wesentliche Lücken |
 |---|---|---|---|---|
 | 1 | Security Dashboard | Teilweise | Reale Fail2Ban-, Firewall-, Ereignis- und WAF-Statusdaten; Schutzkennzahlen und IP-Karte, wenn lokale Datenbank und Abhängigkeit vorhanden sind | Dauerhafte, umfassende Statistikhistorie und zusätzliche Datenquellen |
 | 2 | Fail2Ban Manager | Teilweise | Status, aktive Jails, begrenzte Jail-Parameter, manuelles Sperren/Freigeben; eigene Override-Datei, Backup, Konfigurationstest, Laufzeitprüfung und Rollback | Verwaltung globaler Fail2Ban-Einstellungen, Erstellen von Jails/Filtern/Aktionen und getestete Plesk-spezifische Jail-Vorlagen |

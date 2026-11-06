@@ -1,3 +1,9 @@
+## 0.28.52 – Compose-Zugangsdaten-Warnung
+
+- Warnt im Compose-Erstellungs- und YAML-Editor vor wahrscheinlichen Klartextwerten bei Variablennamen wie Passwort, Token, Secret oder API-Key.
+- Die Warnung zeigt keine Konfigurationswerte und veraendert YAML nicht; sie ersetzt weder Geheimnisverwaltung noch Rotation oder Backup-Pruefung.
+- Ergaenzt die Dokumentation zu Docker Secrets, root-privaten Umgebungsdateien und gespeicherten Compose-Backups.
+
 ## 0.28.51 – Docker-Verwaltung
 
 - Fuegt einen Docker-Menuepunkt mit Echtzeit-Inventar, Start/Stop/Neustart, Logs und bearbeitbaren CPU-/RAM-/Neustart-Limits hinzu.

@@ -1,4 +1,4 @@
-# Sentinel Security: Liefer- und Pruefstatus 0.28.51
+# Sentinel Security: Liefer- und Pruefstatus 0.28.52
 
 Stand: 6. November 2026. Dieses Paket ist ein Entwicklungsstand der vorhandenen
 Plesk-Erweiterung `guardian-lite`. Der gesamte Entwicklungsauftrag mit zwoelf
@@ -12,6 +12,18 @@ die Komponenten, Vertrauensgrenzen und alle zwoelf Module mit konkreten Luecken.
 Die Erweiterung nutzt weiterhin denselben Plesk-Controller, dieselbe Extension-ID,
 dieselben Datenverzeichnisse sowie die vorhandenen React-/TypeScript- und
 serverseitigen Ansichten. Dieses Update fuehrt keine Datenmigration durch.
+
+## In 0.28.52 ergaenzt
+
+- Der Compose-Erstellungs- und YAML-Editor markiert moegliche Klartextwerte
+  anhand typischer Passwort-, Token-, Secret-, API-Key- und Credential-
+  Variablennamen. Die Warnung gibt keine Werte aus und verhindert weder
+  Speicherung noch Nutzung eines Secrets.
+- Administratoren muessen erkannte Zugangsdaten rotieren und gespeicherte
+  Compose-Backups beruecksichtigen. Docker Secrets oder root-private
+  Umgebungsdateien sind vorzuziehen, sofern die Anwendung diese unterstuetzt.
+- TypeScript-/Produktionsbuild und gezielte UI-/Versions-/Paketpruefungen
+  bestanden. Die Warnung wurde nicht auf dem Plesk-Server installiert.
 
 ## In 0.28.51 ergaenzt
 
@@ -241,9 +253,9 @@ Die bestehenden Teilfunktionen bleiben erhalten. Offen bleiben insbesondere:
    `/var/lib/guardian-lite/` sichern. Das Entwicklungs-ZIP nicht als bereits
    produktionsgeprueft behandeln.
 2. Die SHA-256-Datei zusammen mit dem ZIP auf den Testserver uebertragen und dort
-   mit `sha256sum -c guardian-lite-0.28.51.zip.sha256` pruefen.
-3. Neuinstallation: `plesk bin extension -i /root/guardian-lite-0.28.51.zip`.
-   Update: `plesk bin extension -g /root/guardian-lite-0.28.51.zip`.
+   mit `sha256sum -c guardian-lite-0.28.52.zip.sha256` pruefen.
+3. Neuinstallation: `plesk bin extension -i /root/guardian-lite-0.28.52.zip`.
+   Update: `plesk bin extension -g /root/guardian-lite-0.28.52.zip`.
 4. Als direkt angemeldeter Plesk-Administrator oeffnen, Diagnose ausfuehren und
    vorhandene Routen, Einstellungen, Scans und Wiederherstellungsdaten pruefen.
 5. Firewall-Apply/Confirm/Rollback ausschliesslich auf einem isolierten
