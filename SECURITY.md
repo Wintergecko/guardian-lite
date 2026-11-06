@@ -1,4 +1,4 @@
-# Guardian Lite v0.28.49 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.50 – Sicherheitsmodell und Grenzen
 
 ## 0.28.33 – Fail2Ban-Jail-Konfiguration
 

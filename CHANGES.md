@@ -1,3 +1,10 @@
+## 0.28.50 – Ereignis-Tabs und Pagination
+
+- Trennt Webschutz-Ereignisse und Guardian-Meldungen/Audit-Log in eigene, zugängliche Tabs mit jeweils eigenem Inhalt.
+- Ergänzt clientseitige Pagination mit 25 Einträgen pro Seite, Treffer-/Seitenanzeige und deaktivierten Grenzen.
+- Filter setzen die Pagination zurück; Suche, Schweregrad, Zeitraum, Auto-Refresh und Audit-Export bleiben erhalten.
+- React-/TypeScript-Build sowie gezielte UI-, Navigations- und Regressionstests bestanden.
+
 ## 0.28.49 – Plesk-Portregeln vollstaendig anzeigen
 
 - Zeigt im Port-Tab alle von Plesk gelieferten Regeln mit Portangaben, darunter Standarddienste und benutzerdefinierte Plesk-Regeln.

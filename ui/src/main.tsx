@@ -451,16 +451,22 @@ function navigateTo(target: string): void {
   window.dispatchEvent(new CustomEvent('guardian:navigate', { detail: { target } }));
 }
 
-function EventsModule({ status, language, exportUrl }: {
+function EventsModule({ status, language, exportUrl, activeTarget, onNavigate }: {
   status: DashboardStatus;
   language: 'de' | 'en';
   exportUrl: string;
+  activeTarget: string;
+  onNavigate: (target: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [severity, setSeverity] = useState('all');
   const [range, setRange] = useState('all');
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [wafPage, setWafPage] = useState(1);
+  const [incidentPage, setIncidentPage] = useState(1);
+  const pageSize = 25;
   const isGerman = language === 'de';
+  const isWafTab = activeTarget === 'guardian-waf-events';
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const cutoff = range === 'all' ? 0 : Date.now() - Number(range);
   const wafEvents = status.wafEvents.filter((event) => {
@@ -477,12 +483,23 @@ function EventsModule({ status, language, exportUrl }: {
     const searchable = `${event.type} ${event.severity} ${event.domain} ${event.path} ${event.detail}`.toLocaleLowerCase();
     return inRange && matchesSeverity && (!normalizedQuery || searchable.includes(normalizedQuery));
   });
+  const wafPageCount = Math.max(1, Math.ceil(wafEvents.length / pageSize));
+  const incidentPageCount = Math.max(1, Math.ceil(incidents.length / pageSize));
+  const currentWafPage = Math.min(wafPage, wafPageCount);
+  const currentIncidentPage = Math.min(incidentPage, incidentPageCount);
+  const visibleWafEvents = wafEvents.slice((currentWafPage - 1) * pageSize, currentWafPage * pageSize);
+  const visibleIncidents = incidents.slice((currentIncidentPage - 1) * pageSize, currentIncidentPage * pageSize);
 
   useEffect(() => {
     if (!autoRefresh) return undefined;
     const timer = window.setInterval(() => window.location.reload(), 30000);
     return () => window.clearInterval(timer);
   }, [autoRefresh]);
+
+  useEffect(() => {
+    setWafPage(1);
+    setIncidentPage(1);
+  }, [normalizedQuery, severity, range]);
 
   const formatTime = (epoch: number | null, isoTime?: string) => {
     const date = epoch === null ? (isoTime ? new Date(isoTime) : null) : new Date(epoch * 1000);
@@ -505,6 +522,8 @@ function EventsModule({ status, language, exportUrl }: {
       unavailable: 'ModSecurity-Audit-Log ist nicht verfügbar.',
       empty: 'Keine passenden Einträge im gewählten Zeitraum.',
       showing: 'angezeigt', countWaf: 'WAF-Ereignisse', countIncidents: 'Audit-Einträge',
+      previousPage: 'Zurück', nextPage: 'Weiter', page: 'Seite', of: 'von', entries: 'Einträge',
+      tabs: 'Ereignisbereiche',
     }
     : {
       description: 'ModSecurity WAF events and Guardian audit entries from currently available server data.',
@@ -520,11 +539,67 @@ function EventsModule({ status, language, exportUrl }: {
       unavailable: 'ModSecurity audit log is unavailable.',
       empty: 'No matching entries in the selected range.',
       showing: 'shown', countWaf: 'WAF events', countIncidents: 'Audit entries',
+      previousPage: 'Previous', nextPage: 'Next', page: 'Page', of: 'of', entries: 'entries',
+      tabs: 'Event sections',
     };
 
+  const renderPagination = (
+    total: number,
+    currentPage: number,
+    pageCount: number,
+    setPage: (page: number) => void,
+  ) => {
+    if (total <= pageSize) return null;
+    const firstEntry = (currentPage - 1) * pageSize + 1;
+    const lastEntry = Math.min(currentPage * pageSize, total);
+    return (
+      <nav className="sentinel-pagination" aria-label={labels.page + ' ' + labels.entries}>
+        <span aria-live="polite">{firstEntry}–{lastEntry} {labels.of} {total} {labels.entries} · {labels.page} {currentPage} {labels.of} {pageCount}</span>
+        <div>
+          <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1}>{labels.previousPage}</button>
+          <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pageCount}>{labels.nextPage}</button>
+        </div>
+      </nav>
+    );
+  };
+
   return (
-    <main className="sentinel-react-content sentinel-events" aria-label={labels.waf}>
+    <main className="sentinel-react-content sentinel-events" aria-label={labels.tabs}>
       <p className="sentinel-module-description">{labels.description}</p>
+      <div className="sentinel-event-tabs" role="tablist" aria-label={labels.tabs}>
+        <button type="button" role="tab" id="sentinel-waf-events-tab"
+          aria-selected={isWafTab} aria-controls="sentinel-waf-events-panel" tabIndex={isWafTab ? 0 : -1}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+              event.preventDefault();
+              const target = isWafTab ? 'guardian-incidents' : 'guardian-waf-events';
+              onNavigate(target);
+              document.getElementById(isWafTab ? 'sentinel-incidents-tab' : 'sentinel-waf-events-tab')?.focus();
+            } else if (event.key === 'Home' || event.key === 'End') {
+              event.preventDefault();
+              const target = event.key === 'Home' ? 'guardian-waf-events' : 'guardian-incidents';
+              onNavigate(target);
+              document.getElementById(event.key === 'Home' ? 'sentinel-waf-events-tab' : 'sentinel-incidents-tab')?.focus();
+            }
+          }}
+          onClick={() => onNavigate('guardian-waf-events')}>{labels.waf}</button>
+        <button type="button" role="tab" id="sentinel-incidents-tab"
+          aria-selected={!isWafTab} aria-controls="sentinel-incidents-panel" tabIndex={!isWafTab ? 0 : -1}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+              event.preventDefault();
+              const target = isWafTab ? 'guardian-incidents' : 'guardian-waf-events';
+              onNavigate(target);
+              document.getElementById(isWafTab ? 'sentinel-incidents-tab' : 'sentinel-waf-events-tab')?.focus();
+            } else if (event.key === 'Home' || event.key === 'End') {
+              event.preventDefault();
+              const target = event.key === 'Home' ? 'guardian-waf-events' : 'guardian-incidents';
+              onNavigate(target);
+              document.getElementById(event.key === 'Home' ? 'sentinel-waf-events-tab' : 'sentinel-incidents-tab')?.focus();
+            }
+          }}
+          onClick={() => onNavigate('guardian-incidents')}>{labels.incidents}</button>
+      </div>
       <div className="sentinel-event-toolbar">
         <label>{labels.search}<input type="search" maxLength={120} value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label>
         <label>{labels.severity}
@@ -545,11 +620,11 @@ function EventsModule({ status, language, exportUrl }: {
         </label>
         <label className="sentinel-event-refresh"><input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.currentTarget.checked)} />{labels.auto}</label>
       </div>
-      <section className="sentinel-event-table" aria-labelledby="sentinel-waf-events-title">
+      <section className="sentinel-event-table" id="sentinel-waf-events-panel" role="tabpanel" aria-labelledby="sentinel-waf-events-title" hidden={!isWafTab}>
         <header><h2 id="sentinel-waf-events-title">{labels.waf}</h2><span>{wafEvents.length} {labels.showing} / {status.wafEvents.length} {labels.countWaf}</span></header>
         {!status.wafAvailable && <p className="sentinel-detail-error" role="status">{status.wafNote || labels.unavailable}</p>}
         <div className="sentinel-table-scroll"><table><thead><tr><th>{labels.time}</th><th>{labels.rule}</th><th>{labels.severity}</th><th>{labels.ip}</th><th>{labels.blocked}</th></tr></thead>
-          <tbody>{wafEvents.map((event, index) => (
+          <tbody>{visibleWafEvents.map((event, index) => (
             <tr key={`${event.epoch}-${event.rule}-${index}`}>
               <td><time>{formatTime(event.epoch)}</time></td><td>{event.rule}</td>
               <td>{event.severity || '—'}</td><td><code>{event.ip || '—'}</code></td>
@@ -557,11 +632,12 @@ function EventsModule({ status, language, exportUrl }: {
             </tr>
           ))}</tbody></table></div>
         {status.wafAvailable && wafEvents.length === 0 && <p className="sentinel-detail-message">{labels.empty}</p>}
+        {renderPagination(wafEvents.length, currentWafPage, wafPageCount, setWafPage)}
       </section>
-      <section className="sentinel-event-table" aria-labelledby="sentinel-incidents-title">
+      <section className="sentinel-event-table" id="sentinel-incidents-panel" role="tabpanel" aria-labelledby="sentinel-incidents-title" hidden={isWafTab}>
         <header><h2 id="sentinel-incidents-title">{labels.incidents}</h2><span>{incidents.length} {labels.showing} / {status.incidents.length} {labels.countIncidents}</span></header>
         <div className="sentinel-table-scroll"><table><thead><tr><th>{labels.time}</th><th>{labels.severity}</th><th>{labels.type}</th><th>{labels.location}</th><th>{labels.detail}</th></tr></thead>
-          <tbody>{incidents.map((event, index) => (
+          <tbody>{visibleIncidents.map((event, index) => (
             <tr key={`${event.time}-${event.type}-${index}`}>
               <td><time dateTime={event.time}>{formatTime(null, event.time)}</time></td>
               <td>{event.severity || '—'}</td><td>{event.type}</td>
@@ -569,6 +645,7 @@ function EventsModule({ status, language, exportUrl }: {
             </tr>
           ))}</tbody></table></div>
         {incidents.length === 0 && <p className="sentinel-detail-message">{labels.empty}</p>}
+        {renderPagination(incidents.length, currentIncidentPage, incidentPageCount, setIncidentPage)}
         <a className="sentinel-event-export" href={exportUrl}>{labels.export}</a>
       </section>
     </main>
@@ -858,7 +935,11 @@ function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string
         </header>
       )}
       {(activeTarget === 'guardian-waf-events' || activeTarget === 'guardian-incidents') && (
-        <EventsModule status={status} language={language} exportUrl={exportUrl} />
+        <EventsModule status={status} language={language} exportUrl={exportUrl} activeTarget={activeTarget}
+          onNavigate={(target) => {
+            navigateTo(target);
+            setActiveTarget(target);
+          }} />
       )}
       {activeTarget === 'guardian-firewall' && <PleskFirewallModule firewall={status.firewall} language={language} />}
       {activeTarget === 'guardian-settings-overview' && (
