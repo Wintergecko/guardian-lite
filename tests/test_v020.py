@@ -175,6 +175,31 @@ class NewFeatureTests(unittest.TestCase):
         self.assertTrue(events[1]['blocked'])
         self.assertNotIn('secret', str(events))
 
+    def test_waf_audit_sections_include_source_ip_and_timestamp(self):
+        events = h.parse_waf_lines([
+            '--abc123-A--',
+            '[06/Nov/2026:12:34:56 +0100]',
+            'abc123 203.0.113.9 54321 192.0.2.10 443',
+            '--abc123-H--',
+            'Message: Access denied with code 403 [id "942100"] [severity "CRITICAL"]',
+            '--abc123-Z--',
+        ])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]['ip'], '203.0.113.9')
+        self.assertEqual(events[0]['ts'], '2026-11-06T12:34:56+01:00')
+        self.assertTrue(events[0]['blocked'])
+
+    def test_waf_apache_error_lines_include_source_ip_and_timestamp(self):
+        events = h.parse_waf_lines([
+            '[Fri Nov  6 12:34:56.123456 2026] [security2:error] [pid 123] '
+            '[client 198.51.100.8:54321] ModSecurity: Access denied [id "942100"] '
+            '[severity "CRITICAL"]',
+        ])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]['ip'], '198.51.100.8')
+        self.assertEqual(events[0]['ts'], '2026-11-06T12:34:56.123456')
+        self.assertTrue(events[0]['blocked'])
+
     def test_findings_ignore_outside_root_and_traversal(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / 'httpdocs'

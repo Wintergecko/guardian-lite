@@ -1160,29 +1160,54 @@ def parse_waf_lines(lines):
     """Return limited, sanitized WAF metadata; never expose request bodies/tokens."""
     events = []
     timestamp = None
+    audit_ip = None
+    in_audit_section_a = False
     for line in lines:
-        # Audit-log section A starts with "[dd/Mon/yyyy:HH:MM:SS +zzzz] <id> <ip> <port> ...".
-        stamp = re.match(r'\[(\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4})\]', line)
+        section = re.match(r'^--[A-Za-z0-9]+-([A-Z])--$', line)
+        if section:
+            in_audit_section_a = section.group(1) == 'A'
+            if in_audit_section_a:
+                timestamp = None
+                audit_ip = None
+            continue
+
+        stamp = re.match(r'^\[([^\]]+)\]', line)
         if stamp:
+            raw_stamp = stamp.group(1)
             try:
-                parsed = datetime.datetime.strptime(stamp.group(1), '%d/%b/%Y:%H:%M:%S %z')
+                try:
+                    parsed = datetime.datetime.strptime(raw_stamp, '%d/%b/%Y:%H:%M:%S %z')
+                except ValueError:
+                    parsed = datetime.datetime.strptime(raw_stamp, '%a %b %d %H:%M:%S.%f %Y')
                 timestamp = {'ts': parsed.isoformat(), 'epoch': int(parsed.timestamp())}
             except ValueError:
-                timestamp = None
+                if not in_audit_section_a:
+                    timestamp = None
+        if in_audit_section_a:
+            address = re.match(r'^\S+\s+([0-9a-fA-F:.]+)\s+\d+\s+', line)
+            if address:
+                try:
+                    audit_ip = str(ipaddress.ip_address(address.group(1)))
+                except ValueError:
+                    audit_ip = None
             continue
         if not (line.startswith('Message:') or 'ModSecurity:' in line):
             continue
         rule = re.search(r'\[id "(\d{1,12})"\]', line)
-        address = re.search(r'\[client ([0-9a-fA-F:.]+)\]', line)
+        address = re.search(
+            r'\[client (\[[0-9a-fA-F:]+\]|(?:\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F:]+)(?::\d+)?\]',
+            line)
         severity = re.search(r'\[severity "([A-Za-z]{1,20})"\]', line)
         if not rule and not address:
             continue
         ip = None
         if address:
             try:
-                ip = str(ipaddress.ip_address(address.group(1)))
+                ip = str(ipaddress.ip_address(address.group(1).strip('[]')))
             except ValueError:
                 pass
+        elif audit_ip:
+            ip = audit_ip
         event = {'rule': rule.group(1) if rule else 'unbekannt', 'ip': ip,
                  'blocked': 'Access denied' in line,
                  'severity': severity.group(1).upper() if severity else ''}

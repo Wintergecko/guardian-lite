@@ -1,3 +1,8 @@
+## 0.28.37 – WAF-Ereignisse mit IP und Zeit
+
+- Liest Quell-IP und Zeitstempel aus ModSecurity-Audit-Abschnitt A sowie Apache-Fehlerlogzeilen mit IPv4-Client und Port.
+- Ergaenzt Parser-Regressionstests fuer beide Logformate.
+
 ## 0.28.36 – Sidebar im Vordergrund
 
 - Hebt die Sentinel-Sidebar samt Untermenues vor den Inhaltsbereich, damit Navigation und seitliche Menue-Overlays nicht verdeckt werden.
