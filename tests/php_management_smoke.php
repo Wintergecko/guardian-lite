@@ -35,8 +35,11 @@ class pm_ApiCli {
 }
 class ManagementRequest {
     public $post = [];
+    public $query = [];
     public function isPost() { return true; }
+    public function isGet() { return true; }
     public function getPost($key, $fallback = '') { return $this->post[$key] ?? $fallback; }
+    public function getQuery($key, $fallback = '') { return $this->query[$key] ?? $fallback; }
 }
 class ManagementStatus {
     public function addMessage($type, $message) {}
@@ -44,10 +47,29 @@ class ManagementStatus {
 class pm_Controller_Action {
     public $request;
     public $view;
+    public $response;
+    public $_helper;
     protected $_status;
-    public function __construct() { $this->request = new ManagementRequest(); $this->view = new stdClass(); $this->_status = new ManagementStatus(); }
+    public function __construct() {
+        $this->request = new ManagementRequest();
+        $this->view = new stdClass();
+        $this->_status = new ManagementStatus();
+        $this->response = new class {
+            public $headers = [];
+            public $body = '';
+            public $statusCode = 200;
+            public function setHeader($name, $value, $replace = true) { $this->headers[$name] = $value; return $this; }
+            public function setBody($body) { $this->body = $body; return $this; }
+            public function setHttpResponseCode($status) { $this->statusCode = $status; return $this; }
+        };
+        $this->_helper = (object)[
+            'viewRenderer' => new class { public function setNoRender() {} },
+            'layout' => new class { public function disableLayout() {} },
+        ];
+    }
     public function init() {}
     public function getRequest() { return $this->request; }
+    public function getResponse() { return $this->response; }
     public function redirect($url) { throw new ManagementRedirect($url); }
 }
 require dirname(__DIR__) . '/plib/controllers/IndexController.php';
@@ -302,4 +324,41 @@ try { $controller->alertsRetryAction(); } catch (ManagementRedirect $e) {}
 $retryCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
 checkManagement($retryCall[0] === 'guardian-helper' && $retryCall[1] === ['alerts-retry'],
     'Alert retry did not reach the fixed helper action');
+$controller->request->query = ['jail' => 'ssh'];
+$controller->fail2banStatusAction();
+$fail2banCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+checkManagement($fail2banCall[0] === 'guardian-helper' &&
+    $fail2banCall[1] === ['fail2ban-details', 'ssh'],
+    'Fail2ban details did not use the fixed helper action');
+checkManagement(($controller->response->headers['Content-Type'] ?? '') === 'application/json; charset=UTF-8' &&
+    json_decode($controller->response->body, true)['ok'] === true,
+    'Fail2ban details response is not uncached JSON');
+$beforeInvalidJail = count(pm_ApiCli::$calls);
+$controller->request->query = ['jail' => '../ssh'];
+try { $controller->fail2banStatusAction(); throw new RuntimeException('Invalid Fail2ban jail was accepted'); }
+catch (pm_Exception $e) {}
+checkManagement(count(pm_ApiCli::$calls) === $beforeInvalidJail,
+    'Invalid Fail2ban jail reached the privileged helper');
+$controller->request->post = ['csrf' => 'test-token', 'jail' => 'ssh', 'maxretry' => '5',
+    'findtime' => '600', 'bantime' => '300', 'sha256' => str_repeat('a', 64)];
+$controller->fail2banSetAction();
+$setCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+checkManagement($setCall[1] === ['fail2ban-set', 'ssh', '5', '600', '300', str_repeat('a', 64)],
+    'Fail2ban apply did not use validated fixed helper arguments');
+checkManagement(json_decode($controller->response->body, true)['ok'] === true,
+    'Fail2ban apply response is not JSON');
+$beforeBadCsrf = count(pm_ApiCli::$calls);
+$controller->request->post = ['csrf' => 'wrong-token', 'jail' => 'ssh', 'maxretry' => '5',
+    'findtime' => '600', 'bantime' => '300', 'sha256' => str_repeat('a', 64)];
+$controller->fail2banSetAction();
+checkManagement(count(pm_ApiCli::$calls) === $beforeBadCsrf &&
+    $controller->response->statusCode === 400 &&
+    json_decode($controller->response->body, true)['ok'] === false,
+    'Fail2ban apply without valid CSRF was not rejected as JSON');
+$controller->request->post = ['csrf' => 'test-token', 'jail' => 'ssh',
+    'backup_id' => str_repeat('b', 32), 'sha256' => str_repeat('a', 64)];
+$controller->fail2banRestoreAction();
+$restoreCall = pm_ApiCli::$calls[count(pm_ApiCli::$calls) - 1];
+checkManagement($restoreCall[1] === ['fail2ban-restore', 'ssh', str_repeat('b', 32), str_repeat('a', 64)],
+    'Fail2ban restore did not use validated fixed helper arguments');
 echo "Management controller and template smoke: OK\n";

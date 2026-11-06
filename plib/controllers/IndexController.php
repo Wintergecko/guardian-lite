@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.28.32';
+    private const GUARDIAN_VERSION = '0.28.33';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -14,7 +14,7 @@ class IndexController extends pm_Controller_Action
         if (!pm_Session::getClient()->isAdmin() || pm_Session::isImpersonated()) {
             throw new pm_Exception('Nur direkte Plesk-Administrator-Sitzungen sind erlaubt.');
         }
-        $this->view->pageTitle = 'Guardian Lite | Sicherheitszentrale';
+        $this->view->pageTitle = 'Sentinel Security | Sicherheitszentrale';
     }
 
     private function csrfToken()
@@ -123,7 +123,7 @@ class IndexController extends pm_Controller_Action
             throw new pm_Exception('Unbekannte Verwaltungsaktion.');
         }
         $request = ['action' => $operation];
-        foreach (['domain', 'version', 'mode', 'sha256', 'backup', 'baseline_id', 'jobid', 'ip',
+        foreach (['domain', 'version', 'mode', 'sha256', 'backup', 'baseline_id', 'jobid', 'ip', 'scope',
                   'abuseipdb_key', 'turnstile_sitekey', 'turnstile_secret'] as $key) {
             $value = $post->getPost($key, '');
             if (!is_string($value) || strlen($value) > 254) {
@@ -131,6 +131,11 @@ class IndexController extends pm_Controller_Action
             }
             if ($value !== '') { $request[$key] = trim($value); }
         }
+        $paths = $post->getPost('paths', '');
+        if (!is_string($paths) || strlen($paths) > 4000) {
+            throw new pm_Exception('Pfadliste ist zu lang (maximal 4000 Zeichen).');
+        }
+        if ($paths !== '') { $request['paths'] = $paths; }
         if (isset($request['domain']) && !$this->isDomainKnown($request['domain'])) {
             throw new pm_Exception('Unbekannte gehostete Domain.');
         }
@@ -556,6 +561,92 @@ class IndexController extends pm_Controller_Action
         $response->setHeader('Content-Disposition', 'attachment; filename="guardian-incidents.json"', true);
         $response->setHeader('Cache-Control', 'no-store', true);
         $response->setBody($body);
+    }
+
+    public function fail2banStatusAction()
+    {
+        if (!$this->getRequest()->isGet()) {
+            throw new pm_Exception('GET erforderlich.');
+        }
+        $jail = (string)$this->getRequest()->getQuery('jail', '');
+        if (!preg_match('/^[A-Za-z0-9_.-]{1,80}$/D', $jail)) {
+            throw new pm_Exception('Ungueltiger Fail2Ban-Jail.');
+        }
+        $data = $this->helper(['fail2ban-details', $jail]);
+        $body = json_encode($data, JSON_INVALID_UTF8_SUBSTITUTE);
+        if (!is_string($body) || strlen($body) > 40000) {
+            throw new RuntimeException('Fail2Ban-Antwort ungueltig oder zu gross.');
+        }
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+        $this->getResponse()->setHeader('Content-Type', 'application/json; charset=UTF-8', true)
+            ->setHeader('Cache-Control', 'no-store', true)
+            ->setBody($body);
+    }
+
+    private function sendFail2banJson(array $data, $status = 200)
+    {
+        $body = json_encode($data, JSON_INVALID_UTF8_SUBSTITUTE);
+        if (!is_string($body) || strlen($body) > 40000) {
+            throw new RuntimeException('Fail2Ban-Antwort ungueltig oder zu gross.');
+        }
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+        $response = $this->getResponse();
+        if ($status !== 200) {
+            $response->setHttpResponseCode($status);
+        }
+        $response->setHeader('Content-Type', 'application/json; charset=UTF-8', true)
+            ->setHeader('Cache-Control', 'no-store', true)
+            ->setHeader('X-Content-Type-Options', 'nosniff', true)
+            ->setBody($body);
+    }
+
+    public function fail2banSetAction()
+    {
+        try {
+            $this->verifyPost();
+            $request = $this->getRequest();
+            $jail = (string)$request->getPost('jail', '');
+            $sha256 = (string)$request->getPost('sha256', '');
+            $values = [];
+            foreach (['maxretry', 'findtime', 'bantime'] as $key) {
+                $value = $request->getPost($key, '');
+                if (!is_string($value) || !preg_match('/^-?\d{1,8}$/D', $value)) {
+                    throw new pm_Exception('Ungueltige Fail2Ban-Einstellung.');
+                }
+                $values[$key] = $value;
+            }
+            if (!preg_match('/^[A-Za-z0-9_.-]{1,80}$/D', $jail) ||
+                !preg_match('/^[a-f0-9]{64}$/D', $sha256)) {
+                throw new pm_Exception('Fail2Ban-Konfiguration ist ungueltig oder veraltet.');
+            }
+            $data = $this->helper(['fail2ban-set', $jail, $values['maxretry'],
+                $values['findtime'], $values['bantime'], $sha256]);
+            $this->sendFail2banJson($data);
+        } catch (Exception $e) {
+            $this->sendFail2banJson(['ok' => false, 'error' => substr($e->getMessage(), 0, 350)], 400);
+        }
+    }
+
+    public function fail2banRestoreAction()
+    {
+        try {
+            $this->verifyPost();
+            $request = $this->getRequest();
+            $jail = (string)$request->getPost('jail', '');
+            $backup = (string)$request->getPost('backup_id', '');
+            $sha256 = (string)$request->getPost('sha256', '');
+            if (!preg_match('/^[A-Za-z0-9_.-]{1,80}$/D', $jail) ||
+                !preg_match('/^[a-f0-9]{32}$/D', $backup) ||
+                !preg_match('/^[a-f0-9]{64}$/D', $sha256)) {
+                throw new pm_Exception('Fail2Ban-Rollback ist ungueltig oder veraltet.');
+            }
+            $data = $this->helper(['fail2ban-restore', $jail, $backup, $sha256]);
+            $this->sendFail2banJson($data);
+        } catch (Exception $e) {
+            $this->sendFail2banJson(['ok' => false, 'error' => substr($e->getMessage(), 0, 350)], 400);
+        }
     }
 
     public function ipAction()

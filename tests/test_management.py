@@ -887,6 +887,26 @@ class ManagementTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 m.waf_rules(domain, mode, limit)
 
+    def test_waf_path_scope_rules(self):
+        only = m.waf_rules('example.com', 'enforce', 120, 'only', '/wp-login.php\n/api/')
+        self.assertIn('SecRule REQUEST_URI "@rx ^(?:/wp-login[.]php(?:[/?#]|$)|/api/)"', only)
+        self.assertIn('id:9974104', only)
+        self.assertIn('SecRule TX:guardian_in_scope "@eq 1"', only)
+        self.assertEqual(only.count('SecRule TX:guardian_in_scope "@eq 1"'), 2)
+        except_rules = m.waf_rules('example.com', 'detect', 120, 'except', '/xmlrpc.php')
+        self.assertIn('SecRule REQUEST_URI "!@rx ^(?:/xmlrpc[.]php(?:[/?#]|$))"', except_rules)
+        self.assertIn('id:9974100', except_rules)
+        all_rules = m.waf_rules('example.com', 'detect', 120, 'all', '/ignored')
+        self.assertNotIn('REQUEST_URI', all_rules)
+        self.assertEqual(m.waf_paths('/a.php, /b/\n/a.php'), ['/a.php', '/b/'])
+        for bad in ['../x', '/a b', 'relative', '/a?x=1']:
+            with self.assertRaises(ValueError):
+                m.waf_rules('example.com', 'detect', 120, 'only', bad)
+        with self.assertRaises(ValueError):
+            m.waf_rules('example.com', 'detect', 120, 'only', '')
+        with self.assertRaises(ValueError):
+            m.waf_rules('example.com', 'detect', 120, 'bogus', '/x')
+
     def test_php_backup_and_rollback_check_current_hash(self):
         php = self.base / 'php/8.3'
         (php / 'etc').mkdir(parents=True)

@@ -284,13 +284,16 @@ $domainSelect = function () use ($esc) {
       <strong class="guardian-debug-state <?= ($wafState['mode'] ?? '') === 'enforce' ? 'is-on' : 'is-neutral' ?>"><?= ($wafState['mode'] ?? '') === 'enforce' ? '429-Sperre aktiv' : (($wafState['mode'] ?? '') === 'detect' ? 'protokolliert' : (($wafState['mode'] ?? '') === 'off' ? 'Regeln deaktiviert' : 'Regel konfiguriert')) ?></strong>
       <span><?= $esc($wafState['domain']) ?></span>
       <?php if (isset($wafState['limit'])): ?><span><?= (int)$wafState['limit'] ?> Anfragen / IP / 60 s</span><?php endif; ?>
+      <span><?= ($wafState['scope'] ?? 'all') === 'all' ? 'alle Pfade' : (($wafState['scope'] ?? '') === 'only' ? 'nur ' : 'ausser ') . $esc(implode(', ', (array)($wafState['paths'] ?? []))) ?></span>
     <?php else: ?><strong class="guardian-debug-state is-neutral">Keine Guardian-Regel konfiguriert</strong><?php endif; ?>
   </div>
   <form class="guardian-waf-form" method="post" action="<?= $esc(pm_Context::getActionUrl('index', 'manage')) ?>">
     <input type="hidden" name="csrf" value="<?= $esc($this->csrf) ?>"><input type="hidden" name="sha256" value="<?= $esc($management['waf_sha256'] ?? '') ?>">
     <div class="guardian-waf-fields"><label>Zieldomain <?php $domainSelect(); ?></label>
     <label>Schutzmodus <select name="mode"><option value="detect">Nur protokollieren</option><option value="enforce">429-Sperre aktiv</option><option value="off">Deaktiviert</option></select></label>
-    <label>Anfragen je IP / 60 Sekunden <input name="limit" type="number" min="10" max="10000" value="120" required></label></div>
+    <label>Anfragen je IP / 60 Sekunden <input name="limit" type="number" min="10" max="10000" value="120" required></label>
+    <label>Pfadbereich <select name="scope"><option value="all">Alle Pfade</option><option value="only">Nur diese Pfade</option><option value="except">Diese Pfade ausnehmen</option></select></label>
+    <label class="guardian-waf-paths">Pfade (ein Pfad je Zeile, z. B. /wp-login.php oder /api/) <textarea name="paths" rows="3" maxlength="4000" placeholder="/wp-login.php&#10;/xmlrpc.php"></textarea></label></div>
     <div class="guardian-button-row"><button class="guardian-button guardian-button-secondary" name="operation" value="waf-preview">Regeln vorschauen</button>
     <button class="guardian-button" name="operation" value="waf-set" onclick="return confirm('Guardian-Regeln installieren und Apache nach Syntaxpruefung neu laden?');">Regeln anwenden</button></div>
   </form>

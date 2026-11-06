@@ -1,4 +1,12 @@
-# Guardian Lite v0.28.32 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.33 – Sicherheitsmodell und Grenzen
+
+## 0.28.33 – Fail2Ban-Jail-Konfiguration
+
+- Verwaltungsaktionen sind nur fuer direkt angemeldete Plesk-Administratoren zugaenglich und muessen ein gueltiges Session-CSRF-Token enthalten.
+- Der privilegierte Helper akzeptiert nur feste Aktionen, aktive Jail-Namen und begrenzte numerische Werte. Er startet keine Shell und ueberschreibt keine vorhandenen Plesk-Konfigurationsdateien.
+- Aenderungen gehen in eine Guardian-eigene Override-Datei. Der Helper prueft Datei-/Verzeichnisrechte und den vom Browser uebermittelten SHA-256-Stand unter einer root-eigenen Sperre.
+- Vor Apply und Restore wird ein root-geschuetztes Backup geschrieben. Nach atomarem Schreiben folgen `fail2ban-client -t`, gezieltes Jail-Reload und unabhaengige Laufzeitabfrage. Bei Fehlern wird die vorherige Override-Konfiguration zurueckgeschrieben und erneut geprueft.
+- Ein fehlgeschlagenes automatisches Rollback wird als expliziter Fehler gemeldet. Die Aenderungen wurden nicht auf einem Produktivsystem angewendet; Betreiber muessen die Fail2Ban- und Zugriffserreichbarkeit nach Installation selbst pruefen.
 
 ## 0.28.16 – Lokale IP-Länderkarte
 

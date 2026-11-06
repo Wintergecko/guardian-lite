@@ -42,6 +42,13 @@ FIREWALL_ALLOWLIST = ROOT / 'firewall-allowlist.json'
 FIREWALL_DEBUG_CONFIG = ROOT / 'firewall-debug.json'
 FIREWALL_DEBUG_LOG = ROOT / 'firewall-debug.jsonl'
 FIREWALL_DEBUG_LOCK = ROOT / 'firewall-debug.lock'
+FAIL2BAN_CONFIG_DIR = pathlib.Path('/etc/fail2ban/jail.d')
+FAIL2BAN_OVERRIDE = FAIL2BAN_CONFIG_DIR / 'zzzz-guardian-lite.local'
+FAIL2BAN_BACKUPS = ROOT / 'backups' / 'fail2ban'
+FAIL2BAN_LOCK = ROOT / 'fail2ban.lock'
+FAIL2BAN_OVERRIDE_HEADER = '# Guardian Lite managed Fail2ban overrides'
+FAIL2BAN_MAX_CONFIG_BYTES = 65536
+FAIL2BAN_MAX_BACKUPS = 50
 MAX_FIREWALL_DEBUG_BYTES = 256 * 1024
 MAX_FIREWALL_DEBUG_EVENTS = 100
 FIREWALL_RULE_PREFIX = 'Guardian Lite managed deny '
@@ -237,6 +244,385 @@ def fail2ban_status():
                                 'banned_ips_truncated': len(addresses) > len(visible_addresses)})
         result['banned_total'] += count
     return result
+
+
+def fail2ban_query(cli, jail, setting):
+    result = execute([cli, 'get', jail, setting], timeout=3)
+    if result is None or result.returncode:
+        return ''
+    return result.stdout[:32768]
+
+
+def fail2ban_runtime_settings(cli, jail):
+    values = {}
+    for key in ('maxretry', 'findtime', 'bantime'):
+        match = re.fullmatch(r'\s*(-?\d+)\s*', fail2ban_query(cli, jail, key))
+        values[key] = int(match.group(1)) if match else None
+    return values
+
+
+def fail2ban_validate_settings(maxretry, findtime, bantime):
+    if (type(maxretry) is not int or not 1 <= maxretry <= 100 or
+            type(findtime) is not int or not 1 <= findtime <= 604800 or
+            type(bantime) is not int or not -1 <= bantime <= 31536000):
+        raise ValueError('Fail2Ban-Werte ausserhalb des erlaubten Bereichs.')
+    return {'maxretry': maxretry, 'findtime': findtime, 'bantime': bantime}
+
+
+def fail2ban_active_jail(jail):
+    if not JAIL_NAME.fullmatch(jail):
+        raise ValueError('Ungueltiges Fail2Ban-Jail.')
+    status = fail2ban_status()
+    if not status['running'] or jail not in [item['name'] for item in status['jails']]:
+        raise ValueError('Jail nicht aktiv oder ausserhalb der Anzeigegrenze.')
+
+
+def fail2ban_config_directory():
+    try:
+        info = FAIL2BAN_CONFIG_DIR.lstat()
+    except OSError:
+        raise ValueError('Fail2Ban-Konfigurationsverzeichnis nicht lesbar.')
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise ValueError('Fail2Ban-Konfigurationsverzeichnis hat unsichere Eigenschaften.')
+
+
+def fail2ban_read_override():
+    fail2ban_config_directory()
+    try:
+        info = FAIL2BAN_OVERRIDE.lstat()
+    except FileNotFoundError:
+        return b'', False
+    except OSError:
+        raise ValueError('Guardian-Fail2Ban-Konfiguration nicht lesbar.')
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or
+            info.st_size == 0 or
+            info.st_mode & 0o022 or info.st_size > FAIL2BAN_MAX_CONFIG_BYTES):
+        raise ValueError('Guardian-Fail2Ban-Konfiguration hat unsichere Eigenschaften.')
+    try:
+        fd = os.open(str(FAIL2BAN_OVERRIDE), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+        with os.fdopen(fd, 'rb') as source:
+            current = os.fstat(source.fileno())
+            if (not stat.S_ISREG(current.st_mode) or current.st_uid != 0 or current.st_nlink != 1 or
+                    current.st_size > FAIL2BAN_MAX_CONFIG_BYTES):
+                raise ValueError('Guardian-Fail2Ban-Konfiguration hat unsichere Eigenschaften.')
+            raw = source.read(FAIL2BAN_MAX_CONFIG_BYTES + 1)
+            if not raw or len(raw) > FAIL2BAN_MAX_CONFIG_BYTES:
+                raise ValueError('Guardian-Fail2Ban-Konfiguration ist leer oder zu gross.')
+            return raw, True
+    except OSError:
+        raise ValueError('Guardian-Fail2Ban-Konfiguration nicht sicher lesbar.')
+
+
+def fail2ban_parse_override(raw):
+    if not raw:
+        return {}
+    try:
+        lines = raw.decode('utf-8').splitlines()
+    except UnicodeError:
+        raise ValueError('Guardian-Fail2Ban-Konfiguration ist nicht UTF-8.')
+    if not lines or lines[0] != FAIL2BAN_OVERRIDE_HEADER:
+        raise ValueError('Fremde Fail2Ban-Konfiguration wird nicht ueberschrieben.')
+    sections = {}
+    current = None
+    for line in lines[1:]:
+        if not line:
+            continue
+        section = re.fullmatch(r'\[([A-Za-z0-9_.-]{1,80})\]', line)
+        if section:
+            current = section.group(1)
+            if current in sections:
+                raise ValueError('Doppelte Jail-Sektion in Guardian-Konfiguration.')
+            sections[current] = {}
+            continue
+        item = re.fullmatch(r'(maxretry|findtime|bantime) = (-?\d+)', line)
+        if not current or not item or item.group(1) in sections[current]:
+            raise ValueError('Guardian-Fail2Ban-Konfiguration enthaelt unerwartete Inhalte.')
+        sections[current][item.group(1)] = int(item.group(2))
+    for jail, values in sections.items():
+        if set(values) != {'maxretry', 'findtime', 'bantime'}:
+            raise ValueError('Guardian-Fail2Ban-Konfiguration ist unvollstaendig.')
+        fail2ban_validate_settings(values['maxretry'], values['findtime'], values['bantime'])
+    return sections
+
+
+def fail2ban_serialize_override(sections):
+    lines = [FAIL2BAN_OVERRIDE_HEADER]
+    for jail in sorted(sections):
+        if not JAIL_NAME.fullmatch(jail):
+            raise ValueError('Ungueltiger Jail-Name in Guardian-Konfiguration.')
+        values = fail2ban_validate_settings(sections[jail]['maxretry'],
+                                            sections[jail]['findtime'],
+                                            sections[jail]['bantime'])
+        lines.extend(('', '[' + jail + ']',
+                      'maxretry = ' + str(values['maxretry']),
+                      'findtime = ' + str(values['findtime']),
+                      'bantime = ' + str(values['bantime'])))
+    data = ('\n'.join(lines) + '\n').encode('utf-8')
+    if len(data) > FAIL2BAN_MAX_CONFIG_BYTES:
+        raise ValueError('Guardian-Fail2Ban-Konfiguration ist zu gross.')
+    return data
+
+
+def fail2ban_write_override(data):
+    fail2ban_config_directory()
+    temp = FAIL2BAN_CONFIG_DIR / ('.guardian-lite-' + uuid.uuid4().hex)
+    fd = os.open(str(temp), os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                 getattr(os, 'O_NOFOLLOW', 0), 0o640)
+    try:
+        with os.fdopen(fd, 'wb') as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(str(temp), str(FAIL2BAN_OVERRIDE))
+        directory_fd = os.open(str(FAIL2BAN_CONFIG_DIR), os.O_RDONLY | os.O_DIRECTORY |
+                               getattr(os, 'O_NOFOLLOW', 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def fail2ban_restore_override(data, existed):
+    if existed:
+        fail2ban_write_override(data)
+        return
+    fail2ban_config_directory()
+    try:
+        current = FAIL2BAN_OVERRIDE.lstat()
+    except FileNotFoundError:
+        return
+    if (not stat.S_ISREG(current.st_mode) or current.st_uid != 0 or current.st_nlink != 1 or
+            current.st_mode & 0o022):
+        raise ValueError('Guardian-Fail2Ban-Datei kann nicht sicher entfernt werden.')
+    FAIL2BAN_OVERRIDE.unlink()
+    directory_fd = os.open(str(FAIL2BAN_CONFIG_DIR), os.O_RDONLY | os.O_DIRECTORY |
+                           getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def fail2ban_prepare_backup_dir():
+    prepare_dir()
+    ensure_private_dir(ROOT / 'backups')
+    ensure_private_dir(FAIL2BAN_BACKUPS)
+
+
+def fail2ban_store_backup(jail, raw, existed, settings):
+    fail2ban_prepare_backup_dir()
+    backup_id = uuid.uuid4().hex
+    item = {'id': backup_id, 'created_at': utc_now(), 'jail': jail,
+            'before_exists': existed, 'before_content': raw.decode('utf-8'),
+            'before_settings': settings}
+    write_json(FAIL2BAN_BACKUPS / (backup_id + '.json'), item, 160000)
+    backups = []
+    for path in FAIL2BAN_BACKUPS.glob('????????????????????????????????.json'):
+        try:
+            info = path.lstat()
+            if stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_nlink == 1 and not info.st_mode & 0o077:
+                backups.append((info.st_mtime, path))
+        except OSError:
+            continue
+    backups.sort(reverse=True)
+    for _, old in backups[FAIL2BAN_MAX_BACKUPS:]:
+        old.unlink()
+    return backup_id
+
+
+def fail2ban_backup_list(jail):
+    try:
+        info = FAIL2BAN_BACKUPS.lstat()
+    except FileNotFoundError:
+        return []
+    except OSError:
+        raise ValueError('Fail2Ban-Backups nicht lesbar.')
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
+        raise ValueError('Fail2Ban-Backups haben unsichere Verzeichnisrechte.')
+    backups = []
+    for path in FAIL2BAN_BACKUPS.glob('????????????????????????????????.json'):
+        try:
+            item = read_json(path, None, 160000)
+            if (isinstance(item, dict) and item.get('id') == path.stem and
+                    item.get('jail') == jail and isinstance(item.get('created_at'), str)):
+                backups.append({'id': item['id'], 'created_at': item['created_at']})
+        except OSError:
+            continue
+    backups.sort(key=lambda item: item['created_at'], reverse=True)
+    return backups[:5]
+
+
+def fail2ban_apply_and_verify(cli, jail, expected):
+    check = execute([cli, '-t'], timeout=10)
+    if check is None or check.returncode:
+        raise ValueError('Fail2Ban-Konfigurationstest fehlgeschlagen.')
+    reload = execute([cli, 'reload', jail], timeout=10)
+    if reload is None or reload.returncode:
+        raise ValueError('Fail2Ban-Jail konnte nicht neu geladen werden.')
+    actual = fail2ban_runtime_settings(cli, jail)
+    if actual != expected:
+        raise ValueError('Fail2Ban-Laufzeitwerte stimmen nach Reload nicht mit der Vorschau ueberein.')
+    return actual
+
+
+def fail2ban_open_lock():
+    fd = os.open(str(FAIL2BAN_LOCK), os.O_CREAT | os.O_RDWR |
+                 getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    info = os.fstat(fd)
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or
+            info.st_mode & 0o077):
+        os.close(fd)
+        raise ValueError('Fail2Ban-Sperrdatei hat unsichere Eigenschaften.')
+    return fd
+
+
+def fail2ban_jail_details(jail):
+    if os.geteuid() != 0:
+        raise ValueError('Root-Verwaltung erforderlich.')
+    cli = binary(FAIL2BAN_PATHS)
+    if not cli:
+        raise ValueError('Fail2Ban fehlt.')
+    fail2ban_active_jail(jail)
+    settings = fail2ban_runtime_settings(cli, jail)
+    regex_output = fail2ban_query(cli, jail, 'failregex')
+    regex_count = len(re.findall(r'^\|-\s+\[\d+\]:', regex_output, re.M))
+    actions_output = fail2ban_query(cli, jail, 'actions')
+    action_match = re.search(r'following actions:\s*([\s\S]*)', actions_output, re.I)
+    actions = []
+    if action_match:
+        for line in action_match.group(1).splitlines():
+            action = line.strip()
+            if re.fullmatch(r'[A-Za-z0-9_.-]{1,80}', action) and action not in actions:
+                actions.append(action)
+    raw, exists = fail2ban_read_override()
+    overrides = fail2ban_parse_override(raw)
+    return {'ok': True, 'jail': jail, 'settings': {
+        **settings,
+        'filter_regex_count': regex_count if regex_output else None,
+        'actions': actions,
+    }, 'managed': jail in overrides,
+        'override_sha256': hashlib.sha256(raw).hexdigest(),
+        'backups': fail2ban_backup_list(jail)}
+
+
+def fail2ban_update_jail(jail, settings, expected_sha256):
+    if os.geteuid() != 0:
+        raise ValueError('Root-Verwaltung erforderlich.')
+    if not re.fullmatch(r'[a-f0-9]{64}', expected_sha256):
+        raise ValueError('Fail2Ban-Konfiguration muss neu geladen werden.')
+    settings = fail2ban_validate_settings(settings['maxretry'], settings['findtime'], settings['bantime'])
+    cli = binary(FAIL2BAN_PATHS)
+    if not cli:
+        raise ValueError('Fail2Ban fehlt.')
+    fail2ban_active_jail(jail)
+    fail2ban_prepare_backup_dir()
+    lockfd = fail2ban_open_lock()
+    try:
+        fcntl.flock(lockfd, fcntl.LOCK_EX)
+        current, existed = fail2ban_read_override()
+        if hashlib.sha256(current).hexdigest() != expected_sha256:
+            raise ValueError('Fail2Ban-Konfiguration wurde geaendert; bitte neu laden.')
+        previous_settings = fail2ban_runtime_settings(cli, jail)
+        if any(value is None for value in previous_settings.values()):
+            raise ValueError('Effektive Fail2Ban-Werte konnten nicht vollstaendig gelesen werden.')
+        sections = fail2ban_parse_override(current)
+        sections[jail] = settings
+        updated = fail2ban_serialize_override(sections)
+        backup_id = fail2ban_store_backup(jail, current, existed, previous_settings)
+        incident_log('operator', 'warning', '', 'Fail2Ban-Aenderung vorbereitet fuer Jail ' + jail)
+        try:
+            fail2ban_write_override(updated)
+            fail2ban_apply_and_verify(cli, jail, settings)
+        except (ValueError, OSError, subprocess.SubprocessError) as exc:
+            try:
+                fail2ban_restore_override(current, existed)
+                fail2ban_apply_and_verify(cli, jail, previous_settings)
+            except (ValueError, OSError, subprocess.SubprocessError) as rollback_error:
+                raise RuntimeError('Fail2Ban-Aenderung fehlgeschlagen; automatisches Rollback ebenfalls fehlgeschlagen: ' +
+                                   str(rollback_error)[:180])
+            raise ValueError('Fail2Ban-Aenderung fehlgeschlagen und wurde zurueckgerollt: ' + str(exc)[:180])
+        return {'ok': True, 'jail': jail, 'settings': settings, 'backup_id': backup_id,
+                'override_sha256': hashlib.sha256(updated).hexdigest(),
+                'message': 'Konfiguration getestet, Jail neu geladen und Laufzeitwerte unabhaengig verifiziert.'}
+    finally:
+        os.close(lockfd)
+
+
+def fail2ban_restore_jail(jail, backup_id, expected_sha256):
+    if os.geteuid() != 0 or not JAIL_NAME.fullmatch(jail) or not re.fullmatch(r'[a-f0-9]{32}', backup_id):
+        raise ValueError('Ungueltiger Fail2Ban-Rollback.')
+    if not re.fullmatch(r'[a-f0-9]{64}', expected_sha256):
+        raise ValueError('Fail2Ban-Konfiguration muss neu geladen werden.')
+    cli = binary(FAIL2BAN_PATHS)
+    if not cli:
+        raise ValueError('Fail2Ban fehlt.')
+    fail2ban_active_jail(jail)
+    fail2ban_prepare_backup_dir()
+    lockfd = fail2ban_open_lock()
+    try:
+        fcntl.flock(lockfd, fcntl.LOCK_EX)
+        current, existed = fail2ban_read_override()
+        if hashlib.sha256(current).hexdigest() != expected_sha256:
+            raise ValueError('Fail2Ban-Konfiguration wurde geaendert; bitte neu laden.')
+        backup_path = FAIL2BAN_BACKUPS / (backup_id + '.json')
+        try:
+            backup_info = backup_path.lstat()
+        except OSError:
+            raise ValueError('Fail2Ban-Backup ist nicht verfuegbar.')
+        if (not stat.S_ISREG(backup_info.st_mode) or backup_info.st_uid != 0 or
+                backup_info.st_nlink != 1 or backup_info.st_mode & 0o077):
+            raise ValueError('Fail2Ban-Backup hat unsichere Dateirechte.')
+        backup = read_json(backup_path, None, 160000)
+        if (not isinstance(backup, dict) or backup.get('id') != backup_id or backup.get('jail') != jail or
+                not isinstance(backup.get('before_exists'), bool) or
+                not isinstance(backup.get('before_content'), str) or
+                not isinstance(backup.get('before_settings'), dict)):
+            raise ValueError('Fail2Ban-Backup ist ungueltig oder gehoert zu einem anderen Jail.')
+        before_settings = fail2ban_validate_settings(
+            backup['before_settings'].get('maxretry'),
+            backup['before_settings'].get('findtime'),
+            backup['before_settings'].get('bantime'))
+        before = backup['before_content'].encode('utf-8')
+        if len(before) > FAIL2BAN_MAX_CONFIG_BYTES:
+            raise ValueError('Fail2Ban-Backup ist zu gross.')
+        before_sections = fail2ban_parse_override(before)
+        if (backup['before_exists'] and not before) or (not backup['before_exists'] and before):
+            raise ValueError('Fail2Ban-Backup enthaelt unerwartete Konfigurationsdaten.')
+        restore_sections = fail2ban_parse_override(current)
+        if jail in before_sections:
+            restore_sections[jail] = before_sections[jail]
+        else:
+            restore_sections.pop(jail, None)
+        restore_exists = bool(restore_sections) or backup['before_exists']
+        restore_content = (fail2ban_serialize_override(restore_sections)
+                           if restore_sections or restore_exists else b'')
+        current_settings = fail2ban_runtime_settings(cli, jail)
+        if any(value is None for value in current_settings.values()):
+            raise ValueError('Effektive Fail2Ban-Werte konnten nicht vollstaendig gelesen werden.')
+        undo_id = fail2ban_store_backup(jail, current, existed, current_settings)
+        incident_log('operator', 'warning', '', 'Fail2Ban-Rollback vorbereitet fuer Jail ' + jail)
+        try:
+            fail2ban_restore_override(restore_content, restore_exists)
+            fail2ban_apply_and_verify(cli, jail, before_settings)
+        except (ValueError, OSError, subprocess.SubprocessError) as exc:
+            try:
+                fail2ban_restore_override(current, existed)
+                fail2ban_apply_and_verify(cli, jail, current_settings)
+            except (ValueError, OSError, subprocess.SubprocessError) as rollback_error:
+                raise RuntimeError('Fail2Ban-Rollback fehlgeschlagen; Wiederherstellung des vorherigen Zustands ebenfalls fehlgeschlagen: ' +
+                                   str(rollback_error)[:180])
+            raise ValueError('Fail2Ban-Rollback fehlgeschlagen und wurde zurueckgesetzt: ' + str(exc)[:180])
+        restored, _ = fail2ban_read_override()
+        return {'ok': True, 'jail': jail, 'settings': before_settings, 'backup_id': undo_id,
+                'restored_from': backup_id, 'override_sha256': hashlib.sha256(restored).hexdigest(),
+                'message': 'Backup wiederhergestellt, Konfiguration getestet und Laufzeitwerte unabhaengig verifiziert.'}
+    finally:
+        os.close(lockfd)
 
 
 def crowdsec_status():
@@ -2858,6 +3244,15 @@ def _main(argv):
             return respond(operation(argv[1], int(argv[2])))
         if len(argv) == 4 and argv[0] == 'ip-action':
             return respond(manual_ban(argv[1], argv[2], argv[3]))
+        if len(argv) == 2 and argv[0] == 'fail2ban-details':
+            return respond(fail2ban_jail_details(argv[1]))
+        if len(argv) == 6 and argv[0] == 'fail2ban-set':
+            if not all(re.fullmatch(r'-?\d{1,8}', value) for value in argv[2:5]):
+                raise ValueError('Ungueltige Fail2Ban-Einstellungen.')
+            settings = {'maxretry': int(argv[2]), 'findtime': int(argv[3]), 'bantime': int(argv[4])}
+            return respond(fail2ban_update_jail(argv[1], settings, argv[5]))
+        if len(argv) == 4 and argv[0] == 'fail2ban-restore':
+            return respond(fail2ban_restore_jail(argv[1], argv[2], argv[3]))
         if len(argv) in (2, 3, 4, 5, 6) and argv[0] == 'firewall-action':
             operation = argv[1]
             target = argv[2] if len(argv) >= 4 else ''
@@ -2882,7 +3277,7 @@ def _main(argv):
         if len(argv) == 4 and argv[0] == 'worker':
             return scan_worker(argv[1], argv[2], int(argv[3]))
         return error('Ungueltige Aktion.')
-    except (ValueError, OSError, subprocess.SubprocessError, TypeError) as exc:
+    except (ValueError, OSError, subprocess.SubprocessError, TypeError, RuntimeError) as exc:
         return error(str(exc))
 
 
@@ -2899,7 +3294,9 @@ def debug_action_stage(argv):
                'alerts-test', 'alerts-retry', 'quarantine', 'restore', 'firewall-ban',
                'firewall-unban', 'firewall-port-allow', 'firewall-port-deny',
                'firewall-port-remove', 'firewall-allowlist-add', 'firewall-allowlist-remove',
-               'fail2ban-ban', 'fail2ban-unban', 'firewall-debug-set', 'worker', 'watch-worker'}
+               'fail2ban-ban', 'fail2ban-unban', 'fail2ban-details', 'fail2ban-set',
+               'fail2ban-restore',
+               'firewall-debug-set', 'worker', 'watch-worker'}
     return action if action in allowed else 'helper'
 
 

@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.32 – Plesk Security (Linux)
+# Guardian Lite 0.28.33 – Plesk Security (Linux)
 
 Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf Linux, Python >=3.8. Beta: aktive Schutzfunktionen zuerst auf einem separaten Testserver pruefen. Keine offizielle Plesk-Software.
 
@@ -13,7 +13,8 @@ Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf L
 | Dateiwache | Opt-in-inotify und gezielte ClamAV-Einzeldateipruefung | Maximal 5 Domains / 450 Verzeichnisse je Domain; keine Ausfuehrungsblockade |
 | Metadatenvergleich | Periodische Stichprobe fuer Domains mit Scanplanung | Bis 1500 Dateien; keine vollstaendige Integritaetspruefung |
 | Incidents / E-Mail | Privates Ereignisprotokoll mit 24h/7d/30d-Zeitreihe und Filtern fuer bis zu 200 aktuelle Eintraege, JSON-Export, gedrosselte Malwarewarnungen mit begrenzter Outbox und Wiederholungen | Kein Langzeit-/Zeitreihenspeicher; lokale Mailannahme ist kein Zustellnachweis; maximal 100 offene Warnungen und sechs Versuche |
-| Fail2Ban | Status bestehender Jails und manuelle IP-Sperren/-Freigaben | `fail2ban-client` und konfigurierte Jails; erstellt keine Jails oder globale Firewall-Policies |
+| Fail2Ban | Status und begrenzte Konfiguration aktiver Jails (MaxRetry, FindTime, BanTime), manuelle IP-Sperren/-Freigaben, Backups und Rollback | `fail2ban-client` und konfigurierte Jails; erstellt keine Jails oder globalen Firewall-Policies; Overrides werden separat gespeichert, Konfigurationstest und Laufzeitverifikation sind erforderlich |
+| Sentinel-Oberflaeche | Responsive React-/TypeScript-Sicherheitszentrale mit Deutsch/Englisch, Hell-/Dunkelmodus, echten Dashboarddaten und aktiven Fail2Ban-Jail-Details | Bestehende Plesk-Module bleiben integriert; Verwaltungsaktionen laufen ueber Admin- und CSRF-geschuetzte Plesk-Controller |
 | CrowdSec | Optionaler, begrenzter Read-only-Status lokaler Entscheidungen und AppSec-Bereitschaft; einzelne `ban`-IP-Adressen koennen per Admin-Klick im bestehenden Plesk-Firewall-Bestaetigungsablauf vorbereitet werden | CrowdSec (MIT) und Apache-Bouncer muessen separat installiert werden; Guardian installiert/aktiviert sie nicht und misst keinen echten HTTP-Schutz |
 | Plesk Firewall | Guardian-IP-Sperren mit TTL, kommentierte Guardian-IP-Ausnahmen und manuelle Plesk-Portfreigaben/-sperren fuer einzelne Quell-IPs; Plesk-60-Sekunden-Rollback und explizite Bestaetigung | Plesk Firewall installiert/aktiv; IP-Ausnahmen schuetzen nur vor kuenftigen Guardian-Sperren und heben keine Plesk-/Provider-Regeln auf; globale Port-Policies und Greylist fehlen |
 | Firewall-Dashboard | Zaehler, Suche/Filter und Anzeige von Plesks Erlauben-/Sperrregeln; globaler Modul-Debugschalter fuer Helper, Verwaltungsmanager, Updater und Firewall, standardmaessig aus | Greylist, Bot-Challenge, externe Reputation und Aenderung fremder Regeln fehlen; nur Plesk-native Regeln werden gelesen |
@@ -49,9 +50,9 @@ Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.28.32.zip
+plesk bin extension -i /root/guardian-lite-0.28.33.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.28.32.zip
+plesk bin extension -g /root/guardian-lite-0.28.33.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
@@ -78,7 +79,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.28.32
+python3 tools/build_release.py --tag v0.28.33
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.
@@ -88,6 +89,10 @@ Fuer deinen separaten Plesk-Testserver steht die [Testreihenfolge mit Diagnoseex
 ## Weitere Entwicklung
 
 [FUNKTIONSUEBERSICHT.md](FUNKTIONSUEBERSICHT.md) dokumentiert den laufend geprueften Funktionsabgleich. Offene groessere Bereiche sind generische Proxy-Challenges und Greylisting, dauerhafte Ereignisaggregation, ein konfigurierbarer Hook-/Webhook-Ablauf, verifizierte Firewall-Listen mit Plesk-Prioritaet sowie externe Reputation. Proprietare Cloud-Erkennung und lizenzierte Kernel-Patches sind keine Guardian-Funktionen.
+
+Die Plesk-Oberflaeche wird schrittweise auf Sentinel Security erweitert. Das React/TypeScript-Frontend liegt unter `ui/`; `cd ui && npm ci && npm run build` erzeugt die auslieferbaren Dateien unter `htdocs/sentinel/`. Die Extension-ID `guardian-lite` bleibt fuer Update-Kompatibilitaet unveraendert. Das React-Dashboard verwendet echte Statusdaten des bestehenden Plesk-Controllers und zeigt fuer ausgewaehlte aktive Fail2ban-Jails effektive Laufzeitwerte, Filter-Regex-Anzahl und Actions.
+
+Fail2ban-Jails koennen ueber den Admin-geschuetzten, CSRF-validierten Plesk-Controller konfiguriert werden. Sentinel schreibt ausschliesslich eine eigene Override-Datei unter `/etc/fail2ban/jail.d/zzzz-guardian-lite.local` und ueberschreibt keine Plesk-Konfigurationsdateien. Vor jedem Apply wird ein root-geschuetztes Backup angelegt; Eingaben werden begrenzt, die Fail2ban-Konfiguration wird getestet, das ausgewaehlte Jail neu geladen und die effektiven Laufzeitwerte unabhaengig verifiziert. Bei Fehlern wird die vorherige Override-Datei wiederhergestellt und erneut getestet. Bis zu 50 Backups werden behalten; ein Restore setzt nur das ausgewaehlte Jail zurueck und erhaelt Overrides anderer Jails. Hash-Konflikte brechen Apply/Restore ab. Ein Rollback, das selbst fehlschlaegt, wird explizit als Fehler gemeldet. Die bestehenden serverseitig geschuetzten Module bleiben erhalten und sind von der neuen Sidebar aus erreichbar. Die neue Fail2ban-Schreibstrecke wurde lokal getestet; sie wurde nicht auf dem Plesk-Produktivsystem angewendet.
 
 ## Referenzen und Lizenz
 

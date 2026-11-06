@@ -381,23 +381,58 @@ def runtime_install(version):
     return {'message': 'Snuffleupagus 0.14.0 fuer PHP %s installiert, noch nicht aktiviert.' % version}
 
 
-def waf_rules(domain, mode, limit):
+WAF_SCOPES = ('all', 'only', 'except')
+
+
+def waf_paths(raw):
+    """Parses one URL path prefix per line; only plain path characters are accepted."""
+    items = []
+    for line in re.split(r'[\r\n,]+', raw or ''):
+        path = line.strip()
+        if not path:
+            continue
+        if not re.fullmatch(r'/[A-Za-z0-9_./-]{0,199}', path) or '..' in path:
+            raise ValueError('Ungueltiger Pfad "%s": erlaubt sind Pfade wie /wp-login.php oder /api/.' % path[:80])
+        if path not in items:
+            items.append(path)
+    if len(items) > 20:
+        raise ValueError('Maximal 20 Pfade je Regelsatz.')
+    return items
+
+
+def waf_rules(domain, mode, limit, scope='all', paths=''):
     if not h.valid_domain(domain) or mode not in ('off', 'detect', 'enforce'):
         raise ValueError('Ungueltige WAF-Einstellung.')
     limit = int(limit)
     if not 10 <= limit <= 10000:
         raise ValueError('Limit muss zwischen 10 und 10000 liegen.')
+    if scope not in WAF_SCOPES:
+        raise ValueError('Ungueltiger Pfadbereich.')
     if mode == 'off':
         return ''
     # Stable IDs are per server, not dependent on input or hash collisions.
     action = 'deny,status:429' if mode == 'enforce' else 'pass'
-    return ('SecAction "id:9974100,phase:1,pass,nolog,initcol:ip=%%{REMOTE_ADDR}"\n'
-            'SecRule &IP:guardian_requests "@eq 0" "id:9974101,phase:1,pass,nolog,setvar:ip.guardian_requests=0,expirevar:ip.guardian_requests=60"\n'
-            'SecRule REQUEST_HEADERS:Host "@rx ^%s(?::[0-9]+)?$" '
-            '"id:9974102,phase:1,pass,nolog,t:lowercase,setvar:ip.guardian_requests=+1"\n'
+    if scope == 'all':
+        scope_rule = 'SecAction "id:9974104,phase:1,pass,nolog,setvar:tx.guardian_in_scope=1"\n'
+    else:
+        items = waf_paths(paths) if isinstance(paths, str) else list(paths)
+        if not items:
+            raise ValueError('Pfadliste fuer die Begrenzung fehlt.')
+        # Prefixes match whole path segments unless they end with "/"; "." is escaped as a character class.
+        alternatives = [p.replace('.', '[.]') + ('' if p.endswith('/') else '(?:[/?#]|$)') for p in items]
+        operator = '@rx' if scope == 'only' else '!@rx'
+        scope_rule = ('SecRule REQUEST_URI "%s ^(?:%s)" '
+                      '"id:9974104,phase:1,pass,nolog,setvar:tx.guardian_in_scope=1"\n') % (operator, '|'.join(alternatives))
+    first = ('SecAction "id:9974100,phase:1,pass,nolog,initcol:ip=%{REMOTE_ADDR}"\n'
+             'SecRule &IP:guardian_requests "@eq 0" "id:9974101,phase:1,pass,nolog,setvar:ip.guardian_requests=0,expirevar:ip.guardian_requests=60"\n')
+    rest = ('SecRule REQUEST_HEADERS:Host "@rx ^%s(?::[0-9]+)?$" '
+            '"id:9974102,phase:1,chain,pass,nolog,t:lowercase,setvar:ip.guardian_requests=+1"\n'
+            'SecRule TX:guardian_in_scope "@eq 1"\n'
             'SecRule REQUEST_HEADERS:Host "@rx ^%s(?::[0-9]+)?$" '
             '"id:9974103,phase:1,chain,t:lowercase,%s,log,msg:\'Guardian request limit\'"\n'
+            'SecRule TX:guardian_in_scope "@eq 1" "chain"\n'
             'SecRule IP:guardian_requests "@gt %d"\n') % (re.escape(domain), re.escape(domain), action, limit)
+    return first + scope_rule + rest
 
 
 def waf_file():
@@ -409,7 +444,7 @@ def waf_file():
     raise ValueError('Unterstuetztes Apache-ModSecurity-Include-Verzeichnis fehlt.')
 
 
-def waf_set(domain, mode, limit, expected):
+def waf_set(domain, mode, limit, expected, scope='all', paths=''):
     h.site_docroot(domain)
     path = waf_file()
     current = checked(path)[0] if path.exists() else b''
@@ -418,7 +453,8 @@ def waf_set(domain, mode, limit, expected):
     if current and not current.startswith(b'# Guardian managed\n'):
         raise ValueError('Vorhandene fremde Regeldatei wird nicht ueberschrieben.')
     # One explicit target domain per managed policy avoids accidental global rollout.
-    rules = waf_rules(domain, mode, limit)
+    rules = waf_rules(domain, mode, limit, scope, paths)
+    stored_paths = [] if scope == 'all' else waf_paths(paths)
     data = b'# Guardian managed\n' + rules.encode('ascii')
     if path.exists():
         backup = make_backup('waf', domain, path)['id']
@@ -465,7 +501,7 @@ def waf_set(domain, mode, limit, expected):
         run([ctl, '-t'])
         raise
     settings = config()
-    settings['waf'] = {'domain': domain, 'mode': mode, 'limit': int(limit), 'sha256': digest(data), 'backup': backup}
+    settings['waf'] = {'domain': domain, 'mode': mode, 'limit': int(limit), 'scope': scope, 'paths': stored_paths, 'sha256': digest(data), 'backup': backup}
     save_config(settings)
     h.incident_log('operator', 'warning', domain, 'Guardian WAF ' + mode)
     return {'message': 'WAF-Regeln installiert und Apache neu geladen. HTTP-Wirksamkeitspruefung erforderlich.', 'backup': backup}
@@ -3299,9 +3335,11 @@ def _dispatch(request):
             handler(version)
             return start_job({'action': action, 'version': version})
         if action == 'waf-preview':
-            return {'rules': waf_rules(request.get('domain', ''), request.get('mode', ''), request.get('limit', 120))}
+            return {'rules': waf_rules(request.get('domain', ''), request.get('mode', ''), request.get('limit', 120),
+                                       request.get('scope', 'all'), request.get('paths', ''))}
         if action == 'waf-set':
-            return waf_set(request.get('domain', ''), request.get('mode', ''), request.get('limit', 120), request.get('sha256', ''))
+            return waf_set(request.get('domain', ''), request.get('mode', ''), request.get('limit', 120), request.get('sha256', ''),
+                           request.get('scope', 'all'), request.get('paths', ''))
         if action == 'domain-status':
             return domain_status(request.get('domains', []))
         if action == 'waf-engine':

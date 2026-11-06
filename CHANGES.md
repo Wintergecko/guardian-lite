@@ -1,3 +1,12 @@
+## 0.28.33 – Sentinel-Oberflaeche und Fail2Ban-Jail-Verwaltung
+
+- Fuehrt die React-/TypeScript-Sicherheitszentrale mit deutsch/englischer Navigation, responsivem Layout, Hell-/Dunkelmodus und echten Serverstatusdaten ein; die Extension-ID und bestehenden Plesk-Module bleiben erhalten.
+- Ergaenzt aktive Fail2Ban-Jail-Details und eine Admin-/CSRF-geschuetzte Konfiguration fuer MaxRetry, FindTime und BanTime.
+- Schreibt Jail-Werte nur in eine Guardian-eigene Override-Datei, sichert den vorherigen Zustand, prueft Fail2Ban-Konfiguration und Laufzeitwerte und versucht bei Fehlern automatisch das Rollback.
+- Ermoeglicht die Wiederherstellung eines ausgewählten Jails aus root-geschuetzten Backups, ohne Overrides anderer Jails zurueckzusetzen.
+- Begrenzt WebShield-Pfadregeln auf die konfigurierten Pfade und aktualisiert CI/Release-Workflows fuer den reproduzierbaren UI-Build.
+- Installierte Serverkonfigurationen wurden durch diesen Release nicht veraendert.
+
 ## 0.28.32 – Menü-Überarbeitung, Events und Dashboard
 
 - Der Tab „Events“ zeigt Zeit, Regel, Schwere, Quell-IP und Blockiert-Status, mit Suche, Zeitraum-Auswahl (1 h, 24 h, 7 Tage, alle) und Auto-Refresh.
@@ -458,4 +467,3 @@ Auf dem Testserver erfolgreich fuer PHP 8.4 geprueft: sechs dedizierte FPM-Diens
 - Ersetzt rohe JSON-Ausgaben in Reputation, Diagnose, Schutzverwaltung und CMS-Pruefungen durch strukturierte, begrenzte Ergebnisfelder.
 - Erhoeht Textkontraste in Hinweisen, Statusfeldern, Ergebnisdetails und Protokollbloecken.
 - Entfernt die Opazitaetsanimation beim Seitenwechsel, damit Inhalte sofort vollstaendig lesbar sind.
-

@@ -30,7 +30,8 @@ class TabsTests(unittest.TestCase):
         for expected in ('guardian-menu', 'guardian-submenu', 'aria-expanded', 'aria-controls',
                          'data-menu-target', 'ArrowRight', 'ArrowLeft', 'Home', 'End',
                          'guardian_active_tab', 'hashchange', 'DOMContentLoaded', 'guardian-webshield',
-                         'guardian_active_module', 'Malware Scanner', "label: 'Webschutz & PHP'"):
+                         'guardian_active_module', 'Malware Scanner', "label: 'Webschutz & PHP'",
+                         "var incidentDashboard = root.querySelector('[data-incident-dashboard]');"):
             self.assertIn(expected, js)
         self.assertNotIn('eval(', js)
         self.assertNotIn('innerHTML', js)
@@ -79,7 +80,7 @@ class TabsTests(unittest.TestCase):
 
     def test_version_consistency(self):
         version = ET.parse(ROOT / 'meta.xml').getroot().findtext('version')
-        self.assertEqual(version, '0.28.32')
+        self.assertEqual(version, '0.28.33')
         self.assertIn("GUARDIAN_VERSION = '" + version + "'",
                       (ROOT / 'plib/controllers/IndexController.php').read_text())
         self.assertIn('<span>v' + version + '</span>',

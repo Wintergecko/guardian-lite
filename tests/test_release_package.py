@@ -19,7 +19,8 @@ class ReleasePackageTests(unittest.TestCase):
             with zipfile.ZipFile(path) as archive:
                 self.assertIsNone(archive.testzip())
                 for name in ('meta.xml', 'MANAGEMENT.md', 'FEATURES.md',
-                             'plib/views/scripts/index/management.phtml', 'sbin/guardian-bot-guard.php'):
+                             'plib/views/scripts/index/management.phtml', 'sbin/guardian-bot-guard.php',
+                             'htdocs/sentinel/sentinel.js', 'htdocs/sentinel/sentinel.css'):
                     self.assertIn(name, archive.namelist())
                 self.assertNotIn(b'\r\n', archive.read('security/README.md'))
                 for name in ('guardian-helper', 'guardian-manager', 'guardian-updater'):

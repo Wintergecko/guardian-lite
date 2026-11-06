@@ -2,5 +2,6 @@ __pycache__/
 *.py[cod]
 .phpunit.result.cache
 dist/
+ui/node_modules/
 .DS_Store
 *.swp

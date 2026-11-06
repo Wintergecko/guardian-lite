@@ -62,7 +62,7 @@
     if (!nav) {
       nav = document.createElement('nav');
       nav.className = 'guardian-menu';
-      nav.setAttribute('aria-label', 'Guardian Lite Hauptmenü');
+      nav.setAttribute('aria-label', 'Sentinel Security Hauptmenü');
       shell.insertBefore(nav, shell.firstChild);
     }
     var content = shell.querySelector('.guardian-pages');
@@ -82,12 +82,9 @@
     mark.setAttribute('aria-hidden', 'true');
     mark.textContent = '✥';
     var wordmark = document.createElement('span');
-    wordmark.appendChild(document.createTextNode('guardian'));
-    var lite = document.createElement('span');
-    lite.textContent = 'lite';
+    wordmark.appendChild(document.createTextNode('Sentinel'));
     var small = document.createElement('small');
     small.textContent = 'security';
-    wordmark.appendChild(lite);
     wordmark.appendChild(small);
     brand.appendChild(mark);
     brand.appendChild(wordmark);
@@ -385,6 +382,7 @@
         try { recommendationStore.setItem('guardian_rejected_recommendations', JSON.stringify(rejected)); } catch (e) { /* storage optional */ }
       });
     });
+    var incidentDashboard = root.querySelector('[data-incident-dashboard]');
     var incidentTable = document.getElementById('guardian-incidents-table');
     var incidentSearch = document.getElementById('guardian-incident-search');
     var incidentSeverity = document.getElementById('guardian-incident-severity');
