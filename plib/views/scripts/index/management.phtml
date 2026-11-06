@@ -9,6 +9,7 @@ $storageAreas = is_array($storage['areas'] ?? null) ? $storage['areas'] : [];
 $formatBytes = static function ($bytes) { return number_format(max(0, (float)$bytes) / 1048576, 2, ',', '.') . ' MiB'; };
 $resultLabels = [
     'ok' => 'Ergebnis', 'status' => 'Status', 'operation' => 'Aktion', 'ip' => 'IP-Adresse',
+    'generated_at' => 'Erstellt am', 'checks' => 'Pruefungen', 'name' => 'Pruefung',
     'score' => 'Reputationswert (0–100)', 'reports' => 'Meldungen', 'checked_at' => 'Geprueft am',
     'country' => 'Landescode', 'message' => 'Meldung', 'error' => 'Fehler', 'domain' => 'Domain',
     'path' => 'Pfad', 'enabled' => 'Aktiv', 'available' => 'Verfuegbar', 'count' => 'Anzahl',
@@ -54,7 +55,8 @@ $renderValue = function ($value, $depth = 0) use (&$renderValue, $esc, $resultLa
                 && is_numeric($item) && (float)$item >= 1000000000 && (float)$item <= 4102444800) {
             $item = gmdate('Y-m-d H:i:s', (int)$item) . ' UTC';
         }
-        $html .= '<div><dt>' . $esc($resultLabel($key)) . '</dt><dd>' . $renderValue($item, $depth + 1) . '</dd></div>';
+        $rowClass = $depth === 0 && (string)$key === 'checks' ? ' class="guardian-diagnostic-checks"' : '';
+        $html .= '<div' . $rowClass . '><dt>' . $esc($resultLabel($key)) . '</dt><dd>' . $renderValue($item, $depth + 1) . '</dd></div>';
     }
     if (count($value) > 30) { $html .= '<div><dt>Weitere Felder</dt><dd>' . $esc(count($value) - 30) . ' ausgeblendet</dd></div>'; }
     return $html . '</dl>';
@@ -483,6 +485,8 @@ $domainSelect = function () use ($esc) {
     <div class="guardian-settings-form-actions"><button type="submit">Diagnose ausfuehren</button></div>
   </form>
   <p><a href="<?= $esc(pm_Context::getActionUrl('index', 'management-export')) ?>">Letztes Diagnoseergebnis als JSON herunterladen</a></p>
-  <?= $renderResult('Diagnoseergebnis', $management['diagnostics'] ?? []) ?>
+  <div class="guardian-diagnostics-results">
+    <?= $renderResult('Diagnoseergebnis', $management['diagnostics'] ?? []) ?>
+  </div>
   </section>
 </section>

@@ -505,6 +505,19 @@
   min-width: 132px;
   min-height: 40px;
 }
+.guardian #guardian-management-diagnostics .guardian-diagnostics-results .guardian-result-block > .guardian-result-grid > div {
+  grid-template-columns: minmax(100px, 0.3fr) minmax(0, 1.7fr);
+}
+.guardian #guardian-management-diagnostics .guardian-diagnostics-results .guardian-result-block > .guardian-result-grid > .guardian-diagnostic-checks {
+  grid-template-columns: minmax(0, 1fr);
+}
+.guardian #guardian-management-diagnostics .guardian-diagnostics-results .guardian-result-block > .guardian-result-grid > div > dd > .guardian-result-list {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin-top: 8px;
+}
+.guardian #guardian-management-diagnostics .guardian-diagnostics-results .guardian-result-block > .guardian-result-grid > div > dd > .guardian-result-list > li {
+  padding: 14px;
+}
 .guardian.sentinel-dark .guardian-pages .guardian-settings-form {
   color: #dbe5f1;
   background: #111c2f;
@@ -537,6 +550,7 @@
   .guardian .guardian-settings-form { grid-template-columns: minmax(0, 1fr); padding: 14px; }
   .guardian .guardian-settings-form-single,
   .guardian .guardian-settings-diagnostics-form { grid-template-columns: minmax(0, 1fr); }
+  .guardian #guardian-management-diagnostics .guardian-diagnostics-results .guardian-result-block > .guardian-result-grid > div > dd > .guardian-result-list { grid-template-columns: minmax(0, 1fr); }
   .guardian .guardian-settings-form > .guardian-setting-field:last-of-type,
   .guardian .guardian-settings-form > .guardian-settings-form-note,
   .guardian .guardian-settings-form > .guardian-settings-form-actions { grid-column: 1; }

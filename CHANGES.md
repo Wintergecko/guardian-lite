@@ -1,3 +1,8 @@
+## 0.28.46 – Diagnoseergebnisse lesbarer dargestellt
+
+- Nutzt im Diagnosebereich die volle Inhaltsbreite fuer Pruefungen statt einer schmalen rechten Spalte.
+- Ordnet einzelne Systempruefungen in ein responsives Kartenraster und uebersetzt weitere Ergebnisfelder.
+
 ## 0.28.45 – Einstellungsformulare vereinheitlicht
 
 - Vereinheitlicht Feldbreiten, Abstaende und Aktionsbereiche in Speicher-, Diagnose-, Dienstschluessel- und Update-Einstellungen.
