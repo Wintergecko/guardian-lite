@@ -23,7 +23,7 @@ class ReleasePackageTests(unittest.TestCase):
                              'htdocs/sentinel/sentinel.js', 'htdocs/sentinel/sentinel.css'):
                     self.assertIn(name, archive.namelist())
                 self.assertNotIn(b'\r\n', archive.read('security/README.md'))
-                for name in ('guardian-helper', 'guardian-manager', 'guardian-updater'):
+                for name in ('guardian-helper', 'guardian-manager', 'guardian-updater', 'guardian-docker'):
                     filename = 'sbin/' + name
                     self.assertEqual(archive.read(filename).split(b'\n')[0], b'#!/usr/bin/python3')
                     self.assertEqual((archive.getinfo(filename).external_attr >> 16) & 0o777, 0o755)

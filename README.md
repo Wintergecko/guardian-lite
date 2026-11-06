@@ -1,4 +1,4 @@
-# Guardian Lite 0.28.50 – Plesk Security (Linux)
+# Guardian Lite 0.28.51 – Plesk Security (Linux)
 
 **Entwicklungsstand:** Die zwoelf Module des Sentinel-Gesamtauftrags sind noch
 nicht vollstaendig umgesetzt. Implementierung, lokale Tests, offene Funktionen
@@ -19,7 +19,8 @@ Open-Source-Sicherheitszentrale fuer Plesk Obsidian **18.0.55 oder neuer** auf L
 | Metadatenvergleich | Periodische Stichprobe fuer Domains mit Scanplanung | Bis 1500 Dateien; keine vollstaendige Integritaetspruefung |
 | Incidents / E-Mail | Privates Ereignisprotokoll mit 24h/7d/30d-Zeitreihe und Filtern fuer bis zu 200 aktuelle Eintraege, JSON-Export, gedrosselte Malwarewarnungen mit begrenzter Outbox und Wiederholungen | Kein Langzeit-/Zeitreihenspeicher; lokale Mailannahme ist kein Zustellnachweis; maximal 100 offene Warnungen und sechs Versuche |
 | Fail2Ban | Status und begrenzte Konfiguration aktiver Jails (MaxRetry, FindTime, BanTime), manuelle IP-Sperren/-Freigaben, Backups und Rollback | `fail2ban-client` und konfigurierte Jails; erstellt keine Jails oder globalen Firewall-Policies; Overrides werden separat gespeichert, Konfigurationstest und Laufzeitverifikation sind erforderlich |
-| Sentinel-Oberflaeche | Responsive React-/TypeScript-Navigation mit gruppierter Verwaltungsübersicht, Dashboard, getrennten Webschutz- und Audit-Tabs mit 25er-Pagination und read-only Plesk-Firewall-Regelansicht; Suche/Filter, echte Serverdaten und gespeicherter Hell-/Dunkelmodus; Plesk-Portansicht zeigt Plesk-Standard- und benutzerdefinierte Regeln getrennt von Guardian-eigenen bearbeitbaren Regeln; Fail2Ban-Jail-Details und sichere Aenderungen in React | Uebrige Modul-Inhalte werden schrittweise umgestellt und teils serverseitig gerendert. Verwaltungsaktionen verwenden weiterhin Admin- und CSRF-geschuetzte Plesk-Controller |
+| Docker | Inventar bis 100 Container, Start/Stop/Neustart, Logs, CPU-/RAM-/Neustart-Limits, begrenztes Container-Erstellen; Compose-Stacks verwalten, root-geschuetzte YAML-Dateien validieren/sichern/wiederherstellen und nach bestaetigtem Apply starten; geloeschte Sentinel-Projekte aus Backup wiederherstellen | Docker CLI/Daemon und Compose v2 muessen vorhanden sein. YAML ist serverkritische Infrastrukturkonfiguration; Root-eigene Compose-Dateien. Standalone-Container duerfen nur benannte Volumes verwenden; Host-Mounts/privilegierte Optionen werden dort nicht angeboten. Loeschen behaelt Images/Volumes |
+| Sentinel-Oberflaeche | Responsive React-/TypeScript-Navigation mit gruppierter Verwaltungsübersicht, Docker-Verwaltung, Dashboard, getrennten Webschutz- und Audit-Tabs mit 25er-Pagination und read-only Plesk-Firewall-Regelansicht; Suche/Filter, echte Serverdaten und gespeicherter Hell-/Dunkelmodus; Plesk-Portansicht zeigt Plesk-Standard- und benutzerdefinierte Regeln getrennt von Guardian-eigenen bearbeitbaren Regeln; Fail2Ban-Jail-Details und sichere Aenderungen in React | Uebrige Modul-Inhalte werden schrittweise umgestellt und teils serverseitig gerendert. Verwaltungsaktionen verwenden weiterhin Admin- und CSRF-geschuetzte Plesk-Controller |
 | CrowdSec | Optionaler, begrenzter Read-only-Status lokaler Entscheidungen und AppSec-Bereitschaft; einzelne `ban`-IP-Adressen koennen per Admin-Klick im bestehenden Plesk-Firewall-Bestaetigungsablauf vorbereitet werden | CrowdSec (MIT) und Apache-Bouncer muessen separat installiert werden; Guardian installiert/aktiviert sie nicht und misst keinen echten HTTP-Schutz |
 | Plesk Firewall | Guardian-IP-Sperren mit TTL, kommentierte Guardian-IP-Ausnahmen und manuelle Plesk-Portfreigaben/-sperren fuer einzelne Quell-IPs; Plesk-60-Sekunden-Rollback und explizite Bestaetigung | Plesk Firewall installiert/aktiv; IP-Ausnahmen schuetzen nur vor kuenftigen Guardian-Sperren und heben keine Plesk-/Provider-Regeln auf; globale Port-Policies und Greylist fehlen |
 | Firewall-Dashboard | Zaehler, Suche/Filter und Anzeige von Plesks Erlauben-/Sperrregeln; globaler Modul-Debugschalter fuer Helper, Verwaltungsmanager, Updater und Firewall, standardmaessig aus | Greylist, Bot-Challenge, externe Reputation und Aenderung fremder Regeln fehlen; nur Plesk-native Regeln werden gelesen |
@@ -57,9 +58,9 @@ Das installierbare ZIP liegt im [GitHub-Release](https://github.com/Wintergecko/
 
 ```bash
 # Neuinstallation
-plesk bin extension -i /root/guardian-lite-0.28.50.zip
+plesk bin extension -i /root/guardian-lite-0.28.51.zip
 # Vorhandene Installation aktualisieren
-plesk bin extension -g /root/guardian-lite-0.28.50.zip
+plesk bin extension -g /root/guardian-lite-0.28.51.zip
 # Installierte Erweiterungen anzeigen
 plesk bin extension -l
 ```
@@ -86,7 +87,7 @@ php tests/php_scan_controller_smoke.php
 php tests/plesk_updater_smoke.php
 php tests/php_management_smoke.php
 sudo python3 -m unittest discover -s tests -v
-python3 tools/build_release.py --tag v0.28.50
+python3 tools/build_release.py --tag v0.28.51
 ```
 
 Die Linux-CI prueft Python 3.11/3.12/3.13 auf Ubuntu 22.04/24.04, PHP-Controller und Templates, lokale PHP-HTTP-Requests und echte ModSecurity-HTTP-Limits. Ein gesonderter nativer Buildtest kompiliert Snuffleupagus und prueft Simulation, Blockieren und Rollback mit System-PHP in einer isolierten VM. Das ist kein Nachweis fuer produktive Plesk-FPM-Requests.

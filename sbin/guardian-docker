@@ -1,0 +1,857 @@
+#!/usr/bin/python3
+"""Restricted, Plesk-admin-only Docker and Compose adapter."""
+import fcntl
+import datetime
+import hashlib
+import json
+import os
+import pathlib
+import re
+import stat
+import subprocess
+import sys
+import time
+import uuid
+
+ROOT = pathlib.Path('/var/lib/guardian-lite')
+PROJECTS_ROOT = ROOT / 'docker-projects'
+PROJECTS_FILE = ROOT / 'docker-projects.json'
+BACKUPS_ROOT = ROOT / 'docker-compose-backups'
+AUDIT_FILE = ROOT / 'incidents.jsonl'
+AUDIT_LOCK = ROOT / 'incidents.lock'
+DOCKER_PATHS = ('/usr/bin/docker', '/usr/local/bin/docker', '/bin/docker')
+PROJECT_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]{0,62}$')
+CONTAINER_ID = re.compile(r'^[a-f0-9]{12,64}$')
+IMAGE_NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,254}$')
+RESOURCE_NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$')
+SHA256 = re.compile(r'^[a-f0-9]{64}$')
+MAX_CONTAINERS = 100
+MAX_COMPOSE_BYTES = 512 * 1024
+MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_LOG_BYTES = 24000
+MAX_BACKUPS_PER_PROJECT = 20
+
+
+def respond(data, code=0):
+    print(json.dumps(data, ensure_ascii=False, separators=(',', ':')))
+    return code
+
+
+def docker_binary():
+    return next((path for path in DOCKER_PATHS if os.path.isfile(path) and os.access(path, os.X_OK)), None)
+
+
+def command(args, timeout=15, input_data=None):
+    program = docker_binary()
+    if not program:
+        raise ValueError('Docker CLI ist nicht installiert.')
+    result = subprocess.run([program] + args, input=input_data, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, check=False, timeout=timeout,
+                            env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C'})
+    if len(result.stdout) > MAX_RESPONSE_BYTES or len(result.stderr) > 65536:
+        raise ValueError('Docker-Antwort ueberschreitet das Groessenlimit.')
+    if result.returncode:
+        message = result.stderr.decode('utf-8', 'replace').strip()
+        raise ValueError((message or 'Docker-Aktion fehlgeschlagen.')[:300])
+    return result.stdout
+
+
+def strict_json(raw, description):
+    try:
+        return json.loads(raw.decode('utf-8'))
+    except (ValueError, UnicodeError) as exc:
+        raise ValueError(description + ' ist ungueltig.') from exc
+
+
+def ensure_private_dir(path):
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
+        raise ValueError('Docker-Verzeichnis muss root-eigen und privat sein.')
+
+
+def compose_cli_available():
+    try:
+        command(['compose', 'version', '--short'], timeout=8)
+        return True
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return False
+
+
+def inspect_containers():
+    raw = command(['ps', '--all', '--no-trunc', '--format', '{{json .}}'], timeout=10)
+    lines = raw.splitlines()
+    limited = len(lines) > MAX_CONTAINERS
+    rows = []
+    for line in lines[:MAX_CONTAINERS]:
+        row = strict_json(line, 'Docker-Containerinventar')
+        if not isinstance(row, dict):
+            raise ValueError('Docker-Containerinventar enthaelt einen ungueltigen Datensatz.')
+        container_id = row.get('ID', '')
+        if not isinstance(container_id, str) or not CONTAINER_ID.fullmatch(container_id):
+            continue
+        rows.append((container_id, row))
+    if not rows:
+        return [], limited
+    details = strict_json(command(['inspect'] + [item[0] for item in rows], timeout=15),
+                          'Docker-Containerdetails')
+    if not isinstance(details, list):
+        raise ValueError('Docker-Containerinventar ist ungueltig.')
+    by_id = {}
+    for item in details:
+        if not isinstance(item, dict):
+            continue
+        container_id = item.get('Id', '')
+        config = item.get('Config') if isinstance(item.get('Config'), dict) else {}
+        host = item.get('HostConfig') if isinstance(item.get('HostConfig'), dict) else {}
+        state = item.get('State') if isinstance(item.get('State'), dict) else {}
+        labels = config.get('Labels') if isinstance(config.get('Labels'), dict) else {}
+        restart = host.get('RestartPolicy') if isinstance(host.get('RestartPolicy'), dict) else {}
+        nano_cpus = host.get('NanoCpus', 0)
+        by_id[container_id] = {
+            'memory_mib': int(host.get('Memory', 0) or 0) // (1024 * 1024),
+            'cpus': round(int(nano_cpus or 0) / 1_000_000_000, 2),
+            'restart': restart.get('Name', 'no') if isinstance(restart.get('Name', 'no'), str) else 'no',
+            'running': bool(state.get('Running')),
+            'compose_project': labels.get('com.docker.compose.project', '')
+                if isinstance(labels.get('com.docker.compose.project', ''), str) else '',
+        }
+    containers = []
+    for container_id, row in rows:
+        detail = by_id.get(container_id, {})
+        names = row.get('Names', '')
+        name = names.split(',')[0].lstrip('/') if isinstance(names, str) else ''
+        containers.append({
+            'id': container_id,
+            'short_id': container_id[:12],
+            'name': name[:128],
+            'image': str(row.get('Image', ''))[:256],
+            'status': str(row.get('Status', ''))[:180],
+            'state': str(row.get('State', 'unknown'))[:40],
+            'ports': str(row.get('Ports', ''))[:500],
+            'running': detail.get('running', False),
+            'memory_mib': detail.get('memory_mib', 0),
+            'cpus': detail.get('cpus', 0),
+            'restart': detail.get('restart', 'no'),
+            'compose_project': detail.get('compose_project', ''),
+        })
+    return containers, limited
+
+
+def registry_read():
+    try:
+        fd = os.open(str(PROJECTS_FILE), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+        with os.fdopen(fd, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077 or info.st_size > 65536:
+                raise ValueError('Docker-Projektregister hat unsichere Dateirechte.')
+            data = strict_json(stream.read(65537), 'Docker-Projektregister')
+        if not isinstance(data, dict):
+            raise ValueError('Docker-Projektregister ist ungueltig.')
+        return data
+    except FileNotFoundError:
+        return {}
+
+
+def registry_write(data):
+    ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    temp = ROOT / ('docker-projects-' + uuid.uuid4().hex)
+    raw = json.dumps(data, separators=(',', ':')).encode('utf-8')
+    if len(raw) > 65536:
+        raise ValueError('Zu viele verwaltete Docker-Projekte.')
+    fd = os.open(str(temp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(str(temp), str(PROJECTS_FILE))
+    finally:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def parse_config_files(value):
+    if not isinstance(value, str):
+        return []
+    result = []
+    for raw_path in value.split(','):
+        raw_path = raw_path.strip()
+        if raw_path and os.path.isabs(raw_path) and raw_path not in result:
+            result.append(raw_path)
+    return result[:16]
+
+
+def compose_projects():
+    if not compose_cli_available():
+        return [], False
+    output = strict_json(command(['compose', 'ls', '--all', '--format', 'json'], timeout=10),
+                         'Docker-Compose-Projektliste')
+    if not isinstance(output, list):
+        raise ValueError('Docker-Compose-Projektliste ist ungueltig.')
+    projects = {}
+    for item in output[:100]:
+        if not isinstance(item, dict):
+            continue
+        name = item.get('Name', item.get('name', ''))
+        if not isinstance(name, str) or not PROJECT_NAME.fullmatch(name):
+            continue
+        files = parse_config_files(item.get('ConfigFiles', item.get('configFiles', '')))
+        projects[name] = {'name': name, 'status': str(item.get('Status', item.get('status', 'unknown')))[:160],
+                          'files': files, 'managed': False}
+    for name, entry in registry_read().items():
+        if not isinstance(name, str) or not PROJECT_NAME.fullmatch(name) or not isinstance(entry, dict):
+            continue
+        if entry.get('deleted') is True:
+            if name not in projects:
+                backup_id = entry.get('backup', '')
+                if isinstance(backup_id, str) and re.fullmatch(r'[a-f0-9]{32}', backup_id):
+                    projects[name] = {'name': name, 'status': 'deleted; backup available',
+                                      'files': [], 'managed': True, 'deleted': True,
+                                      'backup_id': backup_id}
+            continue
+        project_dir = pathlib.Path('/var/lib/guardian-lite/docker-projects') / name
+        if project_dir.is_dir() and not project_dir.is_symlink():
+            path = project_dir / 'compose.yaml'
+            if name in projects:
+                projects[name]['managed'] = True
+                projects[name]['deleted'] = False
+                projects[name]['backup_id'] = ''
+                if not projects[name]['files']:
+                    projects[name]['files'] = [str(path)]
+            else:
+                projects[name] = {'name': name, 'status': 'not started',
+                                  'files': [str(path)], 'managed': True,
+                                  'deleted': False, 'backup_id': ''}
+    for project in projects.values():
+        project.setdefault('deleted', False)
+        project.setdefault('backup_id', '')
+    return list(projects.values()), True
+
+
+def docker_status():
+    program = docker_binary()
+    if not program:
+        return {'ok': True, 'available': False, 'error': 'Docker CLI ist nicht installiert.',
+                'version': '', 'containers': [], 'projects': [], 'compose_available': False}
+    try:
+        version = command(['version', '--format', '{{.Server.Version}}'], timeout=8).decode('utf-8', 'replace').strip()
+        containers, limited = inspect_containers()
+        projects, compose_available = compose_projects()
+        return {'ok': True, 'available': True, 'error': '', 'version': version[:80],
+                'containers': containers, 'container_inventory_limited': limited,
+                'projects': projects, 'compose_available': compose_available}
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
+        return {'ok': True, 'available': False, 'error': str(exc)[:300],
+                'version': '', 'containers': [], 'container_inventory_limited': False,
+                'projects': [], 'compose_available': compose_cli_available()}
+
+
+def resolve_container(value):
+    if not isinstance(value, str) or not CONTAINER_ID.fullmatch(value):
+        raise ValueError('Ungueltige Container-ID.')
+    containers, _ = inspect_containers()
+    matches = [item for item in containers if item['id'].startswith(value)]
+    if len(matches) != 1:
+        raise ValueError('Container nicht gefunden oder ID nicht eindeutig.')
+    return matches[0]
+
+
+def resolve_project(name):
+    if not isinstance(name, str) or not PROJECT_NAME.fullmatch(name):
+        raise ValueError('Ungueltiger Compose-Projektname.')
+    projects, available = compose_projects()
+    if not available:
+        raise ValueError('Docker Compose ist nicht verfuegbar.')
+    for project in projects:
+        if project['name'] == name:
+            if not project['files']:
+                raise ValueError('Compose-Konfigurationsdateien nicht verfuegbar.')
+            return project
+    raise ValueError('Compose-Projekt nicht gefunden.')
+
+
+def resolve_project_file(project, index):
+    files = project['files']
+    if not isinstance(index, int) or index < 0 or index >= len(files):
+        raise ValueError('Ungueltiger Index der Compose-Datei.')
+    path = pathlib.Path(files[index])
+    if not path.is_absolute() or path.name.startswith('-') or path.is_symlink():
+        raise ValueError('Compose-Dateipfad ist nicht sicher.')
+    real_path = path.resolve(strict=True)
+    if not real_path.is_file() or real_path.stat().st_size > MAX_COMPOSE_BYTES:
+        raise ValueError('Compose-Datei fehlt, ist ungueltig oder zu gross.')
+    return real_path
+
+
+def compose_args(project, replace_index=None, replacement=None):
+    args = ['compose', '--project-name', project['name']]
+    for index, value in enumerate(project['files']):
+        args.extend(['--file', replacement if index == replace_index else value])
+    return args
+
+
+def safe_compose_parent(path):
+    parent = path.parent.resolve(strict=True)
+    cursor = parent
+    while cursor != cursor.parent:
+        info = cursor.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError('Compose-Datei kann nur in root-verwalteten Verzeichnissen bearbeitet werden.')
+        cursor = cursor.parent
+    return parent
+
+
+def read_compose(path):
+    fd = os.open(str(path), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or
+                info.st_mode & 0o022 or info.st_size > MAX_COMPOSE_BYTES):
+            raise ValueError('Compose-Datei muss eine root-eigene regulaere Datei unter 512 KiB sein.')
+        raw = stream.read(MAX_COMPOSE_BYTES + 1)
+    if len(raw) > MAX_COMPOSE_BYTES:
+        raise ValueError('Compose-Datei ueberschreitet 512 KiB.')
+    try:
+        raw.decode('utf-8')
+    except UnicodeError:
+        raise ValueError('Compose-Datei muss UTF-8-kodiert sein.')
+    return raw
+
+
+def validate_yaml(project, index, content):
+    if not isinstance(content, bytes) or not content or len(content) > MAX_COMPOSE_BYTES:
+        raise ValueError('Compose-Konfiguration muss 1 bis 512 KiB gross sein.')
+    try:
+        content.decode('utf-8')
+    except UnicodeError:
+        raise ValueError('Compose-Konfiguration muss UTF-8-kodiert sein.')
+    if b'\x00' in content:
+        raise ValueError('Compose-Konfiguration enthaelt ungueltige Zeichen.')
+    original = resolve_project_file(project, index)
+    parent = safe_compose_parent(original)
+    temp = parent / ('.guardian-validate-' + uuid.uuid4().hex + original.suffix)
+    fd = os.open(str(temp), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(content)
+        args = compose_args(project, index, str(temp)) + ['config', '--quiet']
+        command(args, timeout=30)
+    finally:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+    return original
+
+
+def backup_compose(project, path, content):
+    ensure_private_dir(BACKUPS_ROOT)
+    project_dir = BACKUPS_ROOT / project
+    ensure_private_dir(project_dir)
+    backup_id = uuid.uuid4().hex
+    raw_path = project_dir / (backup_id + '.yaml')
+    metadata = project_dir / (backup_id + '.json')
+    fd = os.open(str(raw_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                 getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(content)
+        stream.flush()
+        os.fsync(stream.fileno())
+    info = {'id': backup_id, 'project': project, 'path': str(path),
+            'sha256': hashlib.sha256(content).hexdigest(), 'created': int(time.time())}
+    fd = os.open(str(metadata), os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                 getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        json.dump(info, stream, separators=(',', ':'))
+        stream.flush()
+        os.fsync(stream.fileno())
+    entries = sorted(project_dir.glob('*.json'), key=lambda item: item.stat().st_mtime, reverse=True)
+    for old in entries[MAX_BACKUPS_PER_PROJECT:]:
+        old_id = old.stem
+        old.unlink()
+        try:
+            (project_dir / (old_id + '.yaml')).unlink()
+        except FileNotFoundError:
+            pass
+    return info
+
+
+def read_backup(project, backup_id, path):
+    if not re.fullmatch(r'[a-f0-9]{32}', backup_id):
+        raise ValueError('Ungueltiger Compose-Backupverweis.')
+    directory = BACKUPS_ROOT / project
+    ensure_private_dir(BACKUPS_ROOT)
+    ensure_private_dir(directory)
+    metadata_path = directory / (backup_id + '.json')
+    content_path = directory / (backup_id + '.yaml')
+    meta = strict_json(read_root_file(metadata_path, 4096), 'Compose-Backup-Metadaten')
+    content = read_root_file(content_path, MAX_COMPOSE_BYTES)
+    if not isinstance(meta, dict) or meta.get('id') != backup_id or meta.get('project') != project or \
+            meta.get('path') != str(path) or meta.get('sha256') != hashlib.sha256(content).hexdigest():
+        raise ValueError('Compose-Backup ist ungueltig oder gehoert zu einer anderen Datei.')
+    return content
+
+
+def read_root_file(path, maximum):
+    fd = os.open(str(path), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or
+                info.st_mode & 0o077 or info.st_size > maximum):
+            raise ValueError('Compose-Backup hat unsichere Dateirechte oder ist zu gross.')
+        return stream.read(maximum + 1)
+
+
+def atomic_compose_write(path, content):
+    parent = safe_compose_parent(path)
+    temp = parent / ('.guardian-compose-' + uuid.uuid4().hex + path.suffix)
+    fd = os.open(str(temp), os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                 getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(str(temp), str(path))
+        directory_fd = os.open(str(parent), os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def compose_file(project_name, index):
+    project = resolve_project(project_name)
+    path = resolve_project_file(project, index)
+    content = read_compose(path)
+    backups = []
+    directory = BACKUPS_ROOT / project_name
+    if directory.is_dir() and not directory.is_symlink():
+        for item in directory.glob('*.json'):
+            try:
+                meta = strict_json(read_root_file(item, 4096), 'Compose-Backup-Metadaten')
+            except (OSError, ValueError):
+                meta = None
+            if isinstance(meta, dict) and meta.get('project') == project_name and meta.get('path') == str(path):
+                backups.append({'id': meta['id'], 'created': meta.get('created', 0)})
+    backups.sort(key=lambda item: item['created'], reverse=True)
+    return {'ok': True, 'project': project_name, 'index': index, 'path': str(path),
+            'content': content.decode('utf-8'), 'sha256': hashlib.sha256(content).hexdigest(),
+            'backups': backups[:MAX_BACKUPS_PER_PROJECT]}
+
+
+def perform_compose(operation, name):
+    project = resolve_project(name)
+    args = compose_args(project)
+    if operation == 'compose-up':
+        args.extend(['up', '--detach'])
+    elif operation == 'compose-stop':
+        args.append('stop')
+    elif operation == 'compose-restart':
+        args.append('restart')
+    elif operation == 'compose-down':
+        args.extend(['down', '--remove-orphans'])
+    elif operation == 'compose-delete':
+        if not project['managed']:
+            raise ValueError('Nur Sentinel-Compose-Projekte koennen einschliesslich ihrer Konfiguration geloescht werden.')
+        expected_file = (PROJECTS_ROOT / name / 'compose.yaml').resolve(strict=True)
+        if project['files'] != [str(expected_file)]:
+            raise ValueError('Compose-Projekt verweist nicht ausschliesslich auf seine Sentinel-Konfigurationsdatei.')
+        root = PROJECTS_ROOT.resolve(strict=True)
+        project_path = PROJECTS_ROOT / name
+        if project_path.is_symlink():
+            raise ValueError('Sentinel-Projektverzeichnis ist nicht sicher.')
+        project_dir = project_path.resolve(strict=True)
+        if (project_dir.parent != root or not project_dir.is_dir() or project_dir.stat().st_uid != 0 or
+                project_dir.stat().st_mode & 0o077):
+            raise ValueError('Sentinel-Projektverzeichnis ist nicht sicher.')
+        if sorted(item.name for item in project_dir.iterdir()) != ['compose.yaml']:
+            raise ValueError('Sentinel-Projekt enthaelt unerwartete Dateien und wird nicht geloescht.')
+        path = project_dir / 'compose.yaml'
+        content = read_compose(path)
+        backup = backup_compose(name, path, content)
+        args.extend(['down', '--remove-orphans'])
+        command(args, timeout=180)
+        path.unlink()
+        project_dir.rmdir()
+        registry = registry_read()
+        registry[name] = {'deleted': True, 'backup': backup['id'],
+                          'path': str(path), 'deleted_at': int(time.time())}
+        registry_write(registry)
+        return {'ok': True, 'message': 'Compose-Projekt geloescht; Backup, Volumes und Images bleiben erhalten.',
+                'project': name, 'volumes_preserved': True, 'images_preserved': True, 'backup_created': True}
+    else:
+        raise ValueError('Ungueltige Compose-Aktion.')
+    command(args, timeout=180)
+    return {'ok': True, 'message': 'Docker-Compose-Aktion erfolgreich ausgefuehrt.',
+            'project': name, 'operation': operation, 'volumes_preserved': True}
+
+
+def recover_compose(name, backup_id):
+    if not PROJECT_NAME.fullmatch(name):
+        raise ValueError('Ungueltiger Compose-Projektname.')
+    registry = registry_read()
+    entry = registry.get(name)
+    if not isinstance(entry, dict) or entry.get('deleted') is not True or entry.get('backup') != backup_id:
+        raise ValueError('Kein passendes Sentinel-Projekt-Backup gefunden.')
+    projects, available = compose_projects()
+    if not available or any(project['name'] == name and not project.get('deleted') for project in projects):
+        raise ValueError('Docker Compose ist nicht verfuegbar oder der Projektname ist belegt.')
+    old_path = entry.get('path', '')
+    expected_path = PROJECTS_ROOT / name / 'compose.yaml'
+    if not isinstance(old_path, str) or old_path != str(expected_path):
+        raise ValueError('Compose-Backup verweist nicht auf eine Sentinel-Datei.')
+    content = read_backup(name, backup_id, pathlib.Path(old_path))
+    ensure_private_dir(PROJECTS_ROOT)
+    project_dir = PROJECTS_ROOT / name
+    if project_dir.exists() or project_dir.is_symlink():
+        raise ValueError('Sentinel-Projektverzeichnis existiert bereits.')
+    project_dir.mkdir(mode=0o700)
+    target = project_dir / 'compose.yaml'
+    temp = project_dir / ('.restore-' + uuid.uuid4().hex + '.yaml')
+    fd = os.open(str(temp), os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                 getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(content)
+        command(['compose', '--project-name', name, '--file', str(temp), 'config', '--quiet'], timeout=30)
+        os.replace(str(temp), str(target))
+        registry[name] = {'created': int(time.time())}
+        registry_write(registry)
+    except Exception:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+        try:
+            target.unlink()
+        except FileNotFoundError:
+            pass
+        try:
+            project_dir.rmdir()
+        except OSError:
+            pass
+        raise
+    finally:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+    return {'ok': True, 'message': 'Compose-Projekt aus Backup wiederhergestellt; noch nicht gestartet.',
+            'project': name}
+
+
+def validate_create_yaml(name, content):
+    if not PROJECT_NAME.fullmatch(name):
+        raise ValueError('Projektname muss 1 bis 63 Kleinbuchstaben, Zahlen, Bindestriche oder Unterstriche enthalten.')
+    if not isinstance(content, bytes) or not content or len(content) > MAX_COMPOSE_BYTES:
+        raise ValueError('Compose-Konfiguration muss 1 bis 512 KiB gross sein.')
+    try:
+        content.decode('utf-8')
+    except UnicodeError:
+        raise ValueError('Compose-Konfiguration muss UTF-8-kodiert sein.')
+    if b'\x00' in content:
+        raise ValueError('Compose-Konfiguration enthaelt ungueltige Zeichen.')
+    existing_projects, compose_available = compose_projects()
+    if not compose_available:
+        raise ValueError('Docker Compose ist nicht verfuegbar.')
+    if any(item['name'] == name for item in existing_projects):
+        raise ValueError('Ein Compose-Projekt mit diesem Namen existiert bereits.')
+    ensure_private_dir(PROJECTS_ROOT)
+    target_dir = PROJECTS_ROOT / name
+    if target_dir.exists():
+        raise ValueError('Ein lokales Docker-Projekt mit diesem Namen existiert bereits.')
+    target_dir.mkdir(mode=0o700)
+    target = target_dir / 'compose.yaml'
+    temp = target_dir / ('.validate-' + uuid.uuid4().hex + '.yaml')
+    fd = os.open(str(temp), os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                 getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(content)
+        command(['compose', '--project-name', name, '--file', str(temp), 'config', '--quiet'], timeout=30)
+        os.replace(str(temp), str(target))
+        registry = registry_read()
+        registry[name] = {'created': int(time.time())}
+        registry_write(registry)
+    except Exception:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+        try:
+            target.unlink()
+        except FileNotFoundError:
+            pass
+        try:
+            target_dir.rmdir()
+        except OSError:
+            pass
+        raise
+    finally:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
+    return {'ok': True, 'message': 'Compose-Projekt erstellt; noch nicht gestartet.',
+            'project': name, 'file': str(target)}
+
+
+def update_container(container, values):
+    args = ['update']
+    if 'memory_mib' in values:
+        value = values['memory_mib']
+        if not isinstance(value, int) or value < 16 or value > 65536:
+            raise ValueError('Arbeitsspeicher muss zwischen 16 und 65536 MiB liegen.')
+        args.extend(['--memory', str(value) + 'm'])
+    if 'cpus' in values:
+        value = values['cpus']
+        if not isinstance(value, str) or not re.fullmatch(r'(?:[0-9]{1,2})(?:\.[0-9]{1,2})?', value):
+            raise ValueError('Ungueltiges CPU-Limit.')
+        if not 0.1 <= float(value) <= 64:
+            raise ValueError('CPU-Limit muss zwischen 0.1 und 64 liegen.')
+        args.extend(['--cpus', value])
+    if 'restart' in values:
+        value = values['restart']
+        if value not in ('no', 'always', 'unless-stopped', 'on-failure'):
+            raise ValueError('Ungueltige Neustart-Richtlinie.')
+        args.extend(['--restart', value])
+    if len(args) == 1:
+        raise ValueError('Keine Container-Einstellungen zum Aendern angegeben.')
+    args.append(container['id'])
+    command(args, timeout=30)
+    return {'ok': True, 'message': 'Container-Einstellungen aktualisiert.', 'container': container['id']}
+
+
+def create_container(values):
+    name = values.get('name', '')
+    image = values.get('image', '')
+    if not isinstance(name, str) or not RESOURCE_NAME.fullmatch(name):
+        raise ValueError('Ungueltiger Containername.')
+    if not isinstance(image, str) or not IMAGE_NAME.fullmatch(image) or image.startswith('-'):
+        raise ValueError('Ungueltiger Docker-Image-Name.')
+    if not isinstance(values.get('memory_mib'), int) or not 16 <= values['memory_mib'] <= 65536:
+        raise ValueError('Arbeitsspeicher muss zwischen 16 und 65536 MiB liegen.')
+    cpu = values.get('cpus', '')
+    if not isinstance(cpu, str) or not re.fullmatch(r'(?:[0-9]{1,2})(?:\.[0-9]{1,2})?', cpu) or not 0.1 <= float(cpu) <= 64:
+        raise ValueError('CPU-Limit muss zwischen 0.1 und 64 liegen.')
+    restart = values.get('restart', 'unless-stopped')
+    if restart not in ('no', 'always', 'unless-stopped', 'on-failure'):
+        raise ValueError('Ungueltige Neustart-Richtlinie.')
+    args = ['run', '--detach', '--name', name, '--label', 'io.guardian-lite.managed=true',
+            '--restart', restart, '--memory', str(values['memory_mib']) + 'm', '--cpus', cpu]
+    host_port = values.get('host_port', '')
+    container_port = values.get('container_port', '')
+    protocol = values.get('protocol', 'tcp')
+    if host_port or container_port:
+        if not (isinstance(host_port, str) and host_port.isdigit() and
+                isinstance(container_port, str) and container_port.isdigit() and
+                1 <= int(host_port) <= 65535 and 1 <= int(container_port) <= 65535 and
+                protocol in ('tcp', 'udp')):
+            raise ValueError('Ungueltige Portweiterleitung.')
+        bind = values.get('bind', '127.0.0.1')
+        if bind not in ('127.0.0.1', '0.0.0.0'):
+            raise ValueError('Ports duerfen nur an 127.0.0.1 oder 0.0.0.0 gebunden werden.')
+        args.extend(['--publish', f'{bind}:{host_port}:{container_port}/{protocol}'])
+    volume = values.get('volume', '')
+    mount_path = values.get('mount_path', '')
+    if volume or mount_path:
+        if not isinstance(volume, str) or not RESOURCE_NAME.fullmatch(volume):
+            raise ValueError('Ungueltiger benannter Docker-Datenspeicher.')
+        if not isinstance(mount_path, str) or not re.fullmatch(r'/[A-Za-z0-9._/-]{1,180}', mount_path) or \
+                '..' in pathlib.PurePosixPath(mount_path).parts or mount_path == '/':
+            raise ValueError('Ungueltiger Zielpfad fuer den benannten Datenspeicher.')
+        args.extend(['--mount', 'type=volume,source=' + volume + ',target=' + mount_path])
+    args.append(image)
+    raw = command(args, timeout=180)
+    container_id = raw.decode('utf-8', 'replace').strip()
+    if not CONTAINER_ID.fullmatch(container_id):
+        raise ValueError('Docker hat keine gueltige Container-ID zurueckgegeben.')
+    return {'ok': True, 'message': 'Container erstellt und gestartet.', 'container': container_id}
+
+
+def container_action(operation, container_id, values=None):
+    container = resolve_container(container_id)
+    if operation in ('container-start', 'container-stop', 'container-restart'):
+        verb = operation.split('-', 1)[1]
+        command([verb, container['id']], timeout=45)
+        return {'ok': True, 'message': 'Container-Aktion ausgefuehrt.', 'container': container['id']}
+    if operation == 'container-remove':
+        if container['running']:
+            raise ValueError('Laufende Container zuerst stoppen. Volumes werden nicht geloescht.')
+        command(['rm', container['id']], timeout=30)
+        return {'ok': True, 'message': 'Container entfernt; Volumes und Images bleiben erhalten.',
+                'container': container['id'], 'volumes_preserved': True, 'images_preserved': True}
+    if operation == 'container-update':
+        return update_container(container, values or {})
+    if operation == 'container-logs':
+        raw = command(['logs', '--tail', '100', '--timestamps', container['id']], timeout=12)
+        return {'ok': True, 'container': container['id'],
+                'logs': raw[-MAX_LOG_BYTES:].decode('utf-8', 'replace')}
+    raise ValueError('Ungueltige Container-Aktion.')
+
+
+def audit(operation, resource, success):
+    ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    safe_operation = re.sub(r'[^A-Za-z0-9_.:-]', '', str(operation))[:40]
+    safe_resource = re.sub(r'[^A-Za-z0-9_.:-]', '', str(resource))[:80]
+    detail = 'Docker ' + safe_operation + ' ' + safe_resource + (' erfolgreich.' if success else ' fehlgeschlagen.')
+    item = {'id': uuid.uuid4().hex,
+            'time': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'),
+            'type': 'operator', 'severity': 'info' if success else 'warning',
+            'domain': '', 'path': '', 'detail': detail[:180]}
+    line = (json.dumps(item, ensure_ascii=False, separators=(',', ':')) + '\n').encode('utf-8')
+    lock = os.open(str(AUDIT_LOCK), os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        lock_info = os.fstat(lock)
+        if (not stat.S_ISREG(lock_info.st_mode) or lock_info.st_uid != 0 or lock_info.st_nlink != 1 or
+                lock_info.st_mode & 0o077):
+            raise ValueError('Docker-Audit-Sperrdatei hat unsichere Dateirechte.')
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            info = AUDIT_FILE.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o077:
+                raise ValueError('Docker-Audit-Protokoll hat unsichere Dateirechte.')
+            if info.st_size > 2 * 1024 * 1024:
+                os.replace(str(AUDIT_FILE), str(ROOT / 'incidents.previous.jsonl'))
+        except FileNotFoundError:
+            pass
+        fd = os.open(str(AUDIT_FILE), os.O_WRONLY | os.O_APPEND | os.O_CREAT |
+                     getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        with os.fdopen(fd, 'ab') as stream:
+            stream.write(line)
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        os.close(lock)
+
+
+def audit_success(operation, resource):
+    try:
+        audit(operation, resource, True)
+    except (OSError, ValueError, TypeError) as exc:
+        raise RuntimeError('Docker-Aktion kann ausgefuehrt worden sein, aber das Audit-Protokoll ist fehlgeschlagen: ' +
+                           str(exc)[:160])
+
+
+def main(argv):
+    if not argv:
+        return respond({'ok': False, 'error': 'Aktion fehlt.'}, 1)
+    operation = argv[0]
+    resource = argv[1] if len(argv) > 1 else ''
+    try:
+        if argv == ['status']:
+            return respond(docker_status())
+        if len(argv) == 3 and operation == 'compose-file':
+            if not argv[2].isdigit() or len(argv[2]) > 2:
+                raise ValueError('Ungueltiger Compose-Dateiindex.')
+            return respond(compose_file(argv[1], int(argv[2])))
+        if len(argv) == 2 and operation == 'compose-create':
+            content = sys.stdin.buffer.read(MAX_COMPOSE_BYTES + 1)
+            if len(content) > MAX_COMPOSE_BYTES:
+                raise ValueError('Compose-Konfiguration ueberschreitet 512 KiB.')
+            result = validate_create_yaml(argv[1], content)
+            audit_success(operation, argv[1])
+            return respond(result)
+        if len(argv) == 3 and operation == 'compose-recover':
+            result = recover_compose(argv[1], argv[2])
+            audit_success(operation, argv[1])
+            return respond(result)
+        if len(argv) == 4 and operation in ('compose-validate', 'compose-save'):
+            project = resolve_project(argv[1])
+            if not argv[2].isdigit() or len(argv[2]) > 2 or not SHA256.fullmatch(argv[3]):
+                raise ValueError('Compose-Dateiindex oder Versionspruefsumme ungueltig.')
+            index = int(argv[2])
+            content = sys.stdin.buffer.read(MAX_COMPOSE_BYTES + 1)
+            if len(content) > MAX_COMPOSE_BYTES:
+                raise ValueError('Compose-Konfiguration ueberschreitet 512 KiB.')
+            path = validate_yaml(project, index, content)
+            current = read_compose(path)
+            current_sha = hashlib.sha256(current).hexdigest()
+            if current_sha != argv[3]:
+                raise ValueError('Compose-Datei wurde zwischenzeitlich geaendert. Bitte neu laden.')
+            if operation == 'compose-validate':
+                return respond({'ok': True, 'message': 'Compose-Konfiguration ist syntaktisch gueltig.',
+                                'sha256': current_sha})
+            backup = backup_compose(argv[1], path, current)
+            atomic_compose_write(path, content)
+            audit_success(operation, argv[1])
+            return respond({'ok': True, 'message': 'Compose-Datei gesichert und gespeichert; noch nicht angewendet.',
+                            'backup': backup['id'], 'sha256': hashlib.sha256(content).hexdigest()})
+        if len(argv) == 5 and operation == 'compose-restore':
+            project = resolve_project(argv[1])
+            if not argv[2].isdigit() or len(argv[2]) > 2 or not SHA256.fullmatch(argv[3]):
+                raise ValueError('Compose-Dateiindex oder Versionspruefsumme ungueltig.')
+            index = int(argv[2])
+            path = resolve_project_file(project, index)
+            current = read_compose(path)
+            if hashlib.sha256(current).hexdigest() != argv[3]:
+                raise ValueError('Compose-Datei wurde zwischenzeitlich geaendert. Bitte neu laden.')
+            backup_id = argv[4]
+            content = read_backup(argv[1], backup_id, path)
+            validate_yaml(project, index, content)
+            backup_compose(argv[1], path, current)
+            atomic_compose_write(path, content)
+            audit_success(operation, argv[1])
+            return respond({'ok': True, 'message': 'Compose-Backup wiederhergestellt; noch nicht angewendet.',
+                            'sha256': hashlib.sha256(content).hexdigest()})
+        if len(argv) == 2 and operation.startswith('compose-') and operation in (
+                'compose-up', 'compose-stop', 'compose-restart', 'compose-down', 'compose-delete'):
+            result = perform_compose(operation, argv[1])
+            audit_success(operation, argv[1])
+            return respond(result)
+        if len(argv) == 12 and operation == 'container-create':
+            name, image, memory, cpus, restart = argv[1:6]
+            values = {'name': name, 'image': image, 'memory_mib': int(memory), 'cpus': cpus,
+                      'restart': restart}
+            bind, host_port, container_port, protocol, volume, mount_path = argv[6:]
+            values.update({'bind': '' if bind == '-' else bind,
+                           'host_port': '' if host_port == '-' else host_port,
+                           'container_port': '' if container_port == '-' else container_port,
+                           'protocol': protocol,
+                           'volume': '' if volume == '-' else volume,
+                           'mount_path': '' if mount_path == '-' else mount_path})
+            result = create_container(values)
+            audit_success(operation, name)
+            return respond(result)
+        if len(argv) == 3 and operation.startswith('container-') and operation in (
+                'container-start', 'container-stop', 'container-restart',
+                'container-remove', 'container-logs'):
+            result = container_action(operation, argv[1])
+            if operation != 'container-logs':
+                audit_success(operation, result.get('container', argv[1]))
+            return respond(result)
+        if len(argv) == 5 and operation == 'container-update':
+            container = resolve_container(argv[1])
+            values = {}
+            if argv[2] != '-':
+                values['memory_mib'] = int(argv[2])
+            if argv[3] != '-':
+                values['cpus'] = argv[3]
+            if argv[4] != '-':
+                values['restart'] = argv[4]
+            result = update_container(container, values)
+            audit_success(operation, container['id'])
+            return respond(result)
+        raise ValueError('Ungueltige Docker-Aktion.')
+    except (ValueError, OSError, subprocess.SubprocessError, TypeError,
+            json.JSONDecodeError, RuntimeError) as exc:
+        if operation != 'status':
+            try:
+                audit(operation, resource, False)
+            except (OSError, ValueError, TypeError) as audit_error:
+                return respond({'ok': False, 'error': (str(exc) + ' Audit-Protokoll ebenfalls fehlgeschlagen: ' +
+                                 str(audit_error))[:350]}, 1)
+        return respond({'ok': False, 'error': str(exc)[:350]}, 1)
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

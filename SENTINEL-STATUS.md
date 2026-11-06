@@ -1,4 +1,4 @@
-# Sentinel Security: Liefer- und Pruefstatus 0.28.50
+# Sentinel Security: Liefer- und Pruefstatus 0.28.51
 
 Stand: 6. November 2026. Dieses Paket ist ein Entwicklungsstand der vorhandenen
 Plesk-Erweiterung `guardian-lite`. Der gesamte Entwicklungsauftrag mit zwoelf
@@ -13,7 +13,35 @@ Die Erweiterung nutzt weiterhin denselben Plesk-Controller, dieselbe Extension-I
 dieselben Datenverzeichnisse sowie die vorhandenen React-/TypeScript- und
 serverseitigen Ansichten. Dieses Update fuehrt keine Datenmigration durch.
 
-## In 0.28.49 ergaenzt
+## In 0.28.51 ergaenzt
+
+- Neuer Docker-Menuepunkt mit Serverinventar fuer bis zu 100 Container und
+  Docker-Compose-Projekte. Docker/Compose werden nur gelesen, wenn die CLI,
+  Daemon und Compose v2 verfuegbar sind; Guardian installiert/aktiviert Docker
+  nicht.
+- Container koennen gestartet, gestoppt, neu gestartet, geloggt und hinsichtlich
+  CPU, RAM und Neustartregel angepasst werden. Neue Standalone-Container
+  unterstuetzen ein Image, Ressourcenlimits, eine Portbindung und optionale
+  benannte Volumes; Host-Verzeichnisse, Docker-Socket und privilegierte
+  Optionen sind fuer diese Funktion nicht freigegeben.
+- Compose-Dateien root-eigener Projekte in root-verwalteten Verzeichnissen
+  lassen sich bearbeiten, mit Compose validieren, vor Aenderungen sichern und
+  aus Backups wiederherstellen. Speichern startet keine Dienste; `up` ist eine
+  separate bestaetigungspflichtige Aktion. Compose-YAML kann dennoch
+  Hostrechte vermitteln und muss vor dem Anwenden geprueft werden.
+- Container-Loeschen erfordert einen gestoppten Container und behaelt Images
+  sowie Volumes. Compose-Down entfernt Container/Netze, aber keine Volumes oder
+  Images. Nur von Sentinel erstellte Compose-Projekte koennen auch mit ihrer
+  YAML-Datei geloescht werden; ein root-privates Backup bleibt erhalten.
+- Aenderungen sind Plesk-Admin-/CSRF-geschuetzt und laufen ueber einen festen
+  argumentbasierten Helper. Es gibt keinen `docker exec`-Endpunkt. Aktionen
+  werden ohne Konfigurationsinhalte, Umgebungsvariablen oder Zugangsdaten in
+  einem begrenzten root-privaten Docker-Audit protokolliert.
+- TypeScript-/Produktionsbuild, gezielte Docker-Helper-Tests, PHP-Smokes und
+  Release-Paketpruefung bestanden. Docker-Livebetrieb sowie Update/Installation
+  auf dem Plesk-Server wurden nicht getestet.
+
+## In 0.28.50 ergaenzt
 
 - Der Port-Tab zeigt jetzt alle von Plesk gelieferten Datensaetze mit Portangaben
   read-only, einschliesslich Plesk-Standarddiensten und benutzerdefinierten
@@ -213,9 +241,9 @@ Die bestehenden Teilfunktionen bleiben erhalten. Offen bleiben insbesondere:
    `/var/lib/guardian-lite/` sichern. Das Entwicklungs-ZIP nicht als bereits
    produktionsgeprueft behandeln.
 2. Die SHA-256-Datei zusammen mit dem ZIP auf den Testserver uebertragen und dort
-   mit `sha256sum -c guardian-lite-0.28.50.zip.sha256` pruefen.
-3. Neuinstallation: `plesk bin extension -i /root/guardian-lite-0.28.50.zip`.
-   Update: `plesk bin extension -g /root/guardian-lite-0.28.50.zip`.
+   mit `sha256sum -c guardian-lite-0.28.51.zip.sha256` pruefen.
+3. Neuinstallation: `plesk bin extension -i /root/guardian-lite-0.28.51.zip`.
+   Update: `plesk bin extension -g /root/guardian-lite-0.28.51.zip`.
 4. Als direkt angemeldeter Plesk-Administrator oeffnen, Diagnose ausfuehren und
    vorhandene Routen, Einstellungen, Scans und Wiederherstellungsdaten pruefen.
 5. Firewall-Apply/Confirm/Rollback ausschliesslich auf einem isolierten

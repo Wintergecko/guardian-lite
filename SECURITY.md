@@ -1,4 +1,13 @@
-# Guardian Lite v0.28.50 – Sicherheitsmodell und Grenzen
+# Guardian Lite v0.28.51 – Sicherheitsmodell und Grenzen
+
+## Docker-Verwaltung
+
+- Docker-CLI-Aufrufe laufen in einem separaten, festen Helper ohne Shell. HTTP-Aktionen sind auf direkte Plesk-Administratoren mit Session-CSRF-Token begrenzt.
+- Standalone-Container erlauben keine Host-Verzeichnis- oder Docker-Socket-Mounts, privilegierten Modus oder `exec`; beim Anlegen sind nur benannte Volumes und explizite Portbindungen moeglich.
+- Compose-Dateien sind ausfuehrbare Infrastrukturdefinitionen und koennen Hostzugriff oder Root-Rechte vermitteln. Bearbeitung ist auf root-eigene Dateien in root-verwalteten, nicht gruppen-/weltbeschreibbaren Verzeichnissen beschraenkt; YAML wird vor dem Speichern mit Docker Compose validiert, vorher gesichert und erst durch eine separate, bestaetigungspflichtige Aktion angewendet.
+- Compose-Stack-Loeschung verwendet kein `--volumes`; Images und Volumes werden nicht geloescht. Sentinel-eigene Projekt-YAML wird vor dem Entfernen archiviert und kann ueber die Oberflaeche wiederhergestellt werden. Backups liegen root-privat unter `/var/lib/guardian-lite/docker-compose-backups`.
+- Die breite Wirkung des Docker-Daemons ist nicht sandboxed: Ein Plesk-Administrator, der eine Compose-Datei oder ein Image ausfuehrt, kann weiterhin Hostrechte vergeben. Vor `up` die gesamte Konfiguration und Imagequelle pruefen.
+- Docker-/Compose-Liveverhalten wurde nicht auf einem Plesk-Produktionssystem verifiziert; Docker wird weder installiert noch beim Extension-Update aktiviert.
 
 ## 0.28.33 – Fail2Ban-Jail-Konfiguration
 

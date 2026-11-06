@@ -1,8 +1,8 @@
-# Guardian Lite 0.28.46 – Schutzverwaltung und Plesk-Praxistest
+# Guardian Lite 0.28.51 – Schutzverwaltung und Plesk-Praxistest
 
 ## Navigation
 
-Die Guardian-Oberflaeche ist an ein Dashboard mit Hauptbereichen angelehnt. **Dashboard**, **Malware Scanner**, **Incidents**, **Firewall**, **Webschutz & PHP** und **Verwaltung** enthalten nur Guardian-Funktionen. Jeder Unterpunkt zeigt eine eigene Modulansicht; Scanstart und letzter Bericht sind getrennt. Webschutz, PHP-Runtime und Reputation sind in Guardian Teil-/Manuell-Integrationen, kein vollstaendiger Funktionsumfang vergleichbarer Komplettloesungen.
+Die Guardian-Oberflaeche ist an ein Dashboard mit Hauptbereichen angelehnt. **Dashboard**, **Malware Scanner**, **Incidents**, **Firewall**, **Webschutz & PHP**, **Docker** und **Verwaltung** enthalten Guardian-Funktionen. Jeder Unterpunkt zeigt eine eigene Modulansicht; Scanstart und letzter Bericht sind getrennt. Webschutz, PHP-Runtime und Reputation sind in Guardian Teil-/Manuell-Integrationen, kein vollstaendiger Funktionsumfang vergleichbarer Komplettloesungen.
 
 ## Voraussetzungen und Reichweite
 
@@ -14,12 +14,40 @@ Es muessen nur die Komponenten fuer Funktionen installiert werden, die du verwen
 
 | Funktion | Benoetigt |
 |---|---|
+| Docker-Verwaltung | Vorhandene Docker CLI und laufender Docker-Daemon; fuer Compose-Projekte Docker Compose v2 (`docker compose`). Guardian installiert oder aktiviert Docker nicht. Root-eigene Compose-Dateien lassen sich erst bearbeiten, wenn auch ihre Elternverzeichnisse root-eigen und nicht gruppen-/weltbeschreibbar sind. |
 | Scans, Historie, Quarantaene, Baselines/Reparatur | ClamAV `clamscan` und aktuelle Signaturen, z. B. unter Debian/Ubuntu `apt install clamav clamav-freshclam`; Signaturen mit `freshclam` aktualisieren. |
 | Fail2Ban-Anzeige und IP-Aktionen | Fail2Ban (`fail2ban-client`) und mindestens ein konfiguriertes Jail. Guardian erstellt keine Jails. |
 | CrowdSec-Entscheidungen | Optional CrowdSec (MIT) mit laufendem lokalen Dienst und lesbarem `cscli`; Guardian liest maximal 50 aktive Entscheidungen. Keine Installation/Registrierung, Community-Listen oder Bouncer durch Guardian. Einzelne IP-`ban`-Entscheidungen lassen sich in den Plesk-Bestaetigungsablauf uebernehmen. |
 | E-Mail-Warnungen | Lokaler Sendmail-kompatibler Mailtransport oder in Plesk funktionierender Mailtransport. |
 
 Fehlgeschlagene Malware-Warnungen werden bis zu 100 Eintraege root-privat gespeichert und beim stuendlichen Plesk-Task mit wachsendem Abstand bis zu sechs Mal erneut uebergeben. Der Administrator kann den Versuch manuell starten. Plesk zeigt Warteschlangenstand und letzten Transportfehler; eine erfolgreiche lokale Annahme belegt nicht die Zustellung zum Empfaenger.
+
+### Docker-Umgebungen
+
+Der Docker-Menuepunkt zeigt bis zu 100 vorhandene Container und Compose-Projekte.
+Containeraktionen umfassen Start/Stop/Neustart, bis zu 100 Logzeilen, CPU-/RAM-
+und Neustartlimit-Aenderungen sowie das Loeschen gestoppter Container. Das
+Anlegen einzelner Container erlaubt nur benannte Volumes und explizite
+Portbindungen; lokale Bindung auf `127.0.0.1` ist voreingestellt. Hostpfade,
+Socket-Mounts, `exec` und privilegierte Optionen sind keine Standalone-UI-Aktionen.
+
+Compose-Projekte koennen gestartet, gestoppt, neu gestartet oder entfernt
+werden. Compose-Dateien koennen nur bearbeitet werden, wenn sie root-eigen
+sind und alle Elternverzeichnisse root-eigen sowie nicht gruppen-/weltbeschreibbar
+sind. Die Oberflaeche validiert die YAML-Datei mit `docker compose config`,
+erstellt vor jedem Speichern/Wiederherstellen eine root-private Sicherung und
+wendet sie nicht automatisch an. Das getrennte `up` kann beliebige Compose-
+Funktionen ausfuehren, einschliesslich Host-Mounts, Capabilities und
+privilegierten Containern: vor dem Anwenden die vollstaendige Datei und
+Imagequellen pruefen. Diese Funktion ist daher nur fuer vertrauenswuerdige
+Plesk-Administratoren bestimmt.
+
+Container- und Compose-Loeschaktionen loeschen keine Images oder Volumes.
+Compose-Down entfernt Stack-Container und generierte Netze; Sentinel-eigene
+Projektdefinitionen koennen separat geloescht werden, nachdem ihr Compose-Down
+erfolgreich war. Die YAML-Datei wird vorher gesichert und kann ueber das
+angezeigte Backup wiederhergestellt werden. Es gibt keine
+automatische Docker-Installation, Imagebereinigung oder Volumeloeschung.
 | Dateiwache | Linux `inotify` (Kernel-Schnittstelle); kein zusaetzliches PHP-Modul. |
 | Plesk-Firewall-Status | Optionale Plesk-Erweiterung **Firewall**. Die Installation allein aktiviert keine Regeln. Die Erweiterung ist keine Voraussetzung fuer andere Guardian-Funktionen. |
 | Plesk-Firewall-Regeln | Plesk Firewall muss installiert und aktiv sein; Plesk-CLI `plesk ext firewall` und der dazugehoerige Dienst muessen funktionieren. `firewalld` darf laut Plesk nicht parallel betrieben werden. |

@@ -154,6 +154,35 @@
 .sentinel-pagination > div { display: flex; gap: 8px; }
 .sentinel-pagination button { min-height: 34px; padding: 6px 11px; color: #d7e2f0; background: #17243a; border: 1px solid #3a4b64; border-radius: 7px; cursor: pointer; }
 .sentinel-pagination button:disabled { opacity: .5; cursor: not-allowed; }
+.sentinel-docker-version { color: #91a3bb; font-size: 12px; }
+.sentinel-docker-actions, .sentinel-docker-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.sentinel-docker button { min-height: 34px; padding: 6px 10px; color: #d7e2f0; background: #17243a; border: 1px solid #3a4b64; border-radius: 7px; font: inherit; cursor: pointer; }
+.sentinel-docker button:disabled { opacity: .5; cursor: not-allowed; }
+.sentinel-docker-section { margin-top: 22px; }
+.sentinel-docker-section > h2 { color: #f8fafc; font-size: 17px; }
+.sentinel-docker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.sentinel-docker-card, .sentinel-docker-dialog { min-width: 0; padding: 14px; color: #d7e2f0; background: #111c2f; border: 1px solid #2a3a53; border-radius: 10px; }
+.sentinel-docker-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.sentinel-docker-card > header h3, .sentinel-docker-dialog h2 { margin: 0 0 6px; color: #f8fafc; font-size: 15px; }
+.sentinel-docker-card > header span, .sentinel-docker-card > header code { color: #91a3bb; font-size: 11px; }
+.sentinel-docker-card > header .is-running { color: #86efac; }
+.sentinel-docker-card > header .is-stopped { color: #fca5a5; }
+.sentinel-docker-card dl { display: grid; gap: 7px; margin: 14px 0; }
+.sentinel-docker-card dl > div { display: grid; grid-template-columns: minmax(88px, .7fr) minmax(0, 1.3fr); gap: 9px; }
+.sentinel-docker-card dt { color: #91a3bb; font-size: 11px; }
+.sentinel-docker-card dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 12px; }
+.sentinel-docker-card-actions button { min-height: 30px; font-size: 11px; }
+.sentinel-docker-files { padding-left: 18px; }
+.sentinel-docker-files li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.sentinel-docker-files code, .sentinel-docker-dialog code { overflow-wrap: anywhere; }
+.sentinel-docker-inline-form, .sentinel-docker-dialog { display: grid; gap: 10px; margin-top: 14px; }
+.sentinel-docker-inline-form label, .sentinel-docker-dialog label { display: grid; gap: 5px; color: #a9bad0; font-size: 12px; }
+.sentinel-docker input, .sentinel-docker select, .sentinel-docker textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; padding: 7px 9px; color: #e2e8f0; background: #0b1120; border: 1px solid #3a4b64; border-radius: 7px; font: inherit; }
+.sentinel-docker textarea { min-height: 180px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+.sentinel-docker-dialog > div, .sentinel-docker-inline-form > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.sentinel-docker-dialog > p, .sentinel-docker-inline-form > p { margin: 0; color: #91a3bb; font-size: 12px; }
+.sentinel-docker .sentinel-detail-warning { padding: 10px; color: #fcd34d; background: #422006; border: 1px solid #92400e; border-radius: 7px; }
+.sentinel-docker-dialog pre { max-height: 420px; overflow: auto; padding: 12px; color: #d7e2f0; background: #0b1120; border-radius: 7px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sentinel-firewall-status { display: inline-flex; margin: 8px 0 14px; padding: 6px 10px; color: #cbd5e1; background: #101a2b; border: 1px solid #3a4b64; border-radius: 999px; font-size: 12px; }
 .sentinel-firewall-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .sentinel-firewall-kpis article { display: grid; gap: 5px; min-width: 0; padding: 13px; background: var(--sentinel-panel); border: 1px solid #26354d; border-radius: 10px; }
@@ -402,6 +431,25 @@
 .guardian.sentinel-light .sentinel-event-tabs button[aria-selected="true"] { color: #15803d; border-bottom-color: #16a34a; }
 .guardian.sentinel-light .sentinel-pagination { color: #64748b; }
 .guardian.sentinel-light .sentinel-pagination button { color: #334155; background: #f8fafc; border-color: #cbd5e1; }
+.guardian.sentinel-light .sentinel-docker-version,
+.guardian.sentinel-light .sentinel-docker-card > header span,
+.guardian.sentinel-light .sentinel-docker-card > header code,
+.guardian.sentinel-light .sentinel-docker-card dt,
+.guardian.sentinel-light .sentinel-docker-dialog > p,
+.guardian.sentinel-light .sentinel-docker-inline-form label,
+.guardian.sentinel-light .sentinel-docker-dialog label { color: #64748b; }
+.guardian.sentinel-light .sentinel-docker-section > h2,
+.guardian.sentinel-light .sentinel-docker-card > header h3,
+.guardian.sentinel-light .sentinel-docker-dialog h2 { color: #1e293b; }
+.guardian.sentinel-light .sentinel-docker-card,
+.guardian.sentinel-light .sentinel-docker-dialog { color: #334155; background: #f8fafc; border-color: #dbe3ec; }
+.guardian.sentinel-light .sentinel-docker input,
+.guardian.sentinel-light .sentinel-docker select,
+.guardian.sentinel-light .sentinel-docker textarea,
+.guardian.sentinel-light .sentinel-docker-dialog pre { color: #1e293b; background: #fff; border-color: #cbd5e1; }
+.guardian.sentinel-light .sentinel-docker button { color: #334155; background: #f1f5f9; border-color: #cbd5e1; }
+.guardian.sentinel-light .sentinel-docker-card > header .is-running { color: #15803d; }
+.guardian.sentinel-light .sentinel-docker-card > header .is-stopped { color: #b91c1c; }
 .guardian.sentinel-light .sentinel-table-scroll code {
   color: #334155;
 }
@@ -560,6 +608,9 @@
   .guardian .guardian-settings-form:not(.guardian-settings-form-single) > .guardian-setting-field:last-of-type { grid-column: 1 / -1; }
 }
 @media (max-width: 600px) {
+  .sentinel-docker-card dl > div { grid-template-columns: minmax(72px, .7fr) minmax(0, 1.3fr); }
+  .sentinel-docker-dialog { padding: 12px; }
+  .sentinel-docker textarea { min-height: 140px; }
   .guardian .guardian-settings-form { grid-template-columns: minmax(0, 1fr); padding: 14px; }
   .guardian .guardian-settings-form-single,
   .guardian .guardian-settings-diagnostics-form { grid-template-columns: minmax(0, 1fr); }

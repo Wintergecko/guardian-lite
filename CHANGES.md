@@ -1,3 +1,11 @@
+## 0.28.51 – Docker-Verwaltung
+
+- Fuegt einen Docker-Menuepunkt mit Echtzeit-Inventar, Start/Stop/Neustart, Logs und bearbeitbaren CPU-/RAM-/Neustart-Limits hinzu.
+- Ermoeglicht das Erstellen begrenzter Standalone-Container und das Verwalten von Docker-Compose-Projekten einschliesslich YAML-Editor, Syntaxpruefung, Versionsbackups, Wiederherstellung und getrenntem Anwenden.
+- Plesk-Admin-/CSRF-geschuetzte Endpunkte und ein fester Root-Helper verwenden ausschliesslich argumentbasierte Docker-Aufrufe; keine Docker-Exec-, Host-Verzeichnis-Mount- oder privilegierten Containeroptionen beim Standalone-Erstellen.
+- Loeschaktionen entfernen keine Images oder Volumes. Sentinel-Projekte koennen nach bestaetigtem Compose-Down geloescht werden; deren YAML wird vorher gesichert.
+- Docker-CLI, Daemon und Compose v2 bleiben externe Voraussetzungen. Kein Docker-Live-Test und keine Serverinstallation in diesem Release.
+
 ## 0.28.50 – Ereignis-Tabs und Pagination
 
 - Trennt Webschutz-Ereignisse und Guardian-Meldungen/Audit-Log in eigene, zugängliche Tabs mit jeweils eigenem Inhalt.

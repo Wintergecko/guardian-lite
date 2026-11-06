@@ -3,7 +3,7 @@
 class IndexController extends pm_Controller_Action
 {
     protected $_accessLevel = 'admin';
-    private const GUARDIAN_VERSION = '0.28.50';
+    private const GUARDIAN_VERSION = '0.28.51';
     private const LAST_MALWARE_ACTION_KEY = 'guardian_malware_last_action_v1';
     private const DEFAULT_UPDATE_REPO = 'Wintergecko/guardian-lite';
     private const LAST_UPDATE_KEY = 'guardian_update_last_check_v1';
@@ -55,6 +55,20 @@ class IndexController extends pm_Controller_Action
         }
         if (!empty($result['code']) || empty($data['ok'])) {
             throw new RuntimeException(isset($data['error']) ? $data['error'] : 'Guardian-Helfer konnte den Auftrag nicht ausfuehren.');
+        }
+        return $data;
+    }
+
+    private function dockerHelper(array $args, $stdin = '')
+    {
+        if (!is_string($stdin) || strlen($stdin) > 524288) {
+            throw new RuntimeException('Docker-Konfiguration ist zu gross.');
+        }
+        $result = pm_ApiCli::callSbin('guardian-docker', $args, pm_ApiCli::RESULT_FULL, [], $stdin);
+        $data = json_decode(isset($result['stdout']) ? $result['stdout'] : '', true);
+        if (!is_array($data) || !empty($result['code']) || empty($data['ok'])) {
+            throw new RuntimeException(is_array($data) && isset($data['error'])
+                ? (string)$data['error'] : 'Docker-Verwaltung nicht erreichbar.');
         }
         return $data;
     }
@@ -600,6 +614,178 @@ class IndexController extends pm_Controller_Action
             ->setHeader('Cache-Control', 'no-store', true)
             ->setHeader('X-Content-Type-Options', 'nosniff', true)
             ->setBody($body);
+    }
+
+    private function sendDockerJson(array $data, $status = 200)
+    {
+        $body = json_encode($data, JSON_INVALID_UTF8_SUBSTITUTE);
+        if (!is_string($body) || strlen($body) > 3000000) {
+            throw new RuntimeException('Docker-Antwort ungueltig oder zu gross.');
+        }
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+        $response = $this->getResponse();
+        if ($status !== 200) {
+            $response->setHttpResponseCode($status);
+        }
+        $response->setHeader('Content-Type', 'application/json; charset=UTF-8', true)
+            ->setHeader('Cache-Control', 'no-store', true)
+            ->setHeader('X-Content-Type-Options', 'nosniff', true)
+            ->setBody($body);
+    }
+
+    public function dockerStatusAction()
+    {
+        try {
+            if (!$this->getRequest()->isGet()) {
+                throw new pm_Exception('GET erforderlich.');
+            }
+            $this->sendDockerJson($this->dockerHelper(['status']));
+        } catch (Exception $e) {
+            $this->sendDockerJson(['ok' => false, 'error' => substr($e->getMessage(), 0, 350)], 400);
+        }
+    }
+
+    public function dockerFileAction()
+    {
+        try {
+            if (!$this->getRequest()->isGet()) {
+                throw new pm_Exception('GET erforderlich.');
+            }
+            $project = $this->getRequest()->getQuery('project', '');
+            $index = $this->getRequest()->getQuery('index', '');
+            if (!is_string($project) || !is_string($index)) {
+                throw new pm_Exception('Ungueltige Docker-Eingabe.');
+            }
+            if (!preg_match('/^[a-z0-9][a-z0-9_-]{0,62}$/D', $project) ||
+                !preg_match('/^\d{1,2}$/D', $index)) {
+                throw new pm_Exception('Ungueltiges Docker-Compose-Projekt oder Datei.');
+            }
+            $this->sendDockerJson($this->dockerHelper(['compose-file', $project, $index]));
+        } catch (Exception $e) {
+            $this->sendDockerJson(['ok' => false, 'error' => substr($e->getMessage(), 0, 350)], 400);
+        }
+    }
+
+    public function dockerManageAction()
+    {
+        try {
+            $this->verifyPost();
+            $post = $this->getRequest();
+            $readPost = static function ($key, $default = '', $maximum = 254) use ($post) {
+                $value = $post->getPost($key, $default);
+                if (!is_string($value) || strlen($value) > $maximum) {
+                    throw new pm_Exception('Ungueltige Docker-Eingabe.');
+                }
+                return $value;
+            };
+            $operation = $readPost('operation', '', 40);
+            $project = $readPost('project');
+            $container = $readPost('container', '', 64);
+            $args = [];
+            $stdin = '';
+            if ($operation === 'compose-recover') {
+                $backup = $readPost('backup', '', 32);
+                if (!preg_match('/^[a-z0-9][a-z0-9_-]{0,62}$/D', $project) ||
+                    !preg_match('/^[a-f0-9]{32}$/D', $backup)) {
+                    throw new pm_Exception('Ungueltiger Compose-Backupverweis.');
+                }
+                $args = ['compose-recover', $project, $backup];
+            } elseif (in_array($operation, ['compose-up', 'compose-stop', 'compose-restart', 'compose-down', 'compose-delete'], true)) {
+                if (!preg_match('/^[a-z0-9][a-z0-9_-]{0,62}$/D', $project)) {
+                    throw new pm_Exception('Ungueltiger Compose-Projektname.');
+                }
+                $args = [$operation, $project];
+            } elseif (in_array($operation, ['container-start', 'container-stop', 'container-restart',
+                'container-remove', 'container-logs'], true)) {
+                if (!preg_match('/^[a-f0-9]{12,64}$/D', $container)) {
+                    throw new pm_Exception('Ungueltige Container-ID.');
+                }
+                $args = [$operation, $container];
+            } elseif ($operation === 'container-update') {
+                if (!preg_match('/^[a-f0-9]{12,64}$/D', $container)) {
+                    throw new pm_Exception('Ungueltige Container-ID.');
+                }
+                $memory = $readPost('memory_mib', '', 5);
+                $cpus = $readPost('cpus', '', 5);
+                $restart = $readPost('restart', '', 20);
+                if (($memory !== '' && !preg_match('/^\d{1,5}$/D', $memory)) ||
+                    ($cpus !== '' && !preg_match('/^\d{1,2}(?:\.\d{1,2})?$/D', $cpus)) ||
+                    ($restart !== '' && !in_array($restart, ['no', 'always', 'unless-stopped', 'on-failure'], true))) {
+                    throw new pm_Exception('Ungueltige Container-Einstellungen.');
+                }
+                $args = ['container-update', $container, $memory === '' ? '-' : $memory,
+                    $cpus === '' ? '-' : $cpus, $restart === '' ? '-' : $restart];
+            } elseif ($operation === 'container-create') {
+                $name = $readPost('name');
+                $image = $readPost('image', '', 255);
+                $memory = $readPost('memory_mib', '', 5);
+                $cpus = $readPost('cpus', '', 5);
+                $restart = $readPost('restart', 'unless-stopped', 20);
+                $bind = $readPost('bind', '127.0.0.1', 15);
+                $hostPort = $readPost('host_port', '', 5);
+                $containerPort = $readPost('container_port', '', 5);
+                $protocol = $readPost('protocol', 'tcp', 3);
+                $volume = $readPost('volume', '', 63);
+                $mountPath = $readPost('mount_path', '', 181);
+                if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/D', $name) ||
+                    !preg_match('/^[A-Za-z0-9][A-Za-z0-9._:\/@+-]{0,254}$/D', $image) ||
+                    !preg_match('/^\d{1,5}$/D', $memory) ||
+                    !preg_match('/^\d{1,2}(?:\.\d{1,2})?$/D', $cpus) ||
+                    !in_array($restart, ['no', 'always', 'unless-stopped', 'on-failure'], true) ||
+                    !in_array($bind, ['127.0.0.1', '0.0.0.0'], true) ||
+                    ($hostPort !== '' && !preg_match('/^\d{1,5}$/D', $hostPort)) ||
+                    ($containerPort !== '' && !preg_match('/^\d{1,5}$/D', $containerPort)) ||
+                    !in_array($protocol, ['tcp', 'udp'], true) ||
+                    ($volume !== '' && !preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/D', $volume)) ||
+                    ($mountPath !== '' && (!preg_match('#^/[A-Za-z0-9._/-]{1,180}$#D', $mountPath) ||
+                        strpos($mountPath, '..') !== false || $mountPath === '/'))) {
+                    throw new pm_Exception('Ungueltige Angaben zum neuen Container.');
+                }
+                $args = ['container-create', $name, $image, $memory, $cpus, $restart, $bind,
+                    $hostPort === '' ? '-' : $hostPort, $containerPort === '' ? '-' : $containerPort,
+                    $protocol, $volume === '' ? '-' : $volume, $mountPath === '' ? '-' : $mountPath];
+            } elseif (in_array($operation, ['compose-validate', 'compose-save', 'compose-create', 'compose-restore'], true)) {
+                if ($operation === 'compose-create') {
+                    $yaml = $readPost('yaml', '', 524288);
+                    if ($yaml === '') {
+                        throw new pm_Exception('Compose-YAML muss zwischen 1 Byte und 512 KiB gross sein.');
+                    }
+                    $stdin = $yaml;
+                    if (!preg_match('/^[a-z0-9][a-z0-9_-]{0,62}$/D', $project)) {
+                        throw new pm_Exception('Ungueltiger neuer Compose-Projektname.');
+                    }
+                    $args = ['compose-create', $project];
+                } else {
+                    $index = $readPost('index', '', 2);
+                    $sha256 = $readPost('sha256', '', 64);
+                    if (!preg_match('/^[a-z0-9][a-z0-9_-]{0,62}$/D', $project) ||
+                        !preg_match('/^\d{1,2}$/D', $index) ||
+                        !preg_match('/^[a-f0-9]{64}$/D', $sha256)) {
+                        throw new pm_Exception('Ungueltiger Compose-Projektverweis.');
+                    }
+                    if ($operation === 'compose-restore') {
+                        $backup = $readPost('backup', '', 32);
+                        if (!preg_match('/^[a-f0-9]{32}$/D', $backup)) {
+                            throw new pm_Exception('Ungueltiger Compose-Backupverweis.');
+                        }
+                        $args = ['compose-restore', $project, $index, $sha256, $backup];
+                    } else {
+                        $yaml = $readPost('yaml', '', 524288);
+                        if ($yaml === '') {
+                            throw new pm_Exception('Compose-YAML muss zwischen 1 Byte und 512 KiB gross sein.');
+                        }
+                        $stdin = $yaml;
+                        $args = [$operation, $project, $index, $sha256];
+                    }
+                }
+            } else {
+                throw new pm_Exception('Unbekannte Docker-Aktion.');
+            }
+            $this->sendDockerJson($this->dockerHelper($args, $stdin));
+        } catch (Exception $e) {
+            $this->sendDockerJson(['ok' => false, 'error' => substr($e->getMessage(), 0, 350)], 400);
+        }
     }
 
     public function fail2banSetAction()

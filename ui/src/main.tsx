@@ -48,6 +48,49 @@ type Incident = {
   detail: string;
 };
 
+type DockerContainer = {
+  id: string;
+  short_id: string;
+  name: string;
+  image: string;
+  status: string;
+  state: string;
+  ports: string;
+  running: boolean;
+  memory_mib: number;
+  cpus: number;
+  restart: string;
+  compose_project: string;
+};
+
+type DockerProject = {
+  name: string;
+  status: string;
+  files: string[];
+  managed: boolean;
+  deleted: boolean;
+  backup_id: string;
+};
+
+type DockerStatus = {
+  available: boolean;
+  error: string;
+  version: string;
+  compose_available: boolean;
+  container_inventory_limited: boolean;
+  containers: DockerContainer[];
+  projects: DockerProject[];
+};
+
+type ComposeFile = {
+  project: string;
+  index: number;
+  path: string;
+  content: string;
+  sha256: string;
+  backups: { id: string; created: number }[];
+};
+
 function normalizeSeverity(value: string): string {
   const severity = value.trim().toLowerCase();
   if (['emergency', 'alert', 'critical', 'crit'].includes(severity)) return 'critical';
@@ -227,6 +270,432 @@ function PleskFirewallModule({ firewall, language }: { firewall: FirewallStatus;
   );
 }
 
+function DockerModule({ language, statusUrl, fileUrl, manageUrl, csrf }: {
+  language: 'de' | 'en';
+  statusUrl: string;
+  fileUrl: string;
+  manageUrl: string;
+  csrf: string;
+}) {
+  const [status, setStatus] = useState<DockerStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [editor, setEditor] = useState<ComposeFile | null>(null);
+  const [logs, setLogs] = useState<{ name: string; content: string } | null>(null);
+  const [editingContainer, setEditingContainer] = useState<DockerContainer | null>(null);
+  const [creatingCompose, setCreatingCompose] = useState(false);
+  const isGerman = language === 'de';
+  const labels = isGerman
+    ? {
+      description: 'Docker-Container und Compose-Umgebungen verwalten. Änderungen laufen über die fest begrenzte, Plesk-geschützte Docker-Schnittstelle.',
+      refresh: 'Aktualisieren', dockerMissing: 'Docker-Daemon oder CLI ist nicht verfügbar.',
+      containers: 'Container', projects: 'Compose-Projekte', emptyContainers: 'Keine Container gefunden.',
+      limited: 'Anzeige auf die ersten 100 Container begrenzt.',
+      emptyProjects: 'Keine Compose-Projekte gefunden.', name: 'Name', image: 'Image', state: 'Status',
+      ports: 'Ports', resources: 'Ressourcen', restart: 'Neustartregel', memory: 'RAM-Limit (MiB)',
+      cpus: 'CPU-Limit', apply: 'Einstellungen speichern', cancel: 'Abbrechen',
+      start: 'Starten', stop: 'Stoppen', restartAction: 'Neustarten', remove: 'Löschen',
+      logsAction: 'Logs', edit: 'Bearbeiten', noLimit: 'unbegrenzt', editTitle: 'Container-Einstellungen',
+      removeContainerConfirm: 'Container wirklich löschen? Der Container muss gestoppt sein. Zugehörige Volumes und Images bleiben erhalten.',
+      stopConfirm: 'Container stoppen? Der Dienst ist bis zum erneuten Start nicht verfügbar.',
+      restartConfirm: 'Container neu starten? Der Dienst wird kurz unterbrochen.',
+      compose: 'Compose-Konfiguration', editFile: 'YAML bearbeiten', up: 'Anwenden / starten',
+      down: 'Stack entfernen', composeStop: 'Stack stoppen', composeRestart: 'Stack neu starten',
+      deleteProject: 'Projekt löschen',
+      recoverProject: 'Projekt aus Backup wiederherstellen',
+      recoverConfirm: 'Compose-Datei aus dem letzten Lösch-Backup wiederherstellen? Das Projekt wird dabei nicht gestartet.',
+      deletedStatus: 'Gelöscht · Backup vorhanden; nicht gestartet',
+      downConfirm: 'Compose-Stack und erzeugte Netzwerke entfernen? Benannte Volumes und Images bleiben erhalten.',
+      deleteProjectConfirm: 'Sentinel-Compose-Projekt und Stack löschen? Die YAML-Datei wird gesichert; Volumes und Images bleiben erhalten.',
+      upConfirm: 'Compose-Konfiguration ausführen? Sie kann Host-Verzeichnisse einbinden oder privilegierte Container starten. Das kann serverweiten Root-Zugriff ermöglichen.',
+      save: 'Sichern', validate: 'Validieren', restore: 'Backup wiederherstellen',
+      restoreConfirm: 'Compose-Datei aus diesem Backup wiederherstellen? Der aktuelle Stand wird zuvor ebenfalls gesichert.',
+      createContainer: 'Container erstellen', createCompose: 'Compose-Projekt erstellen',
+      newProject: 'Projektname', yaml: 'Compose-YAML', create: 'Erstellen',
+      createConfirm: 'Container-Image herunterladen (falls nötig) und Container erstellen und starten? Ein nicht vertrauenswürdiges Image kann Code im Container ausführen.',
+      publicBind: 'Öffentlich (0.0.0.0)', localBind: 'Nur lokal (127.0.0.1)',
+      bind: 'Portbindung', hostPort: 'Host-Port', containerPort: 'Container-Port',
+      protocol: 'Protokoll', volume: 'Benanntes Volume (optional)', mountPath: 'Zielpfad im Container',
+      createNote: 'Standalone-Container können nur benannte Volumes verwenden; Host-Verzeichnisse sind hier absichtlich nicht freigegeben.',
+      composeNote: 'YAML-Dateien root-eigener Projekte (max. 512 KiB) werden vor dem Speichern validiert und versioniert. Anwenden ist ein separater Schritt.',
+      securityNote: 'Achtung: Compose-YAML ist ausführbare Infrastrukturkonfiguration. Bind-Mounts, privilegierte Container und Images können Zugriff auf den Host ermöglichen. Änderungen nur nach Prüfung anwenden.',
+      notEditable: 'Konfigurationsdatei ist nicht root-verwaltet oder kann nicht sicher bearbeitet werden.',
+      loading: 'Docker-Status wird geladen …', managed: 'Sentinel-Projekt', existing: 'Vorhandenes Projekt',
+      backups: 'Gesicherte Versionen', noBackups: 'Keine Compose-Backups vorhanden.',
+      close: 'Schließen', publicWarning: 'Öffentliche Ports sind direkt aus dem Internet erreichbar, sofern die Host-Firewall dies erlaubt.',
+      statusError: 'Docker-Status konnte nicht geladen werden.', createStackNote: 'Projekt wird zunächst nur gespeichert und nicht gestartet.',
+      unnamed: 'Unbenannt',
+    }
+    : {
+      description: 'Manage Docker containers and Compose environments through the restricted, Plesk-protected Docker interface.',
+      refresh: 'Refresh', dockerMissing: 'Docker daemon or CLI is unavailable.',
+      containers: 'Containers', projects: 'Compose projects', emptyContainers: 'No containers found.',
+      limited: 'Showing the first 100 containers only.',
+      emptyProjects: 'No Compose projects found.', name: 'Name', image: 'Image', state: 'Status',
+      ports: 'Ports', resources: 'Resources', restart: 'Restart policy', memory: 'Memory limit (MiB)',
+      cpus: 'CPU limit', apply: 'Save settings', cancel: 'Cancel',
+      start: 'Start', stop: 'Stop', restartAction: 'Restart', remove: 'Delete',
+      logsAction: 'Logs', edit: 'Edit', noLimit: 'unlimited', editTitle: 'Container settings',
+      removeContainerConfirm: 'Delete this container? It must be stopped. Its volumes and images will be preserved.',
+      stopConfirm: 'Stop this container? Its service will be unavailable until started again.',
+      restartConfirm: 'Restart this container? Its service will be briefly interrupted.',
+      compose: 'Compose configuration', editFile: 'Edit YAML', up: 'Apply / start',
+      down: 'Remove stack', composeStop: 'Stop stack', composeRestart: 'Restart stack',
+      deleteProject: 'Delete project',
+      recoverProject: 'Restore project from backup',
+      recoverConfirm: 'Restore the last deletion backup? The project will not be started.',
+      deletedStatus: 'Deleted · backup available; not running',
+      downConfirm: 'Remove this Compose stack and its generated networks? Named volumes and images will be preserved.',
+      deleteProjectConfirm: 'Delete this Sentinel Compose project and stack? Its YAML file will be backed up; volumes and images will be preserved.',
+      upConfirm: 'Run this Compose configuration? It can mount host directories or start privileged containers, potentially granting host-level root access.',
+      save: 'Save', validate: 'Validate', restore: 'Restore backup',
+      restoreConfirm: 'Restore this Compose backup? The current file will also be backed up first.',
+      createContainer: 'Create container', createCompose: 'Create Compose project',
+      newProject: 'Project name', yaml: 'Compose YAML', create: 'Create',
+      createConfirm: 'Pull the image if needed, then create and start this container? An untrusted image can execute code inside the container.',
+      publicBind: 'Public (0.0.0.0)', localBind: 'Local only (127.0.0.1)',
+      bind: 'Port binding', hostPort: 'Host port', containerPort: 'Container port',
+      protocol: 'Protocol', volume: 'Named volume (optional)', mountPath: 'Container mount path',
+      createNote: 'Standalone containers can use named volumes only; host directory mounts are intentionally unavailable here.',
+      composeNote: 'YAML files for root-owned projects (max 512 KiB) are validated and versioned before saving. Applying is a separate step.',
+      securityNote: 'Warning: Compose YAML is executable infrastructure configuration. Bind mounts, privileged containers, and images may grant host access. Review changes before applying.',
+      notEditable: 'Configuration file is not root-managed or cannot be safely edited.',
+      loading: 'Loading Docker status …', managed: 'Sentinel project', existing: 'Existing project',
+      backups: 'Saved versions', noBackups: 'No Compose backups available.',
+      close: 'Close', publicWarning: 'Public ports are directly reachable from the internet if allowed by the host firewall.',
+      statusError: 'Docker status could not be loaded.', createStackNote: 'The project is saved but not started yet.',
+      unnamed: 'Unnamed',
+    };
+
+  const localUrl = (endpoint: string): URL => {
+    const url = new URL(endpoint, window.location.href);
+    if (url.origin !== window.location.origin) throw new Error('Docker route is not local.');
+    return url;
+  };
+
+  async function loadStatus(): Promise<void> {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(localUrl(statusUrl), {
+        credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
+      });
+      const value: unknown = await response.json();
+      if (!response.ok || !isRecord(value) || value.ok !== true ||
+          typeof value.available !== 'boolean' || typeof value.error !== 'string' ||
+          typeof value.version !== 'string' || typeof value.compose_available !== 'boolean' ||
+          typeof value.container_inventory_limited !== 'boolean' ||
+          !Array.isArray(value.containers) || !Array.isArray(value.projects)) {
+        throw new Error(isRecord(value) && typeof value.error === 'string' ? value.error : labels.statusError);
+      }
+      const containers = value.containers.filter((item): item is DockerContainer =>
+        isRecord(item) && typeof item.id === 'string' && typeof item.short_id === 'string' &&
+        typeof item.name === 'string' && typeof item.image === 'string' && typeof item.status === 'string' &&
+        typeof item.state === 'string' && typeof item.ports === 'string' && typeof item.running === 'boolean' &&
+        isFiniteNumber(item.memory_mib) && isFiniteNumber(item.cpus) && typeof item.restart === 'string' &&
+        typeof item.compose_project === 'string');
+      const projects = value.projects.filter((item): item is DockerProject =>
+        isRecord(item) && typeof item.name === 'string' && typeof item.status === 'string' &&
+        Array.isArray(item.files) && item.files.every((path: unknown) => typeof path === 'string') &&
+        typeof item.managed === 'boolean' && typeof item.deleted === 'boolean' &&
+        typeof item.backup_id === 'string');
+      setStatus({
+        available: value.available, error: value.error, version: value.version,
+        compose_available: value.compose_available, container_inventory_limited: value.container_inventory_limited,
+        containers, projects,
+      });
+    } catch (loadError: unknown) {
+      setError(loadError instanceof Error ? loadError.message : labels.statusError);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function request(operation: string, fields: Record<string, string> = {}): Promise<Record<string, unknown>> {
+    const body = new URLSearchParams({ operation, csrf, ...fields });
+    const response = await fetch(localUrl(manageUrl), {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      body,
+    });
+    const value: unknown = await response.json();
+    if (!response.ok || !isRecord(value) || value.ok !== true) {
+      throw new Error(isRecord(value) && typeof value.error === 'string' ? value.error : `HTTP ${response.status}`);
+    }
+    if (typeof value.message === 'string') setMessage(value.message);
+    return value;
+  }
+
+  async function perform(operation: string, fields: Record<string, string> = {}, confirmText = ''): Promise<boolean> {
+    if (confirmText && !window.confirm(confirmText)) return false;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      await request(operation, fields);
+      await loadStatus();
+      return true;
+    } catch (actionError: unknown) {
+      setError(actionError instanceof Error ? actionError.message : labels.statusError);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openComposeFile(project: string, index: number): Promise<void> {
+    setBusy(true);
+    setError('');
+    try {
+      const url = localUrl(fileUrl);
+      url.searchParams.set('project', project);
+      url.searchParams.set('index', String(index));
+      const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept: 'application/json' } });
+      const value: unknown = await response.json();
+      if (!response.ok || !isRecord(value) || value.ok !== true ||
+          typeof value.project !== 'string' || !isFiniteNumber(value.index) ||
+          typeof value.path !== 'string' || typeof value.content !== 'string' ||
+          typeof value.sha256 !== 'string' || !Array.isArray(value.backups)) {
+        throw new Error(isRecord(value) && typeof value.error === 'string' ? value.error : labels.notEditable);
+      }
+      const backups = value.backups.filter((item): item is { id: string; created: number } =>
+        isRecord(item) && typeof item.id === 'string' && isFiniteNumber(item.created));
+      setEditor({ project: value.project, index: value.index, path: value.path,
+        content: value.content, sha256: value.sha256, backups });
+    } catch (loadError: unknown) {
+      setError(loadError instanceof Error ? loadError.message : labels.notEditable);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitForm(event: FormEvent<HTMLFormElement>, operation: string): Promise<void> {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const fields: Record<string, string> = {};
+    for (const [key, value] of formData.entries()) {
+      if (typeof value === 'string') fields[key] = value;
+    }
+    const succeeded = await perform(operation, fields, operation === 'container-create' ? labels.createConfirm : '');
+    if (succeeded && operation === 'compose-create') {
+      setCreatingCompose(false);
+      form.reset();
+    }
+    if (succeeded && operation === 'container-create') setEditingContainer(null);
+  }
+
+  useEffect(() => {
+    void loadStatus();
+  }, []);
+
+  const stateLabel = (state: string) => state === 'running'
+    ? (isGerman ? 'Aktiv' : 'Running') : state;
+
+  return (
+    <main className="sentinel-react-content sentinel-docker" aria-label="Docker">
+      <p className="sentinel-module-description">{labels.description}</p>
+      <div className="sentinel-docker-actions">
+        <button type="button" disabled={loading || busy} onClick={() => void loadStatus()}>{labels.refresh}</button>
+        <button type="button" disabled={busy || !status?.compose_available} onClick={() => setCreatingCompose(true)}>{labels.createCompose}</button>
+        <button type="button" disabled={busy || !status?.available} onClick={() => setEditingContainer({
+          id: '', short_id: '', name: '', image: '', status: '', state: '', ports: '', running: false,
+          memory_mib: 512, cpus: 1, restart: 'unless-stopped', compose_project: '',
+        })}>{labels.createContainer}</button>
+      </div>
+      {loading && !status && <p role="status">{labels.loading}</p>}
+      {error && <p className="sentinel-detail-error" role="alert">{error}</p>}
+      {message && <p className="sentinel-detail-success" role="status">{message}</p>}
+      {status && !status.available && <p className="sentinel-detail-error" role="status">{status.error || labels.dockerMissing}</p>}
+      {status?.available && <>
+        <p className="sentinel-docker-version">Docker {status.version || '—'} · {status.containers.length} {labels.containers.toLocaleLowerCase()}</p>
+        {status.container_inventory_limited && <p className="sentinel-detail-error" role="status">{labels.limited}</p>}
+        <section className="sentinel-docker-section" aria-labelledby="sentinel-docker-containers-title">
+          <h2 id="sentinel-docker-containers-title">{labels.containers}</h2>
+          {status.containers.length === 0 ? <p>{labels.emptyContainers}</p> : (
+            <div className="sentinel-docker-grid">
+              {status.containers.map((container) => (
+                <article className="sentinel-docker-card" key={container.id}>
+                  <header><div><h3>{container.name || labels.unnamed}</h3><code>{container.short_id}</code></div>
+                    <span className={container.running ? 'is-running' : 'is-stopped'}>{stateLabel(container.state)}</span></header>
+                  <dl>
+                    <div><dt>{labels.image}</dt><dd><code>{container.image}</code></dd></div>
+                    <div><dt>{labels.state}</dt><dd>{container.status}</dd></div>
+                    <div><dt>{labels.ports}</dt><dd><code>{container.ports || '—'}</code></dd></div>
+                    <div><dt>{labels.resources}</dt><dd>{container.memory_mib ? `${container.memory_mib} MiB` : labels.noLimit} · {container.cpus || labels.noLimit} CPU</dd></div>
+                    <div><dt>{labels.restart}</dt><dd>{container.restart}</dd></div>
+                    {container.compose_project && <div><dt>{labels.projects}</dt><dd>{container.compose_project}</dd></div>}
+                  </dl>
+                  <div className="sentinel-docker-card-actions">
+                    {!container.running
+                      ? <button type="button" disabled={busy} onClick={() => void perform('container-start', { container: container.id })}>{labels.start}</button>
+                      : <button type="button" disabled={busy} onClick={() => void perform('container-stop', { container: container.id }, labels.stopConfirm)}>{labels.stop}</button>}
+                    <button type="button" disabled={busy || !container.running}
+                      onClick={() => void perform('container-restart', { container: container.id }, labels.restartConfirm)}>{labels.restartAction}</button>
+                    <button type="button" disabled={busy} onClick={() => setEditingContainer(container)}>{labels.edit}</button>
+                    <button type="button" disabled={busy || container.running}
+                      onClick={() => void perform('container-remove', { container: container.id }, labels.removeContainerConfirm)}>{labels.remove}</button>
+                    <button type="button" disabled={busy} onClick={async () => {
+                      setBusy(true); setError('');
+                      try {
+                        const result = await request('container-logs', { container: container.id });
+                        setLogs({ name: container.name, content: typeof result.logs === 'string' ? result.logs : '' });
+                      } catch (loadError: unknown) {
+                        setError(loadError instanceof Error ? loadError.message : labels.statusError);
+                      } finally { setBusy(false); }
+                    }}>{labels.logsAction}</button>
+                  </div>
+                  {editingContainer?.id === container.id && (
+                    <form className="sentinel-docker-inline-form" onSubmit={(event) => {
+                      event.preventDefault();
+                      const formData = new FormData(event.currentTarget);
+                      void perform('container-update', {
+                        container: container.id,
+                        memory_mib: String(formData.get('memory_mib') || ''),
+                        cpus: String(formData.get('cpus') || ''),
+                        restart: String(formData.get('restart') || ''),
+                      });
+                      setEditingContainer(null);
+                    }}>
+                      <strong>{labels.editTitle}: {container.name}</strong>
+                      <label>{labels.memory}<input name="memory_mib" type="number" min="16" max="65536" defaultValue={container.memory_mib || ''} /></label>
+                      <label>{labels.cpus}<input name="cpus" type="number" min="0.1" max="64" step="0.1" defaultValue={container.cpus || ''} /></label>
+                      <label>{labels.restart}<select name="restart" defaultValue={container.restart}>
+                        <option value="no">no</option><option value="always">always</option>
+                        <option value="unless-stopped">unless-stopped</option><option value="on-failure">on-failure</option>
+                      </select></label>
+                      <div><button type="submit" disabled={busy}>{labels.apply}</button>
+                        <button type="button" onClick={() => setEditingContainer(null)}>{labels.cancel}</button></div>
+                    </form>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="sentinel-docker-section" aria-labelledby="sentinel-docker-projects-title">
+          <h2 id="sentinel-docker-projects-title">{labels.projects}</h2>
+          {!status.compose_available && <p className="sentinel-detail-message">{isGerman ? 'Docker Compose ist nicht verfuegbar.' : 'Docker Compose is unavailable.'}</p>}
+          {status.projects.length === 0 ? <p>{labels.emptyProjects}</p> : (
+            <div className="sentinel-docker-grid">
+              {status.projects.map((project) => (
+                <article className="sentinel-docker-card" key={project.name}>
+                  <header><div><h3>{project.name}</h3><span>{project.managed ? labels.managed : labels.existing}</span></div><span>{project.deleted ? labels.deletedStatus : project.status}</span></header>
+                  {!project.deleted && <ul className="sentinel-docker-files">{project.files.map((path, index) => (
+                    <li key={`${path}-${index}`}><code>{path}</code>
+                      <button type="button" disabled={busy || !status.compose_available}
+                        onClick={() => void openComposeFile(project.name, index)}>{labels.editFile}</button></li>
+                  ))}</ul>}
+                  {project.deleted ? <div className="sentinel-docker-card-actions">
+                    <button type="button" disabled={busy || !status.compose_available || !project.backup_id}
+                      onClick={() => void perform('compose-recover',
+                        { project: project.name, backup: project.backup_id }, labels.recoverConfirm)}>
+                      {labels.recoverProject}
+                    </button>
+                  </div> : <div className="sentinel-docker-card-actions">
+                    <button type="button" disabled={busy || !status.compose_available}
+                      onClick={() => void perform('compose-up', { project: project.name }, labels.upConfirm)}>{labels.up}</button>
+                    <button type="button" disabled={busy || !status.compose_available}
+                      onClick={() => void perform('compose-stop', { project: project.name })}>{labels.composeStop}</button>
+                    <button type="button" disabled={busy || !status.compose_available}
+                      onClick={() => void perform('compose-restart', { project: project.name }, labels.restartConfirm)}>{labels.composeRestart}</button>
+                    <button type="button" disabled={busy || !status.compose_available}
+                      onClick={() => void perform(project.managed ? 'compose-delete' : 'compose-down',
+                        { project: project.name }, project.managed ? labels.deleteProjectConfirm : labels.downConfirm)}>
+                      {project.managed ? labels.deleteProject : labels.down}
+                    </button>
+                  </div>}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </>}
+      {editingContainer?.id === '' && (
+        <form className="sentinel-docker-dialog" onSubmit={(event) => void submitForm(event, 'container-create')}>
+          <h2>{labels.createContainer}</h2>
+          <label>{labels.name}<input name="name" required maxLength={63} pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,62}" /></label>
+          <label>{labels.image}<input name="image" required maxLength={255} placeholder="nginx:stable" /></label>
+          <label>{labels.memory}<input name="memory_mib" type="number" min="16" max="65536" defaultValue="512" required /></label>
+          <label>{labels.cpus}<input name="cpus" type="number" min="0.1" max="64" step="0.1" defaultValue="1" required /></label>
+          <label>{labels.restart}<select name="restart" defaultValue="unless-stopped">
+            <option value="no">no</option><option value="always">always</option>
+            <option value="unless-stopped">unless-stopped</option><option value="on-failure">on-failure</option>
+          </select></label>
+          <label>{labels.bind}<select name="bind" defaultValue="127.0.0.1">
+            <option value="127.0.0.1">{labels.localBind}</option><option value="0.0.0.0">{labels.publicBind}</option>
+          </select></label>
+          <label>{labels.hostPort}<input name="host_port" type="number" min="1" max="65535" /></label>
+          <label>{labels.containerPort}<input name="container_port" type="number" min="1" max="65535" /></label>
+          <label>{labels.protocol}<select name="protocol"><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
+          <label>{labels.volume}<input name="volume" maxLength={63} pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,62}" /></label>
+          <label>{labels.mountPath}<input name="mount_path" maxLength={181} placeholder="/data" /></label>
+          <p>{labels.createNote}</p>
+          <p className="sentinel-detail-warning">{labels.publicWarning}</p>
+          <div><button type="submit" disabled={busy || !status?.available}>{labels.create}</button>
+            <button type="button" onClick={() => setEditingContainer(null)}>{labels.cancel}</button></div>
+        </form>
+      )}
+      {creatingCompose && (
+        <form className="sentinel-docker-dialog" onSubmit={(event) => void submitForm(event, 'compose-create')}>
+          <h2>{labels.createCompose}</h2>
+          <label>{labels.newProject}<input name="project" required maxLength={63} pattern="[a-z0-9][a-z0-9_-]{0,62}" /></label>
+          <label>{labels.yaml}<textarea name="yaml" required maxLength={524288} rows={16} spellCheck={false} /></label>
+          <p>{labels.composeNote} {labels.createStackNote}</p>
+          <p className="sentinel-detail-warning">{labels.securityNote}</p>
+          <div><button type="submit" disabled={busy || !status?.compose_available}>{labels.create}</button>
+            <button type="button" onClick={() => setCreatingCompose(false)}>{labels.cancel}</button></div>
+        </form>
+      )}
+      {editor && (
+        <section className="sentinel-docker-dialog" aria-labelledby="sentinel-compose-editor-title">
+          <h2 id="sentinel-compose-editor-title">{labels.compose}: {editor.project}</h2>
+          <p><code>{editor.path}</code></p>
+          <p>{labels.composeNote}</p>
+          <p className="sentinel-detail-warning">{labels.securityNote}</p>
+          <label>{labels.yaml}<textarea value={editor.content} maxLength={524288} rows={24} spellCheck={false}
+            onChange={(event) => setEditor({ ...editor, content: event.currentTarget.value })} /></label>
+          <div className="sentinel-docker-actions">
+            <button type="button" disabled={busy} onClick={() => void perform('compose-validate', {
+              project: editor.project, index: String(editor.index), sha256: editor.sha256, yaml: editor.content,
+            })}>{labels.validate}</button>
+            <button type="button" disabled={busy} onClick={async () => {
+              setBusy(true); setError(''); setMessage('');
+              try {
+                await request('compose-save', { project: editor.project, index: String(editor.index),
+                  sha256: editor.sha256, yaml: editor.content });
+                await openComposeFile(editor.project, editor.index);
+                await loadStatus();
+              } catch (saveError: unknown) {
+                setError(saveError instanceof Error ? saveError.message : labels.notEditable);
+              } finally { setBusy(false); }
+            }}>{labels.save}</button>
+            <button type="button" onClick={() => setEditor(null)}>{labels.close}</button>
+          </div>
+          <h3>{labels.backups}</h3>
+          {editor.backups.length === 0 ? <p>{labels.noBackups}</p> : <ul>{editor.backups.map((backup) => (
+            <li key={backup.id}><time>{new Date(backup.created * 1000).toLocaleString(isGerman ? 'de-DE' : 'en-GB')}</time>
+              <button type="button" disabled={busy} onClick={async () => {
+              const restored = await perform('compose-restore', {
+                project: editor.project, index: String(editor.index), sha256: editor.sha256,
+                backup: backup.id,
+              }, labels.restoreConfirm);
+              if (restored) await openComposeFile(editor.project, editor.index);
+              }}>{labels.restore}</button></li>
+          ))}</ul>}
+        </section>
+      )}
+      {logs && <section className="sentinel-docker-dialog" aria-label={labels.logsAction}>
+        <h2>{labels.logsAction}: {logs.name}</h2><pre>{logs.content}</pre>
+        <button type="button" onClick={() => setLogs(null)}>{labels.close}</button>
+      </section>}
+    </main>
+  );
+}
+
 type DashboardStatus = {
   available: boolean;
   fail2ban: { installed: boolean; running: boolean; jails: number; jailNames: string[]; banned: number };
@@ -318,6 +787,14 @@ const menu: MenuGroup[] = [
       { target: 'guardian-runtime', label: 'PHP Runtime · Schutzstatus', english: 'PHP runtime · status' },
       { target: 'guardian-php-config', label: 'PHP Handler & Rollback', english: 'PHP handler & rollback' },
       { target: 'guardian-reputation', label: 'IP-Reputation', english: 'IP reputation' },
+    ],
+  },
+  {
+    id: 'docker',
+    label: 'Docker',
+    english: 'Docker',
+    items: [
+      { target: 'guardian-docker', label: 'Docker-Umgebungen', english: 'Docker environments' },
     ],
   },
   {
@@ -671,7 +1148,11 @@ function readThemePreference(): boolean {
   }
 }
 
-function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string }) {
+function App({ status, exportUrl, dockerUrls }: {
+  status: DashboardStatus;
+  exportUrl: string;
+  dockerUrls: { status: string; file: string; manage: string };
+}) {
   const [language, setLanguage] = useState<'de' | 'en'>('de');
   const [darkMode, setDarkMode] = useState(readThemePreference);
   const [activeGroup, setActiveGroup] = useState('overview');
@@ -713,7 +1194,8 @@ function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string
     }
     document.querySelector('.guardian')?.classList.toggle('sentinel-module-active', Boolean(target));
     document.querySelector('.guardian')?.classList.toggle('sentinel-dashboard-active', !target);
-    const isReactPage = target === 'guardian-waf-events' || target === 'guardian-incidents' || target === 'guardian-firewall';
+    const isReactPage = target === 'guardian-waf-events' || target === 'guardian-incidents' ||
+      target === 'guardian-firewall' || target === 'guardian-docker';
     document.querySelector('.guardian')?.classList.toggle('sentinel-react-page-active', isReactPage);
     document.querySelector('.guardian')?.setAttribute('data-sentinel-target', target || '');
   }, [activeTarget]);
@@ -942,6 +1424,9 @@ function App({ status, exportUrl }: { status: DashboardStatus; exportUrl: string
           }} />
       )}
       {activeTarget === 'guardian-firewall' && <PleskFirewallModule firewall={status.firewall} language={language} />}
+      {activeTarget === 'guardian-docker' && <DockerModule language={language}
+        statusUrl={dockerUrls.status} fileUrl={dockerUrls.file} manageUrl={dockerUrls.manage}
+        csrf={mount?.dataset.csrf || ''} />}
       {activeTarget === 'guardian-settings-overview' && (
         <SettingsModule language={language} onNavigate={(target) => {
           navigateTo(target);
@@ -1059,5 +1544,13 @@ if (mount) {
   if (!exportLink || exportLink.origin !== window.location.origin) {
     throw new Error('Sentinel export route is invalid.');
   }
-  root.render(<App status={readStatus(mount)} exportUrl={exportLink.href} />);
+  const dockerStatusUrl = mount.dataset.dockerStatusUrl || '';
+  const dockerFileUrl = mount.dataset.dockerFileUrl || '';
+  const dockerManageUrl = mount.dataset.dockerManageUrl || '';
+  const dockerUrls = [dockerStatusUrl, dockerFileUrl, dockerManageUrl].map((endpoint) => new URL(endpoint, window.location.href));
+  if (dockerUrls.some((url) => url.origin !== window.location.origin)) {
+    throw new Error('Docker route is invalid.');
+  }
+  root.render(<App status={readStatus(mount)} exportUrl={exportLink.href}
+    dockerUrls={{ status: dockerUrls[0].href, file: dockerUrls[1].href, manage: dockerUrls[2].href }} />);
 }
